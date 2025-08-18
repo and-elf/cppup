@@ -1,0 +1,46 @@
+BasedOnStyle: Google
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+
+# Braces
+BreakBeforeBraces: Allman   # Consistent brace style
+
+# Pointers & References
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+Cpp11BracedListStyle: true
+SpaceAfterCStyleCast: true
+
+# Includes
+IncludeBlocks: Regroup
+SortIncludes: true
+IncludeCategories:
+  - Regex:           '^<.*\.h>'
+    Priority:        1
+  - Regex:           '^<.*>'
+    Priority:        2
+  - Regex:           '.*'
+    Priority:        3
+
+# Namespace formatting
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+# Alignments
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignOperands: true
+AlignAfterOpenBracket: Align
+BreakConstructorInitializers: AfterColon
+
+# Others
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+ReflowComments: true
+SortUsingDeclarations: true

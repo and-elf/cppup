@@ -1,0 +1,62 @@
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  cppcoreguidelines-*,
+  misc-*,
+  clang-analyzer-*,
+  # Enable specific checks
+  readability-named-parameter,
+  readability-identifier-naming,
+  modernize-use-override,
+  modernize-use-nodiscard,
+  modernize-use-noexcept,
+  modernize-use-constexpr,
+  cppcoreguidelines-non-private-member-variables-in-classes,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-owning-memory,
+  misc-non-private-member-variables-in-classes
+
+WarningsAsErrors: '*'
+
+CheckOptions:
+  # Naming rules
+  - key:             readability-identifier-naming.ClassCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.StructCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.FunctionCase
+    value:           camelBack
+  - key:             readability-identifier-naming.VariableCase
+    value:           camelBack
+  - key:             readability-identifier-naming.MemberCase
+    value:           camelBack
+  - key:             readability-identifier-naming.ParameterCase
+    value:           camelBack
+  - key:             readability-identifier-naming.NamespaceCase
+    value:           lower_case
+
+  # Require [[nodiscard]] on functions returning values
+  - key:             modernize-use-nodiscard.ReplacementString
+    value:           '[[nodiscard]]'
+
+  # Encourage constexpr where possible
+  - key:             modernize-use-constexpr.CheckConstructors
+    value:           1
+
+  # Require noexcept on move/copy operators
+  - key:             modernize-use-noexcept.CheckMove
+    value:           1
+
+  # Member initialization
+  - key:             cppcoreguidelines-special-member-functions.AllowMissingMove
+    value:           0
+  - key:             cppcoreguidelines-special-member-functions.AllowMissingCopy
+    value:           0
+
+  # Disable certain noisy checks
+  - key:             cppcoreguidelines-avoid-magic-numbers.IgnoreAllFloatLiterals
+    value:           1
