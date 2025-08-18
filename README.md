@@ -117,8 +117,5 @@ cppup test
 
 For full design, requirements, and implementation tasks, see each scope:
 
-- [Overview](docs/overview.md)
-- [CLI](cli/design.md)
-- [Configuration](configuration/design.md)
-- [Package](package/design.md)
-- [BuildSystem](buildsystem/design.md)
+- [CLI](.kira/specs/cli-commands/design.md)
+- [Configuration](.kira/specs/configuration-api/design.md)
