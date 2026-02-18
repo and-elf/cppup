@@ -282,7 +282,7 @@ void when_env(const BuildConfiguration& config, const std::string& var, const st
 
 ```cpp
 // build.cpp
-#include <cppup/configuration.h>
+#include <cppup/configuration.hpp>
 
 extern "C" BuildConfiguration configure() {
     return BuildConfiguration{

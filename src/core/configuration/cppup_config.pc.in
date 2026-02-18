@@ -1,0 +1,13 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: cppup_config
+Description: cppup Configuration API Library
+Version: @PROJECT_VERSION@
+URL: https://github.com/cppup/cppup
+Requires: 
+Libs: -L${libdir} -lcppup_config
+Libs.private: @CPPUP_CONFIG_PRIVATE_LIBS@
+Cflags: -I${includedir} -std=c++20

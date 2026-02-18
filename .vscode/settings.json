@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "chrono": "cpp",
+        "functional": "cpp",
+        "filesystem": "cpp",
+        "text_encoding": "cpp",
+        "typeinfo": "cpp"
+    },
+    "cmake.ignoreCMakeListsMissing": true
+}

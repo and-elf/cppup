@@ -1,0 +1,106 @@
+# cppup Configuration API CMake Config File
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+find_dependency(Threads REQUIRED)
+
+# Platform-specific dependencies
+if(WIN32)
+    # Windows-specific dependencies
+elseif(UNIX AND NOT APPLE)
+    # Linux-specific dependencies
+    find_dependency(PkgConfig QUIET)
+elseif(APPLE)
+    # macOS-specific dependencies
+endif()
+
+# Include targets
+include("${CMAKE_CURRENT_LIST_DIR}/cppup_config_targets.cmake")
+
+# Verify targets exist
+check_required_components(cppup_config)
+
+# Provide convenience variables
+set(CPPUP_CONFIG_FOUND TRUE)
+set(CPPUP_CONFIG_VERSION "@PROJECT_VERSION@")
+set(CPPUP_CONFIG_INCLUDE_DIRS "${PACKAGE_PREFIX_DIR}/include")
+set(CPPUP_CONFIG_LIBRARIES cppup::cppup_config)
+
+# Helper function to create build.cpp compilation targets
+function(cppup_add_config_target target_name build_cpp_file)
+    # Get the directory containing the build.cpp file
+    get_filename_component(config_dir "${build_cpp_file}" DIRECTORY)
+    
+    # Create a custom target to compile the build.cpp file
+    add_custom_target(${target_name}_config
+        COMMAND ${CMAKE_CXX_COMPILER}
+            -std=c++20
+            -shared
+            -fPIC
+            -I${CPPUP_CONFIG_INCLUDE_DIRS}
+            -o ${CMAKE_CURRENT_BINARY_DIR}/${target_name}_config.so
+            ${build_cpp_file}
+            -L${PACKAGE_PREFIX_DIR}/lib
+            -lcppup_config
+        DEPENDS ${build_cpp_file}
+        WORKING_DIRECTORY ${config_dir}
+        COMMENT "Compiling configuration for ${target_name}"
+        VERBATIM
+    )
+    
+    # Make the main target depend on the config compilation
+    if(TARGET ${target_name})
+        add_dependencies(${target_name} ${target_name}_config)
+    endif()
+endfunction()
+
+# Helper function to validate build configuration at configure time
+function(cppup_validate_config build_cpp_file)
+    if(NOT EXISTS "${build_cpp_file}")
+        message(FATAL_ERROR "Build configuration file not found: ${build_cpp_file}")
+    endif()
+    
+    # Try to compile the configuration to check for syntax errors
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER}
+            -std=c++20
+            -fsyntax-only
+            -I${CPPUP_CONFIG_INCLUDE_DIRS}
+            ${build_cpp_file}
+        RESULT_VARIABLE compile_result
+        OUTPUT_VARIABLE compile_output
+        ERROR_VARIABLE compile_error
+    )
+    
+    if(NOT compile_result EQUAL 0)
+        message(FATAL_ERROR 
+            "Build configuration compilation failed: ${build_cpp_file}\n"
+            "Error: ${compile_error}"
+        )
+    endif()
+    
+    message(STATUS "Build configuration validated: ${build_cpp_file}")
+endfunction()
+
+# Provide usage information
+if(NOT TARGET cppup::cppup_config)
+    message(FATAL_ERROR "cppup_config library target not found")
+endif()
+
+message(STATUS "Found cppup Configuration API ${CPPUP_CONFIG_VERSION}")
+message(STATUS "  Include directories: ${CPPUP_CONFIG_INCLUDE_DIRS}")
+message(STATUS "  Libraries: ${CPPUP_CONFIG_LIBRARIES}")
+
+# Usage example in comments:
+#
+# find_package(cppup_config REQUIRED)
+# 
+# # Link your build.cpp compilation with the library
+# target_link_libraries(your_build_config_target PRIVATE cppup::cppup_config)
+#
+# # Or use the helper function
+# cppup_add_config_target(myproject "${CMAKE_SOURCE_DIR}/build.cpp")
+# cppup_validate_config("${CMAKE_SOURCE_DIR}/build.cpp")

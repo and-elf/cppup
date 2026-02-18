@@ -1,0 +1,100 @@
+# Bootstrap makefile for cppup
+# This builds a minimal version of cppup that can parse build.cpp
+
+CXX = g++
+CXXFLAGS = -std=c++23 -Wall -Wextra -Werror -Wconversion -Wunused-variable -Wunused-parameter -O2 -DIS_BOOTSTRAP_BUILD -Isrc -Iinclude -Isrc/core/configuration -Isrc/core/cli -Isrc/cli -Isrc/core/package
+LDFLAGS = -ldl -pthread -lcryptopp
+
+# Build directory
+BUILD_DIR = bootstrap_build
+
+# Core configuration sources
+CONFIG_SOURCES = \
+	src/core/configuration/compiler.cpp \
+	src/core/configuration/loader.cpp \
+	src/core/configuration/validation.cpp \
+	src/core/configuration/package_resolver.cpp \
+	src/core/configuration/toolchain_resolver.cpp \
+	src/core/configuration/profile_processor.cpp \
+	src/core/configuration/build_step_executor.cpp
+
+# CLI sources (minimal for bootstrap)
+CLI_SOURCES = \
+	src/main.cpp \
+	src/core/cli/logger.cpp \
+	src/core/cli/cli_application.cpp \
+	src/core/cli/commands.cpp \
+	src/core/cli/commands/common.cpp \
+	src/core/cli/commands/build.cpp \
+	src/core/cli/commands/package.cpp \
+	src/core/build/cache.cpp \
+	src/core/package/registry/registry_package.cpp
+
+# Object files
+CONFIG_OBJECTS = $(patsubst src/core/configuration/%.cpp, $(BUILD_DIR)/src/core/configuration/%.o, $(CONFIG_SOURCES))
+CLI_OBJECTS = $(patsubst %.cpp, $(BUILD_DIR)/%.o, $(filter %.cpp, $(CLI_SOURCES)))
+
+# Bootstrap executable
+cppup_bootstrap: $(BUILD_DIR)/libcppup_config.a $(CLI_OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $(CLI_OBJECTS) -L$(BUILD_DIR) -lcppup_config $(LDFLAGS)
+
+# Configuration library
+$(BUILD_DIR)/libcppup_config.a: $(CONFIG_OBJECTS)
+	ar rcs $@ $^
+
+# Configuration objects
+$(BUILD_DIR)/src/core/configuration/%.o: src/core/configuration/%.cpp | $(BUILD_DIR)/src/core/configuration
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# CLI objects
+$(BUILD_DIR)/src/main.o: src/main.cpp | $(BUILD_DIR)/src
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/src/core/cli/%.o: src/core/cli/%.cpp | $(BUILD_DIR)/src/core/cli
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/src/core/cli/commands/%.o: src/core/cli/commands/%.cpp | $(BUILD_DIR)/src/core/cli/commands
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/src/core/build/%.o: src/core/build/%.cpp | $(BUILD_DIR)/src/core/build
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/src/core/package/registry/%.o: src/core/package/registry/%.cpp | $(BUILD_DIR)/src/core/package/registry
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Create build directories
+$(BUILD_DIR)/src/core/configuration:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core/cli:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core/cli/commands:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core/build:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core/package:
+	mkdir -p $@
+
+$(BUILD_DIR)/src/core/package/registry:
+	mkdir -p $@
+
+$(BUILD_DIR)/src:
+	mkdir -p $@
+
+# Test the bootstrap
+test: cppup_bootstrap
+	./cppup_bootstrap
+
+# Clean
+clean:
+	rm -rf $(BUILD_DIR)
+	rm -f cppup_bootstrap
+	rm -f build_config.so
+
+.PHONY: test clean

@@ -264,8 +264,8 @@
 // second
 #include <winbase.h>
 // third
-#include <processthreadsapi.h>
-#include <shellapi.h>
+#include <processthreadsapi.hpp>
+#include <shellapi.hpp>
 #endif
 
 

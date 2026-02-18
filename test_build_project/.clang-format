@@ -1,0 +1,41 @@
+
+# C++ formatting configuration for test_build_project
+
+BasedOnStyle: Google
+
+# C++23 features
+Standard: c++23
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Line breaks
+ColumnLimit: 100
+BreakBeforeBraces: Attach
+
+# Spacing
+SpacesBeforeTrailingComments: 2
+SpaceBeforeParens: ControlStatements
+
+# Includes
+IncludeCategories:
+  - Regex: '^<.*\.h>'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+  - Regex: '.*'
+    Priority: 3
+
+# Modern C++ features
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Pointer alignment
+PointerAlignment: Left
+
+# Namespace indentation
+NamespaceIndentation: None

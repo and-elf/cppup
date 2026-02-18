@@ -1,11 +1,13 @@
 {
-    "name": "Alpine C++/CMake DevContainer",
-    "image": "mcr.microsoft.com/vscode/devcontainers/cpp",
+    "name": "C++23 DevContainer",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
     "features": {},
     "customizations": {
         "vscode": {
             "settings": {
-                "terminal.integrated.shell.linux": "/bin/sh"
+                "terminal.integrated.shell.linux": "/bin/bash"
             },
             "extensions": [
                 "ms-vscode.cpptools",

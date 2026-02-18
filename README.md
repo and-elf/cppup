@@ -11,7 +11,7 @@ The key design goals:
 - TDD-friendly structure with modular libraries
 - Automatic build caching
 - Cross-platform support for Linux, macOS, and Windows
-- Use cpp 23, std::expected, std::optional, constexpr, noexcept, [[nodiscard]] as a general rule
+- Use cpp 23, std::expected, std::optional, constexpr, noexcept, [[nodiscard]], - cnstexpr and concepts as a general rule
 - Integration with common development tools like `clang-tidy`, `clang-format`, ASan, and code coverage
 
 ---
@@ -111,11 +111,11 @@ cppup test
 
 - TDD workflow is encouraged.
 - Each library and package has its own tests in `core/<feature>/tests/`.
-- Tests integrated with CMake/CTest or Catch2 framework.
+- Tests integrated with Catch2 framework.
 
 ## Detailed Documentation
 
 For full design, requirements, and implementation tasks, see each scope:
 
-- [CLI](.kira/specs/cli-commands/design.md)
+- [CLI](.kiro/specs/cli-commands/design.md)
 - [Configuration](.kira/specs/configuration-api/design.md)
