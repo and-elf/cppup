@@ -38,7 +38,20 @@ else
 fi
 
 echo
+
+# Test compile_commands emitter
+echo "=== Testing compile_commands emitter ==="
+if g++ -std=c++23 -Wall -Wextra -I.. \
+       test_compile_commands.cpp ../compile_commands.cpp \
+       -o test_compile_commands && ./test_compile_commands; then
+    echo "✓ compile_commands test passed"
+else
+    echo "✗ compile_commands test failed"
+    exit 1
+fi
+
+echo
 echo "=== All tests passed! ==="
 
 # Clean up
-rm -f test_types test_outputs test_profile
+rm -f test_types test_outputs test_profile test_compile_commands

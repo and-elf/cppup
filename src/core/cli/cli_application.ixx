@@ -142,6 +142,12 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   bool build_asan = false;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
 
+  // compile-commands command
+  auto cc_cmd  = app.add_subcommand("compile-commands",
+                                    "Emit compile_commands.json for clangd/LSP tooling");
+  bool cc_asan = false;
+  cc_cmd->add_flag("--asan", cc_asan, "Mirror --asan flags in emitted commands");
+
   // Test command
   auto test_cmd  = app.add_subcommand("test", "Run tests");
   bool test_asan = false;
@@ -211,6 +217,13 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   if (*build_cmd)
   {
     return handleExpectedResult(executeBuild(build_asan, context_), "Build",
+                                ErrorHandler::ErrorCode::BuildFailure);
+  }
+
+  if (*cc_cmd)
+  {
+    return handleExpectedResult(executeCompileCommands(cc_asan, context_),
+                                "compile-commands",
                                 ErrorHandler::ErrorCode::BuildFailure);
   }
 

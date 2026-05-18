@@ -18,6 +18,9 @@ namespace cppup::cli
 [[nodiscard]] std::expected<int, std::string> executeBuild(bool                  enable_asan,
                                                            const CommandContext& context) noexcept;
 
+[[nodiscard]] std::expected<int, std::string> executeCompileCommands(
+    bool enable_asan, const CommandContext& context) noexcept;
+
 [[nodiscard]] std::expected<int, std::string> executeTest(bool                  enable_asan,
                                                           const CommandContext& context) noexcept;
 

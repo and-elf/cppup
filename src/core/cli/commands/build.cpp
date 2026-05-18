@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include "../../configuration/compile_commands.hpp"
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -260,6 +262,16 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
 
     const auto& config = *load_result.configuration;
     logger.info("build configuration loaded");
+
+    if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir,
+                                              enable_asan))
+    {
+      logger.debug("wrote " + cc->string());
+    }
+    else
+    {
+      logger.warning("compile_commands.json: " + cc.error());
+    }
 
     std::size_t built  = 0;
     std::size_t cached = 0;

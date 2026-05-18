@@ -16,6 +16,7 @@ extern "C" BuildConfiguration configure()
 
   config.libraries.push_back(Library{"cppup_config",
                                      {"src/core/configuration/compiler.cpp",
+                                      "src/core/configuration/compile_commands.cpp",
                                       "src/core/configuration/loader.cpp",
                                       "src/core/configuration/validation.cpp",
                                       "src/core/configuration/package_resolver.cpp",
@@ -36,6 +37,7 @@ extern "C" BuildConfiguration configure()
               {"src/core/cli/cli_application.cpp", "src/core/cli/logger.cpp",
                "src/core/cli/commands.cpp", "src/core/cli/commands/common.cpp",
                "src/core/cli/commands/init.cpp", "src/core/cli/commands/build.cpp",
+               "src/core/cli/commands/compile_commands_cmd.cpp",
                "src/core/cli/commands/test.cpp", "src/core/cli/commands/format.cpp",
                "src/core/cli/commands/package.cpp", "src/core/cli/commands/module.cpp",
                "src/core/cli/commands/toolchain.cpp", "src/core/cli/commands/plugin.cpp"},

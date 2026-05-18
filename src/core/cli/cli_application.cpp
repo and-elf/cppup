@@ -5,7 +5,6 @@
 
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
-#include "logger.hpp"
 
 namespace cppup::cli
 {
@@ -62,6 +61,12 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto* build_cmd  = app.add_subcommand("build", "Build the project");
   bool  build_asan = false;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
+
+  // compile-commands
+  auto* cc_cmd  = app.add_subcommand("compile-commands",
+                                     "Emit compile_commands.json for clangd/LSP tooling");
+  bool  cc_asan = false;
+  cc_cmd->add_flag("--asan", cc_asan, "Mirror --asan flags in emitted commands");
 
   // test
   auto* test_cmd  = app.add_subcommand("test", "Run tests");
@@ -178,6 +183,13 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   if (*build_cmd)
   {
     return handleExpectedResult(executeBuild(build_asan, context_), "Build",
+                                ErrorHandler::ErrorCode::BuildFailure);
+  }
+
+  if (*cc_cmd)
+  {
+    return handleExpectedResult(executeCompileCommands(cc_asan, context_),
+                                "compile-commands",
                                 ErrorHandler::ErrorCode::BuildFailure);
   }
 
