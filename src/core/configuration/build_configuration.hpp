@@ -8,6 +8,7 @@
 
 #include "outputs.hpp"
 #include "profile.hpp"
+#include "subproject.hpp"
 #include "types.hpp"
 
 namespace cppup::configuration
@@ -36,6 +37,9 @@ struct BuildConfiguration
   std::vector<Binary>  binaries;
   std::vector<Library> libraries;
   std::vector<Test>    tests;
+
+  // Nested projects whose libraries/binaries get merged into this build
+  std::vector<Subproject> subprojects;
 
   // Build profiles
   std::vector<Profile> profiles;
