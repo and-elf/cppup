@@ -42,19 +42,19 @@ struct CompilerOptions
   std::string              compiler     = "g++";
   std::string              cpp_standard = "c++23";
   std::vector<std::string> include_paths;
-  std::vector<std::string> compile_flags = {"-Wall", "-Wextra", "-Wno-missing-field-initializers",
-                                            "-Wno-missing-designated-field-initializers", "-fPIC"};
-  std::vector<std::string> link_flags    = {"-shared"};
+  std::vector<std::string> compile_flags    = {"-Wall",
+                                               "-Wextra",
+                                               "-Wno-missing-field-initializers",
+                                               "-Wno-missing-designated-field-initializers",
+                                               "-Wno-return-type-c-linkage",
+                                               "-fPIC"};
+  std::vector<std::string> link_flags       = {"-shared"};
   std::string              output_directory = ".cppup/build/config";
   bool                     debug_symbols    = false;
   bool                     verbose          = false;
 
   // Add default include paths for the configuration API
-  CompilerOptions()
-  {
-    // Include paths will be set by the caller (build command)
-    // to ensure correct absolute paths
-  }
+  CompilerOptions() = default;
 };
 
 /**

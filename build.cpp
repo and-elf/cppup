@@ -7,8 +7,14 @@ extern "C" BuildConfiguration configure()
   BuildConfiguration config;
 
   config.toolchain     = Toolchain{"g++"};
-  config.compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"},  Flag{"-Wpedantic"}, Flag{"-std=c++23"},
-                          Flag{"-O2"},   Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
+  config.compile_flags = {Flag{"-Wall"},
+                          Flag{"-Wextra"},
+                          Flag{"-Wpedantic"},
+                          Flag{"-Wno-return-type-c-linkage"},
+                          Flag{"-std=c++23"},
+                          Flag{"-O2"},
+                          Flag{"-DNDEBUG"},
+                          Flag{"-fPIC"}};
   config.include_paths = {"include",
                           "src",
                           "src/cli",
