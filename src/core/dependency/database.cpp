@@ -3,8 +3,6 @@
 #include <sqlite3.h>
 
 #include <algorithm>
-#include <chrono>
-#include <iostream>
 #include <queue>
 #include <set>
 #include <sstream>
@@ -66,13 +64,17 @@ constexpr const char* CREATE_INDEXES = R"(
 // Helper to convert vector to JSON-like string
 std::string vector_to_json(const std::vector<std::string>& vec)
 {
-  if (vec.empty()) return "[]";
+  if (vec.empty()) {
+    return "[]";
+  }
 
   std::ostringstream oss;
   oss << "[";
   for (size_t i = 0; i < vec.size(); ++i)
   {
-    if (i > 0) oss << ",";
+    if (i > 0) {
+      oss << ",";
+    }
     oss << "\"" << vec[i] << "\"";
   }
   oss << "]";
@@ -83,12 +85,18 @@ std::string vector_to_json(const std::vector<std::string>& vec)
 std::vector<std::string> json_to_vector(const std::string& json)
 {
   std::vector<std::string> result;
-  if (json.empty() || json == "[]") return result;
+  if (json.empty() || json == "[]") {
+    return result;
+  }
 
   // Simple JSON parsing - in production would use proper JSON library
   std::string content = json;
-  if (content.front() == '[') content = content.substr(1);
-  if (content.back() == ']') content = content.substr(0, content.length() - 1);
+  if (content.front() == '[') {
+    content = content.substr(1);
+  }
+  if (content.back() == ']') {
+    content = content.substr(0, content.length() - 1);
+  }
 
   std::istringstream iss(content);
   std::string        item;
@@ -109,10 +117,28 @@ std::vector<std::string> json_to_vector(const std::string& json)
 // Custom deleter for sqlite3_stmt
 void stmt_deleter(sqlite3_stmt* stmt)
 {
-  if (stmt)
+  if (stmt != nullptr)
   {
     sqlite3_finalize(stmt);
   }
+}
+
+// sqlite3_column_text returns const unsigned char*; the SQLite docs treat
+// it as interchangeable with const char* for UTF-8 text. Centralize the
+// reinterpret_cast here so call sites stay readable and the cast has one
+// justified home rather than thirty.
+[[nodiscard]] const char* column_cstr(sqlite3_stmt* stmt, int idx) noexcept
+{
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  return reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
+}
+
+// Wraps column_cstr and turns a NULL column into an empty string so callers
+// can assign straight into std::string fields without risking UB.
+[[nodiscard]] std::string column_text(sqlite3_stmt* stmt, int idx)
+{
+  const char* p = column_cstr(stmt, idx);
+  return p != nullptr ? std::string{p} : std::string{};
 }
 }  // namespace
 
@@ -221,7 +247,7 @@ std::expected<void, std::string> DependencyDatabase::install_package(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         )";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt = nullptr;
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -291,7 +317,7 @@ std::expected<PackageInfo, std::string> DependencyDatabase::get_package(
             WHERE name = ? AND version = ?
         )";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -310,39 +336,52 @@ std::expected<PackageInfo, std::string> DependencyDatabase::get_package(
       {
         return std::unexpected("Package not found: " + name + " " + version);
       }
-      else
-      {
-        return std::unexpected("Database error: " + std::string(sqlite3_errmsg(db_)));
-      }
+      return std::unexpected("Database error: " + std::string(sqlite3_errmsg(db_)));
     }
 
     PackageInfo package;
-    package.name    = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-    package.version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+    package.name    = column_text(stmt, 0);
+    package.version = column_text(stmt, 1);
 
-    const char* desc = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    if (desc) package.description = desc;
+    const char* desc = column_cstr(stmt, 2);
+    if (desc != nullptr) {
+      package.description = desc;
+    }
 
-    const char* homepage = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-    if (homepage) package.homepage = homepage;
+    const char* homepage = column_cstr(stmt, 3);
+    if (homepage != nullptr) {
+      package.homepage = homepage;
+    }
 
-    const char* repo = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-    if (repo) package.repository_url = repo;
+    const char* repo = column_cstr(stmt, 4);
+    if (repo != nullptr) {
+      package.repository_url = repo;
+    }
 
-    const char* license = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-    if (license) package.license = license;
+    const char* license = column_cstr(stmt, 5);
+    if (license != nullptr) {
+      package.license = license;
+    }
 
-    const char* authors = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
-    if (authors) package.authors = json_to_vector(authors);
+    const char* authors = column_cstr(stmt, 6);
+    if (authors != nullptr) {
+      package.authors = json_to_vector(authors);
+    }
 
-    const char* keywords = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-    if (keywords) package.keywords = json_to_vector(keywords);
+    const char* keywords = column_cstr(stmt, 7);
+    if (keywords != nullptr) {
+      package.keywords = json_to_vector(keywords);
+    }
 
-    const char* install_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
-    if (install_path) package.install_path = install_path;
+    const char* install_path = column_cstr(stmt, 8);
+    if (install_path != nullptr) {
+      package.install_path = install_path;
+    }
 
-    const char* checksum = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
-    if (checksum) package.checksum = checksum;
+    const char* checksum = column_cstr(stmt, 9);
+    if (checksum != nullptr) {
+      package.checksum = checksum;
+    }
 
     package.install_time      = sqlite3_column_int64(stmt, 10);
     package.is_dev_dependency = sqlite3_column_int(stmt, 11) != 0;
@@ -385,7 +424,7 @@ std::expected<std::vector<PackageInfo>, std::string> DependencyDatabase::list_in
   {
     const char* sql = "SELECT name, version FROM packages ORDER BY name, version";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -396,8 +435,8 @@ std::expected<std::vector<PackageInfo>, std::string> DependencyDatabase::list_in
     std::vector<PackageInfo> packages;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
     {
-      std::string name    = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-      std::string version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+      std::string name    = column_text(stmt, 0);
+      std::string version = column_text(stmt, 1);
 
       auto package_result = get_package(name, version);
       if (package_result)
@@ -432,7 +471,7 @@ std::expected<void, std::string> DependencyDatabase::add_dependency(
             VALUES (?, ?, ?, ?, ?)
         )";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -473,7 +512,7 @@ std::expected<std::vector<DependencyRelation>, std::string> DependencyDatabase::
             WHERE package_name = ? AND package_version = ?
         )";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -488,15 +527,19 @@ std::expected<std::vector<DependencyRelation>, std::string> DependencyDatabase::
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
     {
       DependencyRelation relation;
-      relation.package_name    = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-      relation.package_version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-      relation.dependency_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+      relation.package_name    = column_text(stmt, 0);
+      relation.package_version = column_text(stmt, 1);
+      relation.dependency_name = column_text(stmt, 2);
 
-      const char* constraint = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-      if (constraint) relation.version_constraint = constraint;
+      const char* constraint = column_cstr(stmt, 3);
+      if (constraint != nullptr) {
+        relation.version_constraint = constraint;
+      }
 
-      const char* type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-      if (type) relation.dependency_type = type;
+      const char* type = column_cstr(stmt, 4);
+      if (type != nullptr) {
+        relation.dependency_type = type;
+      }
 
       dependencies.push_back(relation);
     }
@@ -523,7 +566,7 @@ void DependencyDatabase::cleanup() noexcept
   stmt_insert_package_.reset();
   stmt_delete_package_.reset();
 
-  if (db_)
+  if (db_ != nullptr)
   {
     sqlite3_close(db_);
     db_ = nullptr;
@@ -533,16 +576,24 @@ void DependencyDatabase::cleanup() noexcept
 std::expected<void, std::string> DependencyDatabase::create_tables() noexcept
 {
   auto result = execute_sql(CREATE_PACKAGES_TABLE);
-  if (!result) return result;
+  if (!result) {
+    return result;
+  }
 
   result = execute_sql(CREATE_DEPENDENCIES_TABLE);
-  if (!result) return result;
+  if (!result) {
+    return result;
+  }
 
   result = execute_sql(CREATE_REGISTRY_TABLE);
-  if (!result) return result;
+  if (!result) {
+    return result;
+  }
 
   result = execute_sql(CREATE_INDEXES);
-  if (!result) return result;
+  if (!result) {
+    return result;
+  }
 
   return {};
 }
@@ -562,7 +613,7 @@ std::expected<void, std::string> DependencyDatabase::execute_sql(const std::stri
   if (rc != SQLITE_OK)
   {
     std::string error = "SQL error: ";
-    if (error_msg)
+    if (error_msg != nullptr)
     {
       error += error_msg;
       sqlite3_free(error_msg);
@@ -592,7 +643,7 @@ std::expected<void, std::string> DependencyDatabase::remove_package(
   {
     const char* sql = "DELETE FROM packages WHERE name = ? AND version = ?";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -626,7 +677,7 @@ std::expected<std::vector<std::string>, std::string> DependencyDatabase::get_pac
   {
     const char* sql = "SELECT version FROM packages WHERE name = ? ORDER BY version";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -639,10 +690,10 @@ std::expected<std::vector<std::string>, std::string> DependencyDatabase::get_pac
     std::vector<std::string> versions;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
     {
-      const char* version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-      if (version)
+      const char* version = column_cstr(stmt, 0);
+      if (version != nullptr)
       {
-        versions.push_back(version);
+        versions.emplace_back(version);
       }
     }
 
@@ -668,7 +719,7 @@ std::expected<bool, std::string> DependencyDatabase::is_package_installed(
   {
     const char* sql = "SELECT COUNT(*) FROM packages WHERE name = ? AND version = ?";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -708,7 +759,7 @@ std::expected<size_t, std::string> DependencyDatabase::get_package_count() const
   {
     const char* sql = "SELECT COUNT(*) FROM packages";
 
-    sqlite3_stmt* stmt;
+    sqlite3_stmt* stmt{};
     int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
@@ -762,7 +813,7 @@ std::expected<void, std::string> DependencyDatabase::update_registry_entry(
         VALUES (?, ?, ?, ?, ?, ?)
     )";
 
-  sqlite3_stmt* stmt = nullptr;
+  sqlite3_stmt* stmt{};
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
   {
     return std::unexpected("Failed to prepare registry update statement: " +
@@ -773,7 +824,9 @@ std::expected<void, std::string> DependencyDatabase::update_registry_entry(
   std::string versions_str;
   for (size_t i = 0; i < entry.available_versions.size(); ++i)
   {
-    if (i > 0) versions_str += ",";
+    if (i > 0) {
+      versions_str += ",";
+    }
     versions_str += entry.available_versions[i];
   }
 
@@ -803,7 +856,7 @@ std::expected<RegistryEntry, std::string> DependencyDatabase::get_registry_entry
         FROM registry WHERE name = ?
     )";
 
-  sqlite3_stmt* stmt = nullptr;
+  sqlite3_stmt* stmt{};
   if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
   {
     return std::unexpected("Failed to prepare registry query: " + std::string(sqlite3_errmsg(db_)));
@@ -815,14 +868,14 @@ std::expected<RegistryEntry, std::string> DependencyDatabase::get_registry_entry
   int           result = sqlite3_step(stmt);
   if (result == SQLITE_ROW)
   {
-    entry.name           = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-    entry.latest_version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    entry.description    = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    entry.repository_url = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    entry.name           = column_text(stmt, 0);
+    entry.latest_version = column_text(stmt, 1);
+    entry.description    = column_text(stmt, 2);
+    entry.repository_url = column_text(stmt, 3);
 
     // Parse versions string back to vector
-    const char* versions_str = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-    if (versions_str)
+    const char* versions_str = column_cstr(stmt, 4);
+    if (versions_str != nullptr)
     {
       std::stringstream ss(versions_str);
       std::string       version;
@@ -832,7 +885,7 @@ std::expected<RegistryEntry, std::string> DependencyDatabase::get_registry_entry
       }
     }
 
-    entry.last_updated = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+    entry.last_updated = column_text(stmt, 5);
   }
   else if (result == SQLITE_DONE)
   {
@@ -857,7 +910,7 @@ std::expected<std::vector<RegistryEntry>, std::string> DependencyDatabase::searc
         FROM registry WHERE name LIKE ? OR description LIKE ?
     )";
 
-  sqlite3_stmt* stmt = nullptr;
+  sqlite3_stmt* stmt{};
   if (sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK)
   {
     return std::unexpected("Failed to prepare registry search: " +
@@ -872,14 +925,14 @@ std::expected<std::vector<RegistryEntry>, std::string> DependencyDatabase::searc
   while (sqlite3_step(stmt) == SQLITE_ROW)
   {
     RegistryEntry entry;
-    entry.name           = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-    entry.latest_version = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    entry.description    = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    entry.repository_url = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    entry.name           = column_text(stmt, 0);
+    entry.latest_version = column_text(stmt, 1);
+    entry.description    = column_text(stmt, 2);
+    entry.repository_url = column_text(stmt, 3);
 
     // Parse versions string back to vector
-    const char* versions_str = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-    if (versions_str)
+    const char* versions_str = column_cstr(stmt, 4);
+    if (versions_str != nullptr)
     {
       std::stringstream ss(versions_str);
       std::string       version;
@@ -889,7 +942,7 @@ std::expected<std::vector<RegistryEntry>, std::string> DependencyDatabase::searc
       }
     }
 
-    entry.last_updated = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+    entry.last_updated = column_text(stmt, 5);
     results.push_back(std::move(entry));
   }
 
@@ -1063,7 +1116,7 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
       }
     }
 
-    std::string dep_key = dep_name + "@" + latest_version;
+    std::string dep_key = std::format("{}@{}", dep_name, latest_version);
 
     // If dependency is in recursion stack, we found a cycle
     if (recursion_stack.find(dep_key) != recursion_stack.end())
