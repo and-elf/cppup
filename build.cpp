@@ -56,7 +56,7 @@ extern "C" BuildConfiguration configure()
 
   // Process runner library
   config.libraries.push_back(
-      Library{"cppup_process", {"src/SystemProcessRunner.cpp"}, LibraryType::Static});
+      Library{"cppup_process", {"src/core/system_process_runner.cpp"}, LibraryType::Static});
 #else
   // Package system libraries
   config.libraries.push_back(
@@ -105,7 +105,7 @@ extern "C" BuildConfiguration configure()
 
   // Process runner library
   config.libraries.push_back(
-      Library{"cppup_process", {"src/SystemProcessRunner.cpp"}, LibraryType::Static});
+      Library{"cppup_process", {"src/core/system_process_runner.cpp"}, LibraryType::Static});
 
   // Build system libraries (optional - can be disabled with compile flags)
 

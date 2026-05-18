@@ -156,7 +156,7 @@ class BootstrapBuilder
     const std::vector<BuildConfig> targets = {
         BuildConfig("cppup_config",
                     {"src/core/configuration/compiler.cpp", "src/core/configuration/loader.cpp"}),
-        BuildConfig("cppup_process", {"src/SystemProcessRunner.cpp"}),
+        BuildConfig("cppup_process", {"src/core/system_process_runner.cpp"}),
         BuildConfig("cppup",
                     {"src/main.cpp", "src/core/cli/cli_application.cpp",
                      "src/core/cli/commands.cpp", "src/core/cli/logger.cpp"},
