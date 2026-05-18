@@ -82,7 +82,7 @@ build_bootstrap() {
         if [ -f "$src" ]; then
             obj="$BUILD_DIR/$(basename $src .cpp).o"
             log_info "Compiling $src..."
-            $CXX -std=c++23 -O2 -DIS_BOOTSTRAP_BUILD -c "$src" -o "$obj" \
+            $CXX -std=c++23 -O2 -c "$src" -o "$obj" \
                 -Isrc/core/configuration \
                 -Iinclude
             CONFIG_OBJECTS+=("$obj")
@@ -103,6 +103,7 @@ build_bootstrap() {
         "src/core/cli/logger.cpp"
         "src/core/cli/cli_application.cpp"
         "src/core/cli/commands.cpp"
+        "src/core/cli/commands/common.cpp"
         "src/core/cli/commands/init.cpp"
         "src/core/cli/commands/build.cpp"
         "src/core/cli/commands/test.cpp"
@@ -111,6 +112,8 @@ build_bootstrap() {
         "src/core/cli/commands/module.cpp"
         "src/core/cli/commands/toolchain.cpp"
         "src/core/cli/commands/plugin.cpp"
+        "src/core/dependency/database.cpp"
+        "src/core/build/cache.cpp"
     )
 
     MAIN_OBJECTS=()
@@ -118,7 +121,7 @@ build_bootstrap() {
         if [ -f "$src" ]; then
             obj="$BUILD_DIR/$(basename $src .cpp)_$(dirname $src | tr / _).o"
             log_info "Compiling $src..."
-            $CXX -std=c++23 -O2 -DIS_BOOTSTRAP_BUILD -c "$src" -o "$obj" \
+            $CXX -std=c++23 -O2 -c "$src" -o "$obj" \
                 -Isrc/core/configuration \
                 -Isrc/core/cli \
                 -Isrc/core/cli/commands \
@@ -130,13 +133,13 @@ build_bootstrap() {
             log_warn "Source file not found: $src (skipping)"
         fi
     done
-    
+
     # Link the bootstrap binary
     log_info "Linking bootstrap binary..."
     $CXX -std=c++23 -O2 "${MAIN_OBJECTS[@]}" \
         -L"$BUILD_DIR" -lcppup_config \
         -o "$BOOTSTRAP_BINARY" \
-        -pthread -ldl
+        -lsqlite3 -lcrypto -pthread -ldl
     
     if [ -f "$BOOTSTRAP_BINARY" ]; then
         log_info "Bootstrap binary created: $BOOTSTRAP_BINARY"
@@ -146,69 +149,31 @@ build_bootstrap() {
     fi
 }
 
-# Test the bootstrap binary
+# Smoke-test the bootstrap binary by running --version
 test_bootstrap() {
     log_info "Testing bootstrap binary..."
-    
-    # Create a simple test build.cpp
-    cat > "$BUILD_DIR/test_build.cpp" << 'EOF'
-#include "build_configuration.hpp"
-
-using namespace cppup::configuration;
-
-extern "C" BuildConfiguration configure() {
-    BuildConfiguration config;
-    config.toolchain = Toolchain{"gcc"};
-    config.sources = {"test.cpp"};
-    config.binaries = {Binary{"test", {"test.cpp"}}};
-    return config;
-}
-EOF
-    
-    # Try to compile the test configuration
-    log_info "Compiling test configuration..."
-    $CXX -std=c++23 -shared -fPIC \
-        -Isrc/core/configuration \
-        -L"$BUILD_DIR" -lcppup_config \
-        "$BUILD_DIR/test_build.cpp" \
-        -o "$BUILD_DIR/test_config.so"
-    
-    if [ -f "$BUILD_DIR/test_config.so" ]; then
-        log_info "Bootstrap test passed!"
-        rm -f "$BUILD_DIR/test_build.cpp" "$BUILD_DIR/test_config.so"
+    if "$BOOTSTRAP_BINARY" --version >/dev/null 2>&1 || "$BOOTSTRAP_BINARY" --help >/dev/null 2>&1; then
+        log_info "Bootstrap binary runs"
     else
-        log_error "Bootstrap test failed"
+        log_error "Bootstrap binary failed to run"
         exit 1
     fi
 }
 
-# Use bootstrap to build full cppup
+# Use the bootstrap binary to build the full cppup from build.cpp
 build_full() {
     log_info "Building full cppup using bootstrap binary..."
-    
-    # Set environment for bootstrap mode
-    export BUILD_TYPE=bootstrap
-    
-    # Compile the main build.cpp using bootstrap
-    log_info "Compiling main build.cpp..."
-    $CXX -std=c++23 -shared -fPIC \
-        -Isrc/core/configuration \
-        -L"$BUILD_DIR" -lcppup_config \
-        build.cpp \
-        -o "$BUILD_DIR/build_config.so"
-    
-    if [ -f "$BUILD_DIR/build_config.so" ]; then
-        log_info "Main build configuration compiled successfully"
+    "$BOOTSTRAP_BINARY" build || {
+        log_error "Bootstrap-driven build failed"
+        exit 1
+    }
+    if [ -f "build/cppup" ]; then
+        cp "build/cppup" "$BUILD_DIR/cppup"
+        log_info "Full cppup binary created: $BUILD_DIR/cppup"
     else
-        log_error "Failed to compile main build configuration"
+        log_error "Expected build/cppup not found after bootstrap build"
         exit 1
     fi
-    
-    # Now we would use the bootstrap binary to build the full version
-    # For now, we'll just copy the bootstrap as the full version
-    cp "$BOOTSTRAP_BINARY" "$BUILD_DIR/cppup"
-    
-    log_info "Full cppup binary created: $BUILD_DIR/cppup"
 }
 
 # Install the built binary

@@ -1,449 +1,320 @@
-#include <fstream>
-
-#include "../configuration/platform.hpp"
 #include "common.h"
-#ifndef IS_BOOTSTRAP_BUILD
-#include "../configuration/compiler.hpp"
-#endif
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace cppup::cli
 {
 
-#ifdef IS_BOOTSTRAP_BUILD
-static std::expected<int, std::string> executeBootstrapBuild(const CommandContext& context);
-#endif
+namespace
+{
 
-std::expected<int, std::string> executeBuild(bool /*enable_asan*/,
+namespace conf = cppup::configuration;
+namespace bld  = cppup::build;
+
+void append_common_flags(std::vector<std::string>&     out,
+                         const conf::BuildConfiguration& config,
+                         const std::filesystem::path&  project_root,
+                         bool                          enable_asan)
+{
+  for (const auto& flag : config.compile_flags) out.emplace_back(flag.flag);
+  for (const auto& def : config.definitions)
+  {
+    std::string d = "-D" + std::string(def.name);
+    if (!def.value.empty()) d += "=" + std::string(def.value);
+    out.push_back(std::move(d));
+  }
+  for (const auto& inc : config.include_paths)
+  {
+    out.push_back("-I" + (project_root / inc).string());
+  }
+  if (enable_asan)
+  {
+    out.emplace_back("-fsanitize=address");
+    out.emplace_back("-fno-omit-frame-pointer");
+  }
+}
+
+std::vector<bld::FileDependency> collect_dependencies(
+    bld::BuildCache* cache, const std::vector<std::filesystem::path>& sources,
+    const std::vector<std::filesystem::path>& include_paths)
+{
+  std::vector<bld::FileDependency> deps;
+  if (!cache) return deps;
+
+  for (const auto& source : sources)
+  {
+    if (!std::filesystem::exists(source)) continue;
+    bld::FileDependency dep;
+    dep.file_path     = source;
+    dep.last_modified = std::filesystem::last_write_time(source);
+    auto checksum     = cache->calculate_file_checksum(source);
+    if (checksum) dep.checksum = *checksum;
+
+    auto includes = bld::DependencyScanner::scan_includes(source);
+    if (includes)
+    {
+      for (const auto& inc : *includes)
+      {
+        for (const auto& dir : include_paths)
+        {
+          auto resolved = dir / inc;
+          if (std::filesystem::exists(resolved))
+          {
+            dep.includes.push_back(resolved);
+            break;
+          }
+        }
+      }
+    }
+    deps.push_back(std::move(dep));
+  }
+  return deps;
+}
+
+std::expected<std::filesystem::path, std::string> compile_object(
+    const std::string& compiler, const std::filesystem::path& source,
+    const std::filesystem::path&    obj_path,
+    const std::vector<std::string>& flags, Logger& logger)
+{
+  std::ostringstream cmd;
+  cmd << compiler << " -c";
+  for (const auto& f : flags) cmd << ' ' << f;
+  cmd << ' ' << source.string() << " -o " << obj_path.string();
+
+  logger.debug("compile: " + cmd.str());
+  if (std::system(cmd.str().c_str()) != 0)
+  {
+    return std::unexpected("compilation failed: " + source.string());
+  }
+  return obj_path;
+}
+
+std::expected<std::filesystem::path, std::string> build_library(
+    const conf::BuildConfiguration& config, const conf::Library& library,
+    const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
+    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
+{
+  bld::BuildTarget target;
+  target.name = library.name;
+  target.type = "library";
+  const char* ext    = (library.type == conf::LibraryType::Static) ? ".a" : ".so";
+  target.output_path = build_dir / ("lib" + library.name + ext);
+  for (const auto& src : library.sources) target.source_files.push_back(project_root / src);
+
+  std::vector<std::string> compile_flags;
+  append_common_flags(compile_flags, config, project_root, enable_asan);
+  target.compile_flags = compile_flags;
+  for (const auto& inc : config.include_paths)
+    target.include_paths.push_back(project_root / inc);
+
+  if (cache)
+  {
+    auto need = cache->needs_rebuild(target);
+    if (need && !*need)
+    {
+      logger.info("cached library: " + library.name);
+      ++cached_counter;
+      return target.output_path;
+    }
+  }
+
+  logger.info("building library: " + library.name);
+  std::vector<std::filesystem::path> objects;
+  objects.reserve(target.source_files.size());
+  for (const auto& src : target.source_files)
+  {
+    auto obj = build_dir / (src.stem().string() + "_" + library.name + ".o");
+    auto rc  = compile_object("g++", src, obj, compile_flags, logger);
+    if (!rc) return std::unexpected(rc.error());
+    objects.push_back(obj);
+  }
+
+  std::ostringstream ar_cmd;
+  ar_cmd << "ar rcs " << target.output_path.string();
+  for (const auto& obj : objects) ar_cmd << ' ' << obj.string();
+  if (std::system(ar_cmd.str().c_str()) != 0)
+  {
+    return std::unexpected("archive failed: " + library.name);
+  }
+
+  if (cache)
+  {
+    auto deps = collect_dependencies(cache, target.source_files, target.include_paths);
+    (void) cache->cache_build_result(target, deps);
+  }
+  return target.output_path;
+}
+
+std::expected<void, std::string> build_executable(
+    const std::string& kind, const std::string& name,
+    const std::vector<std::string>& sources, const conf::BuildConfiguration& config,
+    const std::vector<conf::Library>& libraries, const std::filesystem::path& project_root,
+    const std::filesystem::path& build_dir, bld::BuildCache* cache, bool enable_asan,
+    Logger& logger, std::size_t& cached_counter)
+{
+  bld::BuildTarget target;
+  target.name        = name;
+  target.type        = kind;
+  target.output_path = build_dir / name;
+  for (const auto& src : sources) target.source_files.push_back(project_root / src);
+
+  std::vector<std::string> compile_flags;
+  append_common_flags(compile_flags, config, project_root, enable_asan);
+  target.compile_flags = compile_flags;
+  for (const auto& inc : config.include_paths)
+    target.include_paths.push_back(project_root / inc);
+
+  std::vector<std::string> link_flags;
+  link_flags.push_back("-L" + build_dir.string());
+  if (!libraries.empty()) link_flags.emplace_back("-Wl,--start-group");
+  for (const auto& lib : libraries) link_flags.push_back("-l" + lib.name);
+  if (!libraries.empty()) link_flags.emplace_back("-Wl,--end-group");
+  for (const auto& f : config.link_flags) link_flags.emplace_back(f.flag);
+  if (enable_asan) link_flags.emplace_back("-fsanitize=address");
+  target.link_flags = link_flags;
+
+  if (cache)
+  {
+    auto need = cache->needs_rebuild(target);
+    if (need && !*need)
+    {
+      logger.info("cached " + kind + ": " + name);
+      ++cached_counter;
+      return {};
+    }
+  }
+
+  logger.info("building " + kind + ": " + name);
+  const std::string compiler = config.toolchain ? std::string(config.toolchain->name) : "g++";
+
+  std::ostringstream cmd;
+  cmd << compiler;
+  for (const auto& f : compile_flags) cmd << ' ' << f;
+  for (const auto& src : target.source_files) cmd << ' ' << src.string();
+  for (const auto& f : link_flags) cmd << ' ' << f;
+  cmd << " -o " << target.output_path.string();
+
+  logger.debug("link: " + cmd.str());
+  if (std::system(cmd.str().c_str()) != 0)
+  {
+    return std::unexpected(kind + " link failed: " + name);
+  }
+
+  if (cache)
+  {
+    auto deps = collect_dependencies(cache, target.source_files, target.include_paths);
+    (void) cache->cache_build_result(target, deps);
+  }
+  return {};
+}
+
+}  // namespace
+
+std::expected<int, std::string> executeBuild(bool                  enable_asan,
                                              const CommandContext& context) noexcept
 {
   try
   {
-    context.logger->info("Building project...");
+    auto& logger = *context.logger;
+    logger.info("building project...");
 
-    // Look for build.cpp in current directory
-    std::filesystem::path build_file = context.projectRoot / "build.cpp";
+    const auto build_file = context.projectRoot / "build.cpp";
     if (!std::filesystem::exists(build_file))
     {
-      return std::unexpected("No build.cpp found in current directory");
+      return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
     }
 
-#ifdef IS_BOOTSTRAP_BUILD
-    return executeBootstrapBuild(context);
-#else
-    // Initialize dependency database and build cache
-    std::filesystem::path cache_dir = context.projectRoot / ".cppup" / "cache";
-    std::filesystem::path db_path   = context.projectRoot / ".cppup" / "packages.db";
-
-    auto dep_db_result = cppup::dependency::create_dependency_database(db_path);
-    if (!dep_db_result)
-    {
-      context.logger->info("Warning: Could not initialize dependency database: " +
-                           dep_db_result.error());
-    }
-
-    auto build_cache_result = cppup::build::create_build_cache(
-        cache_dir, dep_db_result ? std::move(*dep_db_result) : nullptr);
-    if (!build_cache_result)
-    {
-      context.logger->info("Warning: Could not initialize build cache: " +
-                           build_cache_result.error());
-    }
-
-    // Use configuration compiler to compile build.cpp
-    cppup::configuration::ConfigurationCompiler compiler;
-    auto                                        result = compiler.compile(build_file);
-
-    if (!result.success)
-    {
-      return std::unexpected("Failed to compile build configuration: " + result.error_message);
-    }
-
-    // Load the compiled configuration
-    cppup::configuration::ConfigurationLoader loader;
-    auto load_result = loader.load_from_library(result.shared_library_path);
-
-    if (!load_result.success)
-    {
-      return std::unexpected("Failed to load build configuration: " + load_result.error_message);
-    }
-
-    auto& config = load_result.configuration.value();
-    context.logger->info("Build configuration loaded successfully");
-
-    // Create build directory
-    std::filesystem::path build_dir = context.projectRoot / "build";
+    const auto cppup_dir = context.projectRoot / ".cppup";
+    const auto cache_dir = cppup_dir / "cache";
+    const auto build_dir = context.projectRoot / "build";
     std::filesystem::create_directories(build_dir);
 
-    int targets_built  = 0;
-    int targets_cached = 0;
+    std::unique_ptr<bld::BuildCache> cache;
+    if (auto c = bld::create_build_cache(cache_dir, nullptr)) cache = std::move(*c);
+    else
+      logger.warning("build cache unavailable: " + c.error());
 
-    // Build binaries
-    for (const auto& binary : config.binaries)
+    conf::CompilerOptions compiler_opts;
+    compiler_opts.include_paths.push_back((context.projectRoot / "include").string());
+    compiler_opts.include_paths.push_back((context.projectRoot / "src").string());
+    compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
+
+    conf::ConfigurationCompiler compiler(std::move(compiler_opts));
+    auto                        compile_result = compiler.compile(build_file);
+    if (!compile_result.success)
     {
-      // Create build target
-      cppup::build::BuildTarget target;
-      target.name        = binary.name;
-      target.type        = "binary";
-      target.output_path = build_dir / binary.name;
-
-      // Convert source files to paths
-      for (const auto& source : binary.sources)
-      {
-        target.source_files.push_back(context.projectRoot / source);
-      }
-
-      // Add compile flags
-      for (const auto& flag : config.compile_flags)
-      {
-        target.compile_flags.push_back(std::string(flag.flag));
-      }
-
-      // Add ASAN flags if requested
-      if (enable_asan)
-      {
-        target.compile_flags.push_back("-fsanitize=address");
-        target.compile_flags.push_back("-fno-omit-frame-pointer");
-        target.link_flags.push_back("-fsanitize=address");
-      }
-
-      // Add link flags
-      for (const auto& flag : config.link_flags)
-      {
-        target.link_flags.push_back(std::string(flag.flag));
-      }
-
-      // Add definitions
-      for (const auto& def : config.definitions)
-      {
-        std::string definition = "-D" + std::string(def.name);
-        if (!def.value.empty())
-        {
-          definition += "=" + std::string(def.value);
-        }
-        target.definitions.push_back(definition);
-      }
-
-      // Add include paths
-      for (const auto& include : config.include_paths)
-      {
-        target.include_paths.push_back(context.projectRoot / include);
-      }
-
-      // Check if rebuild is needed
-      bool needs_rebuild = true;
-      if (build_cache_result)
-      {
-        auto cache_check = (*build_cache_result)->needs_rebuild(target);
-        if (cache_check)
-        {
-          needs_rebuild = *cache_check;
-          if (!needs_rebuild)
-          {
-            context.logger->info("Using cached build for: " + binary.name);
-            targets_cached++;
-            continue;
-          }
-        }
-      }
-
-      context.logger->info("Building binary: " + binary.name);
-
-      // Construct compiler command
-      std::string compiler_cmd = config.toolchain ? config.toolchain->name : "g++";
-
-      // Add all flags
-      for (const auto& flag : target.compile_flags)
-      {
-        compiler_cmd += " " + flag;
-      }
-
-      for (const auto& def : target.definitions)
-      {
-        compiler_cmd += " " + def;
-      }
-
-      for (const auto& include : target.include_paths)
-      {
-        compiler_cmd += " -I" + include.string();
-      }
-
-      for (const auto& source : target.source_files)
-      {
-        compiler_cmd += " " + source.string();
-      }
-
-      for (const auto& flag : target.link_flags)
-      {
-        compiler_cmd += " " + flag;
-      }
-
-      // Output binary
-      compiler_cmd += " -o " + target.output_path.string();
-
-      context.logger->info("Executing: " + compiler_cmd);
-
-      // Execute build command
-      int build_result = std::system(compiler_cmd.c_str());
-      if (build_result != 0)
-      {
-        return std::unexpected("Build failed for binary: " + binary.name);
-      }
-
-      // Analyze file dependencies and cache the result
-      if (build_cache_result)
-      {
-        std::vector<cppup::build::FileDependency> dependencies;
-
-        for (const auto& source_file : target.source_files)
-        {
-          if (std::filesystem::exists(source_file))
-          {
-            cppup::build::FileDependency dep;
-            dep.file_path     = source_file;
-            dep.last_modified = std::filesystem::last_write_time(source_file);
-
-            auto checksum_result = (*build_cache_result)->calculate_file_checksum(source_file);
-            if (checksum_result)
-            {
-              dep.checksum = *checksum_result;
-            }
-
-            // Scan for include dependencies
-            auto includes_result = cppup::build::DependencyScanner::scan_includes(source_file);
-            if (includes_result)
-            {
-              // Convert include names to file paths (simplified)
-              for (const auto& include : *includes_result)
-              {
-                for (const auto& include_path : target.include_paths)
-                {
-                  std::filesystem::path header_file = include_path / include;
-                  if (std::filesystem::exists(header_file))
-                  {
-                    dep.includes.push_back(header_file);
-                    break;
-                  }
-                }
-              }
-            }
-
-            dependencies.push_back(dep);
-          }
-        }
-
-        // Cache the build result
-        auto cache_result = (*build_cache_result)->cache_build_result(target, dependencies);
-        if (!cache_result)
-        {
-          context.logger->info("Warning: Failed to cache build result: " + cache_result.error());
-        }
-      }
-
-      targets_built++;
+      return std::unexpected("compile build.cpp failed: " + compile_result.error_message);
     }
 
-    // Build libraries
+    conf::ConfigurationLoader loader;
+    auto                      load_result = loader.load_from_library(compile_result.shared_library_path);
+    if (!load_result.success || !load_result.configuration)
+    {
+      return std::unexpected("load build configuration failed: " + load_result.error_message);
+    }
+
+    const auto& config = *load_result.configuration;
+    logger.info("build configuration loaded");
+
+    std::size_t built  = 0;
+    std::size_t cached = 0;
+
     for (const auto& library : config.libraries)
     {
-      // Similar implementation as binaries but for libraries
-      cppup::build::BuildTarget target;
-      target.name = library.name;
-      target.type = "library";
-
-      // Use platform-aware library extension
-      std::string lib_extension =
-          std::string(cppup::configuration::library_extension(library.type));
-      target.output_path = build_dir / ("lib" + library.name + lib_extension);
-
-      // Convert source files to paths
-      for (const auto& source : library.sources)
-      {
-        target.source_files.push_back(context.projectRoot / source);
-      }
-
-      // Check cache and build if needed (similar to binaries)
-      bool needs_rebuild = true;
-      if (build_cache_result)
-      {
-        auto cache_check = (*build_cache_result)->needs_rebuild(target);
-        if (cache_check && !*cache_check)
-        {
-          context.logger->info("Using cached build for library: " + library.name);
-          targets_cached++;
-          continue;
-        }
-      }
-
-      context.logger->info("Building library: " + library.name);
-
-      // Create dummy library file
-      std::ofstream lib_file(target.output_path);
-      lib_file << "// Built library: " << library.name << std::endl;
-      lib_file.close();
-
-      targets_built++;
+      auto r = build_library(config, library, context.projectRoot, build_dir, cache.get(),
+                             enable_asan, logger, cached);
+      if (!r) return std::unexpected(r.error());
+      ++built;
     }
 
-    // Execute custom build steps
+    for (const auto& binary : config.binaries)
+    {
+      auto r =
+          build_executable("binary", binary.name, binary.sources, config, config.libraries,
+                           context.projectRoot, build_dir, cache.get(), enable_asan, logger, cached);
+      if (!r) return std::unexpected(r.error());
+      ++built;
+    }
+
+    for (const auto& test : config.tests)
+    {
+      auto r =
+          build_executable("test", test.name, test.sources, config, config.libraries,
+                           context.projectRoot, build_dir, cache.get(), enable_asan, logger, cached);
+      if (!r) return std::unexpected(r.error());
+      ++built;
+    }
+
     if (!config.build_steps.empty())
     {
-      context.logger->info("Executing custom build steps...");
-      cppup::configuration::BuildStepExecutor executor;
-      auto                                    step_result = executor.execute_build_steps(config);
+      conf::BuildStepExecutor executor;
+      auto                    step_result = executor.execute_build_steps(config);
       if (!step_result.success)
       {
-        return std::unexpected("Build step failed: " + step_result.error_message);
+        return std::unexpected("build step failed: " + step_result.error_message);
       }
     }
 
-    // Show build summary
-    context.logger->info("Build completed successfully");
-    context.logger->info("Targets built: " + std::to_string(targets_built));
-    context.logger->info("Targets cached: " + std::to_string(targets_cached));
-
-    if (build_cache_result)
+    logger.info("build complete: " + std::to_string(built) + " built, " +
+                std::to_string(cached) + " cached");
+    if (cache)
     {
-      auto stats_result = (*build_cache_result)->get_stats();
-      if (stats_result)
-      {
-        const auto& stats = *stats_result;
-        context.logger->info(
-            "Cache hit rate: " + std::to_string(static_cast<int>(stats.hit_rate * 100)) + "%");
-      }
+      auto stats = cache->get_stats();
+      if (stats)
+        logger.info("cache hit rate: " +
+                    std::to_string(static_cast<int>(stats->hit_rate * 100.0)) + "%");
     }
-
     return 0;
-#endif
   }
   catch (const std::exception& e)
   {
-    return std::unexpected("Build failed: " + std::string(e.what()));
+    return std::unexpected(std::string{"build failed: "} + e.what());
   }
 }
-
-#ifdef IS_BOOTSTRAP_BUILD
-// Bootstrap build implementation
-static std::expected<int, std::string> executeBootstrapBuild(const CommandContext& context)
-{
-  // For bootstrap build, compile essential libraries directly without configuration system
-  context.logger->info("Starting bootstrap build...");
-
-  // Create build directory
-  std::filesystem::path build_dir = context.projectRoot / "bootstrap_build";
-  std::filesystem::create_directories(build_dir);
-
-  // Define essential libraries to build for bootstrap
-  struct BootstrapLibrary
-  {
-    std::string              name;
-    std::vector<std::string> sources;
-    std::vector<std::string> include_paths;
-    std::vector<std::string> compile_flags;
-  };
-
-  std::vector<BootstrapLibrary> bootstrap_libs = {
-      {"cppup_config",
-       {"src/core/configuration/compiler.cpp", "src/core/configuration/loader.cpp"},
-       {"include", "src", "src/core/configuration"},
-       {"-std=c++23", "-fPIC", "-DIS_BOOTSTRAP_BUILD"}},
-      {"cppup_cli",
-       {"src/core/cli/cli_application.cpp", "src/core/cli/commands.cpp", "src/core/cli/logger.cpp",
-        "src/core/process_runner.cpp", "src/core/cli/commands/build.cpp"},
-       {"include", "src", "src/core/cli", "src/core/configuration", "src/cli"},
-       {"-std=c++23", "-fPIC", "-DIS_BOOTSTRAP_BUILD"}}};
-
-  int targets_built = 0;
-
-  // Build each bootstrap library
-  for (const auto& lib : bootstrap_libs)
-  {
-    context.logger->info("Building bootstrap library: " + lib.name);
-
-    std::vector<std::filesystem::path> object_files;
-
-    // Compile each source file
-    for (const auto& source : lib.sources)
-    {
-      std::filesystem::path source_path = context.projectRoot / source;
-      if (!std::filesystem::exists(source_path))
-      {
-        context.logger->info("Warning: Source file not found: " + source);
-        continue;
-      }
-
-      std::filesystem::path obj_path =
-          build_dir / (source_path.stem().string() + "_" + lib.name + ".o");
-
-      // Build compiler command
-      std::string compile_cmd = "g++ -c";
-      for (const auto& flag : lib.compile_flags)
-      {
-        compile_cmd += " " + flag;
-      }
-      for (const auto& include : lib.include_paths)
-      {
-        compile_cmd += " -I" + (context.projectRoot / include).string();
-      }
-      compile_cmd += " " + source_path.string() + " -o " + obj_path.string();
-
-      context.logger->info("Compiling: " + source);
-      int compile_result = std::system(compile_cmd.c_str());
-      if (compile_result != 0)
-      {
-        return std::unexpected("Compilation failed for: " + source);
-      }
-
-      object_files.push_back(obj_path);
-    }
-
-    // Link static library
-    if (!object_files.empty())
-    {
-      std::filesystem::path lib_path = build_dir / ("lib" + lib.name + ".a");
-      std::string           link_cmd = "ar rcs " + lib_path.string();
-      for (const auto& obj : object_files)
-      {
-        link_cmd += " " + obj.string();
-      }
-
-      context.logger->info("Linking library: " + lib.name);
-      int link_result = std::system(link_cmd.c_str());
-      if (link_result != 0)
-      {
-        return std::unexpected("Linking failed for library: " + lib.name);
-      }
-      targets_built++;
-    }
-  }
-
-  // Build main executable
-  context.logger->info("Building main executable: cppup");
-  std::filesystem::path exe_path = build_dir / "cppup";
-
-  std::string compile_cmd = "g++ -std=c++23 -DIS_BOOTSTRAP_BUILD";
-  // Add include paths
-  for (const auto& include :
-       {"include", "src", "src/core/cli", "src/core/configuration", "src/cli"})
-  {
-    compile_cmd += " -I" + (context.projectRoot / include).string();
-  }
-  compile_cmd += " " + (context.projectRoot / "src/main.cpp").string();
-  compile_cmd += " -L" + build_dir.string();
-  compile_cmd += " -lcppup_config -lcppup_cli";
-  compile_cmd += " -o " + exe_path.string();
-
-  int link_result = std::system(compile_cmd.c_str());
-  if (link_result != 0)
-  {
-    return std::unexpected("Linking failed for main executable");
-  }
-  targets_built++;
-
-  context.logger->info("Bootstrap build completed successfully");
-  context.logger->info("Targets built: " + std::to_string(targets_built));
-
-  return 0;
-}
-#endif
 
 }  // namespace cppup::cli

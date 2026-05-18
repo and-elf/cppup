@@ -1,2 +1,11 @@
-build
-bootstrap_build
+/build
+/bootstrap_build
+/.cppup
+
+# Compiled artifacts (built test/probe binaries at repo root)
+/cppup_bootstrap
+/bootstrap_test
+/test_cache
+/test_cppup
+/test_expected
+/test_print

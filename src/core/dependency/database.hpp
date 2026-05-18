@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -177,7 +178,7 @@ class DependencyDatabase
   [[nodiscard]] std::expected<std::vector<std::string>, std::string> topological_sort(
       const std::vector<std::string>& packages) const noexcept;
 
-  [[nodiscard]] bool has_cycle_dfs(const std::string& package, const std::set<std::string>& visited,
+  [[nodiscard]] bool has_cycle_dfs(const std::string& package, std::set<std::string>& visited,
                                    std::set<std::string>& recursion_stack) const noexcept;
 };
 

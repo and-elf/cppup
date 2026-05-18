@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <queue>
 #include <set>
 #include <sstream>
 
@@ -584,7 +585,6 @@ std::expected<std::unique_ptr<DependencyDatabase>, std::string> create_dependenc
   return db;
 }
 
-}  // namespace cppup::dependency
 std::expected<void, std::string> DependencyDatabase::remove_package(
     const std::string& name, const std::string& version) noexcept
 {
@@ -1018,7 +1018,7 @@ std::expected<size_t, std::string> DependencyDatabase::get_registry_count() cons
 
 bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
                                        std::set<std::string>& visited,
-                                       std::set<std::string>& recursion_stack) const
+                                       std::set<std::string>& recursion_stack) const noexcept
 {
   // Parse package key (format: "name@version")
   size_t at_pos = package_key.find('@');
@@ -1087,3 +1087,5 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
   recursion_stack.erase(package_key);
   return false;
 }
+
+}  // namespace cppup::dependency
