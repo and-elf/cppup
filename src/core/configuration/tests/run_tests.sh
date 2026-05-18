@@ -4,7 +4,7 @@ echo "Building and running configuration API tests..."
 echo
 
 # Set compiler flags
-CXX_FLAGS="-std=c++20 -Wall -Wextra -I.."
+CXX_FLAGS="-std=c++23 -Wall -Wextra -Wno-missing-field-initializers -I.."
 
 # Test types
 echo "=== Testing basic types ==="

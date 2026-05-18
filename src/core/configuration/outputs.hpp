@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "types.hpp"
+
 namespace cppup::configuration
 {
 
@@ -24,16 +26,7 @@ struct Binary
 {
   std::string              name;
   std::vector<std::string> sources;
-
-  Binary(std::string name, std::vector<std::string> sources) noexcept :
-      name(std::move(name)), sources(std::move(sources))
-  {
-  }
-
-  Binary(std::string name, std::initializer_list<std::string> sources) noexcept :
-      name(std::move(name)), sources(sources)
-  {
-  }
+  std::vector<std::string> libraries;
 };
 
 /**
@@ -44,26 +37,8 @@ struct Library
   std::string              name;
   std::vector<std::string> sources;
   LibraryType              type = LibraryType::Static;
-
-  Library(std::string name, std::vector<std::string> sources) noexcept :
-      name(std::move(name)), sources(std::move(sources))
-  {
-  }
-
-  Library(std::string name, std::initializer_list<std::string> sources) noexcept :
-      name(std::move(name)), sources(sources)
-  {
-  }
-
-  Library(std::string name, std::vector<std::string> sources, LibraryType type) noexcept :
-      name(std::move(name)), sources(std::move(sources)), type(type)
-  {
-  }
-
-  Library(std::string name, std::initializer_list<std::string> sources, LibraryType type) noexcept :
-      name(std::move(name)), sources(sources), type(type)
-  {
-  }
+  std::vector<Flag>        link_flags;
+  std::vector<std::string> libraries;
 };
 
 /**

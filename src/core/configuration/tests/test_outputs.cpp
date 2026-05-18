@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "../outputs.hpp"
+#include "../types.hpp"
 
 using namespace cppup::configuration;
 
@@ -32,6 +33,8 @@ void test_library_construction()
   assert(lib1.name == "mylib");
   assert(lib1.sources.size() == 2);
   assert(lib1.type == LibraryType::Static);
+  assert(lib1.link_flags.empty());
+  assert(lib1.libraries.empty());
 
   // Test explicit shared library
   Library lib2("mysharedlib", {"lib.cpp"}, LibraryType::Shared);
@@ -46,6 +49,55 @@ void test_library_construction()
   assert(lib3.type == LibraryType::Shared);
 
   std::cout << "Library construction tests passed\n";
+}
+
+void test_library_with_link_flags_and_deps()
+{
+  // Library that pulls in system libs and depends on another internal library
+  Library lib("cppup_build", {"cache.cpp"}, LibraryType::Static,
+              {Flag{"-lsqlite3"}, Flag{"-lcrypto"}}, {"cppup_configuration"});
+  assert(lib.name == "cppup_build");
+  assert(lib.sources.size() == 1);
+  assert(lib.type == LibraryType::Static);
+  assert(lib.link_flags.size() == 2);
+  assert(lib.link_flags[0].flag == "-lsqlite3");
+  assert(lib.link_flags[1].flag == "-lcrypto");
+  assert(lib.libraries.size() == 1);
+  assert(lib.libraries[0] == "cppup_configuration");
+
+  // Designated-init form must also work
+  Library lib2{.name       = "cppup_cli",
+               .sources    = {"cli.cpp"},
+               .type       = LibraryType::Static,
+               .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
+               .libraries  = {"cppup_configuration", "cppup_build"}};
+  assert(lib2.name == "cppup_cli");
+  assert(lib2.link_flags.size() == 2);
+  assert(lib2.libraries.size() == 2);
+  assert(lib2.libraries[1] == "cppup_build");
+
+  std::cout << "Library link_flags and libraries tests passed\n";
+}
+
+void test_binary_with_libraries()
+{
+  // Binary that links against named internal libraries
+  Binary bin("cppup", {"src/main.cpp"}, {"cppup_cli"});
+  assert(bin.name == "cppup");
+  assert(bin.sources.size() == 1);
+  assert(bin.libraries.size() == 1);
+  assert(bin.libraries[0] == "cppup_cli");
+
+  // Existing 2-arg form must still leave libraries empty
+  Binary bin2("myapp", {"main.cpp"});
+  assert(bin2.libraries.empty());
+
+  // Designated-init form
+  Binary bin3{.name = "tool", .sources = {"tool.cpp"}, .libraries = {"libA", "libB"}};
+  assert(bin3.libraries.size() == 2);
+  assert(bin3.libraries[1] == "libB");
+
+  std::cout << "Binary libraries field tests passed\n";
 }
 
 void test_test_construction()
@@ -90,6 +142,8 @@ int main()
 {
   test_binary_construction();
   test_library_construction();
+  test_library_with_link_flags_and_deps();
+  test_binary_with_libraries();
   test_test_construction();
   test_build_step_construction();
 

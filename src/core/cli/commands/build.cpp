@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "../../configuration/compile_commands.hpp"
+#include "../../configuration/link_resolution.hpp"
 #include "common.h"
 
 namespace cppup::cli
@@ -149,28 +150,58 @@ std::expected<std::filesystem::path, std::string> build_library(
 
 std::expected<void, std::string> build_executable(
     const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
-    const conf::BuildConfiguration& config, const std::vector<conf::Library>& libraries,
+    const conf::BuildConfiguration&        config,
+    const std::vector<std::string>&        linked_library_names,
     const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
     bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
 {
+  auto resolved = conf::resolve_link_set(linked_library_names, config.libraries);
+  if (!resolved)
+  {
+    return std::unexpected(kind + " " + name + ": " + resolved.error());
+  }
+  const auto library_link_flags = conf::aggregate_link_flags(*resolved, config.libraries);
+
   bld::BuildTarget target;
   target.name        = name;
   target.type        = kind;
   target.output_path = build_dir / name;
-  for (const auto& src : sources) target.source_files.push_back(project_root / src);
+  for (const auto& src : sources)
+  {
+    target.source_files.push_back(project_root / src);
+  }
 
   std::vector<std::string> compile_flags;
   append_common_flags(compile_flags, config, project_root, enable_asan);
   target.compile_flags = compile_flags;
-  for (const auto& inc : config.include_paths) target.include_paths.push_back(project_root / inc);
+  for (const auto& inc : config.include_paths)
+  {
+    target.include_paths.push_back(project_root / inc);
+  }
 
   std::vector<std::string> link_flags;
   link_flags.push_back("-L" + build_dir.string());
-  if (!libraries.empty()) link_flags.emplace_back("-Wl,--start-group");
-  for (const auto& lib : libraries) link_flags.push_back("-l" + lib.name);
-  if (!libraries.empty()) link_flags.emplace_back("-Wl,--end-group");
-  for (const auto& f : config.link_flags) link_flags.emplace_back(f.flag);
-  if (enable_asan) link_flags.emplace_back("-fsanitize=address");
+  if (!resolved->empty())
+  {
+    link_flags.emplace_back("-Wl,--start-group");
+    for (const auto& lib : *resolved)
+    {
+      link_flags.push_back("-l" + lib);
+    }
+    link_flags.emplace_back("-Wl,--end-group");
+  }
+  for (const auto& f : library_link_flags)
+  {
+    link_flags.emplace_back(f);
+  }
+  for (const auto& f : config.link_flags)
+  {
+    link_flags.emplace_back(f.flag);
+  }
+  if (enable_asan)
+  {
+    link_flags.emplace_back("-fsanitize=address");
+  }
   target.link_flags = link_flags;
 
   if (cache)
@@ -278,19 +309,33 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
 
     for (const auto& binary : config.binaries)
     {
-      auto r = build_executable("binary", binary.name, binary.sources, config, config.libraries,
+      auto r = build_executable("binary", binary.name, binary.sources, config, binary.libraries,
                                 context.projectRoot, build_dir, cache.get(), enable_asan, logger,
                                 cached);
-      if (!r) return std::unexpected(r.error());
+      if (!r)
+      {
+        return std::unexpected(r.error());
+      }
       ++built;
     }
 
+    // Tests have no per-target libraries field yet; link against every internal
+    // library so test executables can pull in whatever they need.
+    std::vector<std::string> all_library_names;
+    all_library_names.reserve(config.libraries.size());
+    for (const auto& lib : config.libraries)
+    {
+      all_library_names.push_back(lib.name);
+    }
     for (const auto& test : config.tests)
     {
-      auto r = build_executable("test", test.name, test.sources, config, config.libraries,
+      auto r = build_executable("test", test.name, test.sources, config, all_library_names,
                                 context.projectRoot, build_dir, cache.get(), enable_asan, logger,
                                 cached);
-      if (!r) return std::unexpected(r.error());
+      if (!r)
+      {
+        return std::unexpected(r.error());
+      }
       ++built;
     }
 
