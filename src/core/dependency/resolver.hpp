@@ -16,7 +16,7 @@ namespace cppup::dependency
 /**
  * Version constraint types
  */
-enum class VersionConstraintType
+enum class VersionConstraintType : uint8_t
 {
   Exact,         // ==1.0.0
   GreaterThan,   // >1.0.0

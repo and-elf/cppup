@@ -17,8 +17,7 @@ namespace cppup::cli
 
 // Recursively walk `root`, returning every C++ source/header file that is
 // not under an excluded path.
-[[nodiscard]] std::vector<std::filesystem::path> find_cpp_files(
-    const std::filesystem::path& root);
+[[nodiscard]] std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& root);
 
 // Resolve a CLI-style list of arguments to a deduped set of C++ source
 // files under `project_root`. Each arg may be a file or a directory:
@@ -31,8 +30,7 @@ namespace cppup::cli
 // source; `skipped_missing` receives every path that didn't exist.
 // Output paths are absolute and deduplicated, in deterministic order.
 [[nodiscard]] std::vector<std::filesystem::path> select_cpp_files(
-    const std::vector<std::string>&    args,
-    const std::filesystem::path&       project_root,
+    const std::vector<std::string>& args, const std::filesystem::path& project_root,
     std::vector<std::filesystem::path>* skipped_non_cpp = nullptr,
     std::vector<std::filesystem::path>* skipped_missing = nullptr);
 

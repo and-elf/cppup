@@ -1,20 +1,19 @@
 #include "cache.hpp"
 
-#include "../dependency/database.hpp"
-
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <sqlite3.h>
 
 #include <array>
-#include <cstdint>
-#include <optional>
-
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <optional>
 #include <regex>
 #include <sstream>
+
+#include "../dependency/database.hpp"
 
 namespace cppup::build
 {
@@ -102,8 +101,8 @@ std::string target_signature(const BuildTarget& target)
 class SqliteBuildCache final : public BuildCache
 {
  public:
-  SqliteBuildCache(sqlite3* db, std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db)
-      : db_(db), dep_db_(std::move(dep_db))
+  SqliteBuildCache(sqlite3* db, std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db) :
+      db_(db), dep_db_(std::move(dep_db))
   {
   }
 
@@ -166,9 +165,12 @@ class SqliteBuildCache final : public BuildCache
   std::expected<void, std::string> cache_build_result(
       const BuildTarget& target, const std::vector<FileDependency>& dependencies) override
   {
-    if (auto r = exec("BEGIN IMMEDIATE"); !r) return r;
+    if (auto r = exec("BEGIN IMMEDIATE"); !r)
+    {
+      return r;
+    }
 
-    const char* sql = R"(
+    const char*   sql  = R"(
       INSERT OR REPLACE INTO cache_entries
         (target_name, output_path, signature, build_time)
       VALUES (?, ?, ?, ?)
@@ -180,11 +182,10 @@ class SqliteBuildCache final : public BuildCache
       return std::unexpected(std::string{"prepare cache_entries failed: "} + sqlite3_errmsg(db_));
     }
 
-    const auto signature = target_signature(target);
-    const auto build_time =
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count();
+    const auto signature  = target_signature(target);
+    const auto build_time = std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::system_clock::now().time_since_epoch())
+                                .count();
 
     sqlite3_bind_text(stmt, 1, target.name.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(stmt, 2, target.output_path.string().c_str(), -1, SQLITE_TRANSIENT);
@@ -200,14 +201,13 @@ class SqliteBuildCache final : public BuildCache
     }
     sqlite3_finalize(stmt);
 
-    if (auto r = exec_bound("DELETE FROM file_dependencies WHERE target_name = ?", target.name);
-        !r)
+    if (auto r = exec_bound("DELETE FROM file_dependencies WHERE target_name = ?", target.name); !r)
     {
       exec("ROLLBACK");
       return r;
     }
 
-    const char* dep_sql = R"(
+    const char*   dep_sql  = R"(
       INSERT INTO file_dependencies (target_name, file_path, checksum)
       VALUES (?, ?, ?)
     )";
@@ -215,7 +215,8 @@ class SqliteBuildCache final : public BuildCache
     if (sqlite3_prepare_v2(db_, dep_sql, -1, &dep_stmt, nullptr) != SQLITE_OK)
     {
       exec("ROLLBACK");
-      return std::unexpected(std::string{"prepare file_dependencies failed: "} + sqlite3_errmsg(db_));
+      return std::unexpected(std::string{"prepare file_dependencies failed: "} +
+                             sqlite3_errmsg(db_));
     }
     for (const auto& dep : dependencies)
     {
@@ -239,10 +240,10 @@ class SqliteBuildCache final : public BuildCache
   std::expected<CacheStats, std::string> get_stats() override
   {
     CacheStats stats;
-    stats.hits     = hits_;
-    stats.misses   = misses_;
+    stats.hits       = hits_;
+    stats.misses     = misses_;
     const auto total = hits_ + misses_;
-    stats.hit_rate = total == 0 ? 0.0 : static_cast<double>(hits_) / static_cast<double>(total);
+    stats.hit_rate   = total == 0 ? 0.0 : static_cast<double>(hits_) / static_cast<double>(total);
     return stats;
   }
 
@@ -256,9 +257,13 @@ class SqliteBuildCache final : public BuildCache
 
   std::optional<StoredEntry> load_entry(const std::string& name)
   {
-    const char*   sql  = "SELECT output_path, signature, build_time FROM cache_entries WHERE target_name = ?";
+    const char* sql =
+        "SELECT output_path, signature, build_time FROM cache_entries WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return std::nullopt;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    {
+      return std::nullopt;
+    }
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::optional<StoredEntry> result;
     if (sqlite3_step(stmt) == SQLITE_ROW)
@@ -385,7 +390,7 @@ std::expected<std::vector<std::string>, std::string> DependencyScanner::scan_inc
     return std::unexpected("cannot open file: " + source_file.string());
   }
 
-  static const std::regex include_re(R"(^\s*#\s*include\s*[<"]([^>"]+)[>"])");
+  static const std::regex  include_re(R"(^\s*#\s*include\s*[<"]([^>"]+)[>"])");
   std::vector<std::string> includes;
   std::string              line;
   while (std::getline(in, line))

@@ -110,8 +110,8 @@ inline std::expected<BuildConfiguration, std::string> compile_and_load(
   auto compile_result = compiler.compile(build_file);
   if (!compile_result.success)
   {
-    return std::unexpected("compile " + build_file.string() + " failed: " +
-                           compile_result.error_message);
+    return std::unexpected("compile " + build_file.string() +
+                           " failed: " + compile_result.error_message);
   }
   auto loaded = load_from_library(compile_result.shared_library_path);
   if (!loaded)
@@ -161,7 +161,7 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
     return std::unexpected(root.error());
   }
 
-  BuildConfiguration merged   = std::move(*root);
+  BuildConfiguration      merged    = std::move(*root);
   std::vector<Subproject> root_subs = std::move(merged.subprojects);
   merged.subprojects.clear();
 
@@ -181,13 +181,12 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
 
   while (!worklist.empty())
   {
-    Entry      entry = std::move(worklist.back());
+    Entry entry = std::move(worklist.back());
     worklist.pop_back();
 
-    const std::string sp_rel = entry.parent_rel.empty()
-                                   ? entry.sp.path
-                                   : entry.parent_rel + "/" + entry.sp.path;
-    const auto        sp_dir = root_dir / sp_rel;
+    const std::string sp_rel =
+        entry.parent_rel.empty() ? entry.sp.path : entry.parent_rel + "/" + entry.sp.path;
+    const auto sp_dir = root_dir / sp_rel;
 
     auto bs = detail::resolve_build_system(entry.sp, sp_dir);
     if (!bs)

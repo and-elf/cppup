@@ -29,9 +29,9 @@ namespace cppup::cli
     bool check_only, const std::vector<std::string>& file_args,
     const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeTidy(
-    bool apply_fix, const std::vector<std::string>& file_args,
-    const CommandContext& context) noexcept;
+[[nodiscard]] std::expected<int, std::string> executeTidy(bool                            apply_fix,
+                                                          const std::vector<std::string>& file_args,
+                                                          const CommandContext& context) noexcept;
 
 // Package commands
 [[nodiscard]] std::expected<int, std::string> executePackageList(

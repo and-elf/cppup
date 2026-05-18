@@ -13,7 +13,7 @@ namespace
 {
 
 Library make_lib(std::string name, std::vector<Flag> link_flags = {},
-                std::vector<std::string> deps = {})
+                 std::vector<std::string> deps = {})
 {
   return Library{.name       = std::move(name),
                  .sources    = {},

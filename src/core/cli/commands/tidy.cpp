@@ -28,8 +28,9 @@ std::string shell_quote(const std::filesystem::path& p)
 
 }  // namespace
 
-std::expected<int, std::string> executeTidy(bool apply_fix, const std::vector<std::string>& file_args,
-                                            const CommandContext& context) noexcept
+std::expected<int, std::string> executeTidy(bool                            apply_fix,
+                                            const std::vector<std::string>& file_args,
+                                            const CommandContext&           context) noexcept
 {
   try
   {
@@ -38,15 +39,14 @@ std::expected<int, std::string> executeTidy(bool apply_fix, const std::vector<st
     const auto cc_json = context.projectRoot / "compile_commands.json";
     if (!std::filesystem::exists(cc_json))
     {
-      return std::unexpected(
-          "compile_commands.json not found at " + cc_json.string() +
-          " — run `cppup compile-commands` (or `cppup build`) first");
+      return std::unexpected("compile_commands.json not found at " + cc_json.string() +
+                             " — run `cppup compile-commands` (or `cppup build`) first");
     }
 
     std::vector<std::filesystem::path> skipped_non_cpp;
     std::vector<std::filesystem::path> skipped_missing;
-    const auto files = select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp,
-                                        &skipped_missing);
+    const auto                         files =
+        select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp, &skipped_missing);
 
     for (const auto& s : skipped_non_cpp)
     {

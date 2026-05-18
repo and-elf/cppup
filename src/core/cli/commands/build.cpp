@@ -151,8 +151,7 @@ std::expected<std::filesystem::path, std::string> build_library(
 
 std::expected<void, std::string> build_executable(
     const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
-    const conf::BuildConfiguration&        config,
-    const std::vector<std::string>&        linked_library_names,
+    const conf::BuildConfiguration& config, const std::vector<std::string>& linked_library_names,
     const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
     bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
 {
@@ -273,8 +272,7 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
 
     conf::ConfigurationCompiler compiler(std::move(compiler_opts));
-    auto                        config_result =
-        conf::load_with_subprojects(context.projectRoot, compiler);
+    auto config_result = conf::load_with_subprojects(context.projectRoot, compiler);
     if (!config_result)
     {
       return std::unexpected("load build configuration failed: " + config_result.error());

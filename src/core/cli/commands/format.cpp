@@ -13,7 +13,7 @@ namespace cppup::cli
 
 std::expected<int, std::string> executeFormat(bool                            check_only,
                                               const std::vector<std::string>& file_args,
-                                              const CommandContext& context) noexcept
+                                              const CommandContext&           context) noexcept
 {
   try
   {
@@ -27,8 +27,8 @@ std::expected<int, std::string> executeFormat(bool                            ch
 
     std::vector<std::filesystem::path> skipped_non_cpp;
     std::vector<std::filesystem::path> skipped_missing;
-    const auto files = select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp,
-                                        &skipped_missing);
+    const auto                         files =
+        select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp, &skipped_missing);
 
     for (const auto& s : skipped_non_cpp)
     {

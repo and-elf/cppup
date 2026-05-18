@@ -103,8 +103,8 @@ inline std::expected<std::vector<std::string>, std::string> resolve_link_set(
  * Aggregate link_flags from the given libraries (in the order they appear in
  * `library_names`), deduplicating while preserving first-occurrence order.
  */
-inline std::vector<std::string> aggregate_link_flags(
-    const std::vector<std::string>& library_names, const std::vector<Library>& all_libraries)
+inline std::vector<std::string> aggregate_link_flags(const std::vector<std::string>& library_names,
+                                                     const std::vector<Library>&     all_libraries)
 {
   std::unordered_map<std::string_view, const Library*> by_name;
   by_name.reserve(all_libraries.size());

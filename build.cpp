@@ -17,10 +17,14 @@ extern "C" BuildConfiguration configure()
                           "src/core/configuration"};
 
   config.subprojects = {
-      Subproject{.path = "src/core/configuration"},
-      Subproject{.path = "src/core/dependency"},
-      Subproject{.path = "src/core/build"},
-      Subproject{.path = "src/core/cli"},
+      Subproject{.path = "src/core/configuration", .build_system = {}, .build_args = {}},
+      Subproject{.path = "src/core/dependency", .build_system = {}, .build_args = {}},
+      Subproject{
+          .path         = "src/core/build",
+          .build_system = {},
+          .build_args   = {},
+      },
+      Subproject{.path = "src/core/cli", .build_system = {}, .build_args = {}},
   };
 
   config.binaries.push_back(

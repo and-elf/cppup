@@ -1,6 +1,6 @@
 
-#include <print>
 #include <cassert>
+#include <print>
 
 int main() {
     std::print("Running test_build_project unit tests...\n");

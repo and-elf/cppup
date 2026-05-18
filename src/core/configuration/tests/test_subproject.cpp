@@ -18,8 +18,8 @@ class TempDir
   TempDir()
   {
     path_ = fs::temp_directory_path() /
-            ("cppup_subproject_test_" + std::to_string(std::hash<std::string>{}(
-                                            std::to_string(reinterpret_cast<std::uintptr_t>(this)))));
+            ("cppup_subproject_test_" + std::to_string(std::hash<std::string>{}(std::to_string(
+                                            reinterpret_cast<std::uintptr_t>(this)))));
     fs::create_directories(path_);
   }
   ~TempDir()

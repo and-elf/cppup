@@ -24,7 +24,7 @@ bool path_is_under(const std::filesystem::path& candidate, const std::filesystem
 
 bool is_cpp_source_extension(const std::string& ext) noexcept
 {
-  static constexpr std::array<std::string_view, 7> kExts{".cpp", ".cxx", ".cc",  ".c",
+  static constexpr std::array<std::string_view, 7> kExts{".cpp", ".cxx", ".cc", ".c",
                                                          ".hpp", ".hxx", ".h"};
   return std::find(kExts.begin(), kExts.end(), ext) != kExts.end();
 }
@@ -65,8 +65,7 @@ std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& r
 }
 
 std::vector<std::filesystem::path> select_cpp_files(
-    const std::vector<std::string>&     args,
-    const std::filesystem::path&        project_root,
+    const std::vector<std::string>& args, const std::filesystem::path& project_root,
     std::vector<std::filesystem::path>* skipped_non_cpp,
     std::vector<std::filesystem::path>* skipped_missing)
 {
@@ -75,7 +74,7 @@ std::vector<std::filesystem::path> select_cpp_files(
   auto                            push = [&](std::filesystem::path p)
   {
     std::error_code ec;
-    auto canonical = std::filesystem::weakly_canonical(p, ec);
+    auto            canonical = std::filesystem::weakly_canonical(p, ec);
     dedup.insert(ec ? std::move(p) : std::move(canonical));
   };
 

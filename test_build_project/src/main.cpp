@@ -1,6 +1,6 @@
 
-#include <print>
 #include <iostream>
+#include <print>
 
 int main() {
     std::print("Hello from test_build_project!\n");
