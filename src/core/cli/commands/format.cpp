@@ -16,8 +16,8 @@ namespace
 
 bool isCppSourceExtension(const std::string& ext) noexcept
 {
-  static const std::vector<std::string> exts = {".cpp", ".cxx", ".cc",  ".c",
-                                                ".hpp", ".hxx", ".h",   ".ixx"};
+  static const std::vector<std::string> exts = {".cpp", ".cxx", ".cc", ".c",
+                                                ".hpp", ".hxx", ".h"};
   return std::find(exts.begin(), exts.end(), ext) != exts.end();
 }
 
