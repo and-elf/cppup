@@ -1,0 +1,40 @@
+image: debian:trixie-slim
+
+stages:
+  - build
+  - test
+  - lint
+
+before_script:
+  - apt-get update -qq && apt-get install -y --no-install-recommends
+      build-essential g++ clang clang-tidy clang-format
+      libsqlite3-dev libssl-dev libgtest-dev libgmock-dev
+      ca-certificates git
+  - command -v cppup >/dev/null || (echo "cppup not installed in image" && exit 1)
+
+build:
+  stage: build
+  script:
+    - cppup build
+  artifacts:
+    paths:
+      - build/
+    expire_in: 1 day
+
+test:
+  stage: test
+  needs: ["build"]
+  script:
+    - cppup test
+
+format:
+  stage: lint
+  script:
+    - cppup format --check
+
+tidy:
+  stage: lint
+  needs: ["build"]
+  script:
+    - cppup tidy
+  allow_failure: true

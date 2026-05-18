@@ -15,11 +15,58 @@ using cppup::configuration::Asan;
 using cppup::configuration::BuildOptions;
 using cppup::configuration::Coverage;
 
+// Optional feature toggles for `cppup init` (no raw bools in APIs).
+enum class Vscode : unsigned char
+{
+  Off,
+  On
+};
+enum class Devcontainer : unsigned char
+{
+  Off,
+  On
+};
+enum class Docker : unsigned char
+{
+  Off,
+  On
+};
+enum class GitlabCi : unsigned char
+{
+  Off,
+  On
+};
+
+struct InitOptions
+{
+  Vscode       vscode       = Vscode::Off;
+  Devcontainer devcontainer = Devcontainer::Off;
+  Docker       docker       = Docker::Off;
+  GitlabCi     gitlab_ci    = GitlabCi::Off;
+};
+
+[[nodiscard]] constexpr bool enabled(Vscode v) noexcept
+{
+  return v == Vscode::On;
+}
+[[nodiscard]] constexpr bool enabled(Devcontainer d) noexcept
+{
+  return d == Devcontainer::On;
+}
+[[nodiscard]] constexpr bool enabled(Docker d) noexcept
+{
+  return d == Docker::On;
+}
+[[nodiscard]] constexpr bool enabled(GitlabCi g) noexcept
+{
+  return g == GitlabCi::On;
+}
+
 // Command implementation functions
 
 [[nodiscard]] std::expected<int, std::string> executeInit(
     const std::string& project_name, const std::optional<std::string>& venv_path,
-    const CommandContext& context) noexcept;
+    InitOptions options, const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeBuild(BuildOptions          options,
                                                            const CommandContext& context) noexcept;

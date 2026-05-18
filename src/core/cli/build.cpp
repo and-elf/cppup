@@ -22,5 +22,10 @@ extern "C" BuildConfiguration configure()
   config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
                                     Flag{"-lpthread"}, Flag{"-ldl"}};
 
+  config.tests.push_back(Test{"test_init", {"commands/test_init.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
   return config;
 }

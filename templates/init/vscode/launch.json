@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "inputs": [
+        {
+            "id": "gtestFilter",
+            "type": "promptString",
+            "description": "GoogleTest filter (e.g. Smoke.* or *.BasicArithmetic)",
+            "default": "*"
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Debug __PROJECT_NAME__",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/__PROJECT_NAME__",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug current test file",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug current test file (filter case)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
+            "args": ["--gtest_filter=${input:gtestFilter}", "--gtest_break_on_failure"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        }
+    ]
+}

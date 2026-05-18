@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cppup: build",
+            "type": "shell",
+            "command": "cppup",
+            "args": ["build"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "cppup: build (asan)",
+            "type": "shell",
+            "command": "cppup",
+            "args": ["build", "--asan"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "cppup: test",
+            "type": "shell",
+            "command": "cppup",
+            "args": ["test"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "cppup: build",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}

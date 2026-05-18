@@ -1,5 +1,8 @@
 #include "cli_application.hpp"
 
+#include <unistd.h>
+
+#include <iostream>
 #include <print>
 #include <string>
 
@@ -40,6 +43,70 @@ int handleExpectedResult(std::expected<int, std::string> result, const std::stri
   return ErrorHandler::getExitCode(error_code);
 }
 
+// Read a y/N answer from stdin, defaulting to No on EOF or empty line.
+bool prompt_yes_no(const std::string& question)
+{
+  std::print("{} [y/N] ", question);
+  std::cout.flush();
+  std::string line;
+  if (!std::getline(std::cin, line))
+  {
+    return false;
+  }
+  return !line.empty() && (line[0] == 'y' || line[0] == 'Y');
+}
+
+InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool with_devcontainer,
+                                 bool with_docker, bool with_gitlab_ci)
+{
+  if (minimal)
+  {
+    return InitOptions{};
+  }
+  if (full)
+  {
+    return InitOptions{.vscode       = Vscode::On,
+                       .devcontainer = Devcontainer::On,
+                       .docker       = Docker::On,
+                       .gitlab_ci    = GitlabCi::On};
+  }
+
+  InitOptions opts;
+  const bool  any_with_flag =
+      with_vscode || with_devcontainer || with_docker || with_gitlab_ci;
+  if (any_with_flag)
+  {
+    opts.vscode       = with_vscode ? Vscode::On : Vscode::Off;
+    opts.devcontainer = with_devcontainer ? Devcontainer::On : Devcontainer::Off;
+    opts.docker       = with_docker ? Docker::On : Docker::Off;
+    opts.gitlab_ci    = with_gitlab_ci ? GitlabCi::On : GitlabCi::Off;
+    return opts;
+  }
+
+  // No explicit flags. If stdin is a TTY, ask the user; otherwise minimal.
+  if (::isatty(STDIN_FILENO) == 0)
+  {
+    return opts;
+  }
+  if (prompt_yes_no("Scaffold .vscode/ (tasks, launch, settings)?"))
+  {
+    opts.vscode = Vscode::On;
+  }
+  if (prompt_yes_no("Scaffold .devcontainer/devcontainer.json?"))
+  {
+    opts.devcontainer = Devcontainer::On;
+  }
+  if (prompt_yes_no("Scaffold Dockerfile (debian:trixie-slim)?"))
+  {
+    opts.docker = Docker::On;
+  }
+  if (prompt_yes_no("Scaffold .gitlab-ci.yml?"))
+  {
+    opts.gitlab_ci = GitlabCi::On;
+  }
+  return opts;
+}
+
 }  // anonymous namespace
 
 int CLIApplication::run(int argc, char* argv[]) noexcept
@@ -54,8 +121,26 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto*       init_cmd = app.add_subcommand("init", "Initialize a new project");
   std::string init_name;
   std::string init_path;
+  bool        init_full             = false;
+  bool        init_minimal          = false;
+  bool        init_with_vscode      = false;
+  bool        init_with_devcontainer = false;
+  bool        init_with_docker      = false;
+  bool        init_with_gitlab_ci   = false;
   init_cmd->add_option("name", init_name, "Project name")->required();
   init_cmd->add_option("--path", init_path, "Virtual environment path");
+  init_cmd->add_flag("--full", init_full,
+                     "Scaffold all optional templates (.vscode, .devcontainer, Dockerfile, "
+                     ".gitlab-ci.yml)");
+  init_cmd->add_flag("--minimal", init_minimal,
+                     "Scaffold only the base layout; skip the TTY prompt");
+  init_cmd->add_flag("--with-vscode", init_with_vscode, "Scaffold .vscode/ (tasks/launch/settings)");
+  init_cmd->add_flag("--with-devcontainer", init_with_devcontainer,
+                     "Scaffold .devcontainer/devcontainer.json");
+  init_cmd->add_flag("--with-docker", init_with_docker,
+                     "Scaffold Dockerfile (debian:trixie-slim base)");
+  init_cmd->add_flag("--with-gitlab-ci", init_with_gitlab_ci,
+                     "Scaffold .gitlab-ci.yml (cppup build/test/format/tidy pipeline)");
 
   // build
   auto* build_cmd      = app.add_subcommand("build", "Build the project");
@@ -194,7 +279,10 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     {
       path_opt = init_path;
     }
-    return handleExpectedResult(executeInit(init_name, path_opt, context_), "Init",
+    const auto init_opts = resolve_init_options(init_full, init_minimal, init_with_vscode,
+                                                init_with_devcontainer, init_with_docker,
+                                                init_with_gitlab_ci);
+    return handleExpectedResult(executeInit(init_name, path_opt, init_opts, context_), "Init",
                                 ErrorHandler::ErrorCode::FileNotFound);
   }
 

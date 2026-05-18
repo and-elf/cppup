@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+.cppup/cache/
+compile_commands.json
+.cache/
+
+# Compiled artifacts
+*.o
+*.obj
+*.exe
+*.so
+*.dylib
+*.a
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+
+# IDE / editor
+.idea/
+*.swp
