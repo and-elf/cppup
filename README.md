@@ -1,121 +1,165 @@
 # cppup
 
-## Overview
+cppup is a cross-platform C++ project manager and build system inspired by Cargo.
 
-`cppup` is a cross-platform C++ project manager and build system inspired by Rust's Cargo. It manages dependencies, toolchains, and build configurations, and supports modular C++ projects with optional C++20 module integration.
+It focuses on:
+- Build-system-agnostic package resolution
+- Project configuration through C++ (`build.cpp`)
+- Practical defaults for modern C++ workflows
+- Incremental and cache-friendly builds
 
-The key design goals:
-
-- Simplified package and plugin management
-- Build system-agnostic dependency management
-- TDD-friendly structure with modular libraries
-- Automatic build caching
-- Cross-platform support for Linux, macOS, and Windows
-- Use cpp 23, std::expected, std::optional, constexpr, noexcept, [[nodiscard]], - cnstexpr and concepts as a general rule
-- Integration with common development tools like `clang-tidy`, `clang-format`, ASan, and code coverage
-
----
-
-## Feature Scopes
-
-- **design.md**: Explains the what, why, and how for the feature, including relations to other parts.
-- **requirements.md**: EARS-formatted functional requirements.
-- **tasks.md**: Step-by-step actionable tasks to implement and track progress.
-
-### CLI
-- Commands: `init`, `build`, `test`, `package`, `plugin`, `toolchain`, `add`, `remove`
-- Handles arguments, flags, and error reporting
-- Supports `--asan` to automatically enable AddressSanitizer builds
-
-### Configuration
-- Users define project configuration via `build.cpp`
-- Configurations compiled into shared objects (`.so`/`.dll`) and loaded at runtime
-- Can reference other directories and packages using the internal API
-
-### Package
-- Virtual environment manages packages
-- Build system-agnostic dependency management
-- Packages provide getters for compile flags, link flags, and object lists
-
-### BuildSystem
-- Ninja is used as the default backend (downloaded via `cppup init`)
-- Generates Ninja build files from project configuration
-- Supports caching and incremental builds
-- Integrates compile flags from toolchains and packages
-- Optional support for C++ modules
-
----
-
-## Build Tooling
-
-### clang-tidy
-- Code style and linting checks
-- Configurable per project
-
-### clang-format
-- Uses Google's formatting style
-- Apply formatting via `cppup format` (or equivalent CLI command)
-
-### ASan
-- Automatically enabled with:
-  ```bash
-  cppup build --asan
-
----
-
-## Build Flow
-
-1. `cppup init` creates the project structure and downloads Ninja.
-2. `build.cpp` is compiled into a shared library (or interpreted API in future).
-3. Configuration is loaded from the shared library.
-4. Packages are resolved from virtual environment.
-5. Ninja build files are generated based on source files, dependencies, and compile/link flags.
-6. `run_ninja` executes the build, respecting cache and ASan settings.
-
----
-
-## Plugins
-
-- Plugins are shared libraries that implement optional features like custom build systems.
-- Each plugin includes an API version in the manifest for compatibility.
-- Installed via `cppup plugin add <name>`.
-
----
-
-## Dependency Management
-
-- Build dependencies: always rebuild dependent libraries if changed.
-- Source files in the current project: track hash of object files to avoid unnecessary rebuilds.
-- Caching is handled via SQLite database for metadata and Ninja for incremental compilation.
-
----
-
-## Getting Started
+## Quick Start
 
 ```bash
-# Initialize a new project
+# create a project
 cppup init my_project
 
-# Add a package
-cppup package add my_library
+# add a dependency
+cppup package add fmt --git https://github.com/fmtlib/fmt.git --branch 11.0.2
 
-# Build the project
-cppup build --asan
-
-# Run tests
+# build and test
+cppup build
 cppup test
-
 ```
 
-## Testing
+## Build and Bootstrap cppup
 
-- TDD workflow is encouraged.
-- Each library and package has its own tests in `core/<feature>/tests/`.
-- Tests integrated with Catch2 framework.
+cppup uses a two-stage bootstrap process:
+1. Build a minimal bootstrap binary.
+2. Use that binary to process `build.cpp` and build the full tool.
 
-## Detailed Documentation
+### Linux and macOS
 
-For full design, requirements, and implementation tasks, see each scope:
+```bash
+./bootstrap.sh build
+./bootstrap.sh test
+./bootstrap.sh clean
+```
 
-- [CLI](.kiro/specs/cli-commands/design.md)
-- [Configuration](.kira/specs/configuration-api/design.md)
+Install examples:
+
+```bash
+sudo ./bootstrap.sh install
+PREFIX=~/.local ./bootstrap.sh install
+```
+
+### Windows
+
+```bat
+bootstrap.bat
+```
+
+The output binary is written under `bootstrap_build/`.
+
+## Configuration API
+
+Your project defines a `configure()` function in `build.cpp`.
+
+```cpp
+#include <cppup/configuration.hpp>
+
+using namespace cppup::configuration;
+
+extern "C" BuildConfiguration configure() {
+  BuildConfiguration config;
+
+  config.toolchain = Toolchain{"gcc-13"};
+  config.sources = {"src/*.cpp", "src/**/*.cpp"};
+  config.compile_flags = warnings::extra();
+  config.compile_flags.push_back(cpp_standard::cpp23());
+
+  config.binaries = {
+    Binary{"app", {"src/main.cpp"}}
+  };
+
+  return config;
+}
+```
+
+## Package Sources and Resolution
+
+cppup supports package resolution from:
+- Registry packages
+- Git repositories
+- Local directories
+- TAR/ZIP archives
+- HTTP sources
+
+Examples:
+
+```cpp
+config.packages = {
+  from_registry("boost", "1.84.0"),
+  from_git("fmt", "https://github.com/fmtlib/fmt.git", "11.0.2"),
+  from_directory("my_local_lib", "../my_local_lib"),
+  header_only("catch2", "https://github.com/catchorg/Catch2.git")
+};
+```
+
+For reproducible builds, pin by commit:
+
+```cpp
+auto spdlog = from_git("spdlog", "https://github.com/gabime/spdlog.git");
+config.packages.push_back(std::move(spdlog));
+```
+
+## Build Systems
+
+Supported package/build integrations include:
+- cppup-native packages
+- CMake
+- Make
+- Header-only packages
+
+The architecture is modular, so build-system support can be compiled selectively.
+
+## Useful Commands
+
+```bash
+cppup init <project>
+cppup build [--asan]
+cppup test [--asan]
+cppup format [--check]
+cppup package add <name> [--git URL | --dir PATH | --url URL]
+cppup package remove <name>
+cppup package list
+cppup toolchain list
+```
+
+## Environment Variables
+
+Common variables used during bootstrap/build:
+- `CXX` (compiler override)
+- `BUILD_TYPE` (for profile-specific behavior)
+- `PREFIX` (install prefix)
+- `CPPUP_VERBOSE` (verbose output)
+
+## Troubleshooting
+
+Compiler not found:
+
+```bash
+export CXX=clang++
+./bootstrap.sh build
+```
+
+C++20/C++23 support issues:
+- Use a recent compiler (GCC 10+, Clang 10+, MSVC 2019+).
+
+Install permission issues:
+
+```bash
+PREFIX=~/.local ./bootstrap.sh install
+```
+
+## Development
+
+- Tests live throughout `src/core/**/tests` and in top-level test targets.
+- Example projects live in `examples/` and `test_build_project/`.
+- Bootstrap and regular builds are both expected to stay green.
+
+## Additional References
+
+- CLI command docs: `src/core/cli/README.md`
+- Configuration module docs: `src/core/configuration/README.md`
+- Spec docs: `.kiro/specs/cli-commands/` and `.kiro/specs/configuration-api/`

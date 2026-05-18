@@ -82,7 +82,7 @@ build_bootstrap() {
         if [ -f "$src" ]; then
             obj="$BUILD_DIR/$(basename $src .cpp).o"
             log_info "Compiling $src..."
-            $CXX -std=c++23 -O2 -c "$src" -o "$obj" \
+            $CXX -std=c++23 -O2 -DIS_BOOTSTRAP_BUILD -c "$src" -o "$obj" \
                 -Isrc/core/configuration \
                 -Iinclude
             CONFIG_OBJECTS+=("$obj")
@@ -103,16 +103,25 @@ build_bootstrap() {
         "src/core/cli/logger.cpp"
         "src/core/cli/cli_application.cpp"
         "src/core/cli/commands.cpp"
+        "src/core/cli/commands/init.cpp"
+        "src/core/cli/commands/build.cpp"
+        "src/core/cli/commands/test.cpp"
+        "src/core/cli/commands/format.cpp"
+        "src/core/cli/commands/package.cpp"
+        "src/core/cli/commands/module.cpp"
+        "src/core/cli/commands/toolchain.cpp"
+        "src/core/cli/commands/plugin.cpp"
     )
-    
+
     MAIN_OBJECTS=()
     for src in "${MAIN_SOURCES[@]}"; do
         if [ -f "$src" ]; then
-            obj="$BUILD_DIR/$(basename $src .cpp).o"
+            obj="$BUILD_DIR/$(basename $src .cpp)_$(dirname $src | tr / _).o"
             log_info "Compiling $src..."
-            $CXX -std=c++23 -O2 -c "$src" -o "$obj" \
+            $CXX -std=c++23 -O2 -DIS_BOOTSTRAP_BUILD -c "$src" -o "$obj" \
                 -Isrc/core/configuration \
                 -Isrc/core/cli \
+                -Isrc/core/cli/commands \
                 -Isrc/cli \
                 -Iinclude \
                 -Isrc

@@ -1,112 +1,136 @@
+#include <algorithm>
+#include <cstdlib>
 #include <expected>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include "command_context.hpp"
+#include "commands.hpp"
 
 namespace cppup::cli
 {
+
+namespace
+{
+
+bool isCppSourceExtension(const std::string& ext) noexcept
+{
+  static const std::vector<std::string> exts = {".cpp", ".cxx", ".cc",  ".c",
+                                                ".hpp", ".hxx", ".h",   ".ixx"};
+  return std::find(exts.begin(), exts.end(), ext) != exts.end();
+}
+
+bool isExcludedPath(const std::filesystem::path& path) noexcept
+{
+  for (const auto& component : path)
+  {
+    const std::string s = component.string();
+    if (s == "build" || s == "bootstrap_build" || s == ".cppup" || s == ".git" ||
+        (s.length() > 1 && s.front() == '.'))
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::vector<std::filesystem::path> findCppFiles(const std::filesystem::path& root)
+{
+  std::vector<std::filesystem::path> files;
+  for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+  {
+    if (!entry.is_regular_file())
+    {
+      continue;
+    }
+    if (isExcludedPath(std::filesystem::relative(entry.path(), root)))
+    {
+      continue;
+    }
+    if (isCppSourceExtension(entry.path().extension().string()))
+    {
+      files.push_back(entry.path());
+    }
+  }
+  return files;
+}
+
+}  // namespace
 
 std::expected<int, std::string> executeFormat(bool                  check_only,
                                               const CommandContext& context) noexcept
 {
   try
   {
-    if (check_only)
-    {
-      context.logger->info("Checking code formatting...");
-    }
-    else
-    {
-      context.logger->info("Formatting code...");
-    }
+    context.logger->info(check_only ? "Checking code formatting..." : "Formatting code...");
 
-    // Look for .clang-format file
-    std::filesystem::path clang_format_file = context.projectRoot / ".clang-format";
-    bool                  has_clang_format  = std::filesystem::exists(clang_format_file);
-
+    const bool has_clang_format =
+        std::filesystem::exists(context.projectRoot / ".clang-format");
     if (!has_clang_format)
     {
-      context.logger->info("No .clang-format file found, using default style");
+      context.logger->info("No .clang-format found, using Google style");
     }
 
-    // Find all C++ source files
-    std::vector<std::filesystem::path> cpp_files;
-    std::vector<std::string> extensions = {".cpp", ".cxx", ".cc", ".c", ".hpp", ".hxx", ".h"};
-
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(context.projectRoot))
-    {
-      if (entry.is_regular_file())
-      {
-        auto ext = entry.path().extension().string();
-        if (std::find(extensions.begin(), extensions.end(), ext) != extensions.end())
-        {
-          // Skip build directories and hidden directories
-          std::string path_str = entry.path().string();
-          if (path_str.find("/build/") == std::string::npos &&
-              path_str.find("\\.") == std::string::npos)
-          {
-            cpp_files.push_back(entry.path());
-          }
-        }
-      }
-    }
-
-    if (cpp_files.empty())
+    const auto files = findCppFiles(context.projectRoot);
+    if (files.empty())
     {
       context.logger->info("No C++ source files found");
       return 0;
     }
 
-    context.logger->info("Found " + std::to_string(cpp_files.size()) + " C++ files");
+    context.logger->info("Processing " + std::to_string(files.size()) + " files");
 
-    // Format each file
-    int issues_found = 0;
-    for (const auto& file : cpp_files)
+    const std::string style_arg = has_clang_format ? " --style=file" : " --style=Google";
+    int               issues    = 0;
+    int               formatted = 0;
+
+    for (const auto& file : files)
     {
-      std::string clang_format_cmd = "clang-format";
-
+      std::string cmd = "clang-format";
       if (check_only)
       {
-        clang_format_cmd += " --dry-run --Werror";
+        cmd += " --dry-run --Werror";
       }
       else
       {
-        clang_format_cmd += " -i";
+        cmd += " -i";
       }
+      cmd += style_arg;
+      cmd += " \"";
+      cmd += file.string();
+      cmd += "\"";
 
-      if (has_clang_format)
+      const int rc = std::system(cmd.c_str());
+      if (rc != 0)
       {
-        clang_format_cmd += " --style=file";
+        if (check_only)
+        {
+          ++issues;
+          context.logger->warning("Not formatted: " + file.string());
+        }
+        else
+        {
+          return std::unexpected("clang-format failed on: " + file.string());
+        }
       }
-      else
+      else if (!check_only)
       {
-        clang_format_cmd += " --style=Google";
+        ++formatted;
       }
-
-      clang_format_cmd += " " + file.string();
-
-      context.logger->info("Processing: " + file.filename().string());
-
-      // Execute clang-format command (placeholder - would use ProcessRunner in real implementation)
-      // For now, just log the command that would be executed
-      // In real implementation, would check return code for formatting issues
     }
 
     if (check_only)
     {
-      if (issues_found == 0)
+      if (issues > 0)
       {
-        context.logger->info("All files are properly formatted");
+        return std::unexpected(std::to_string(issues) + " file(s) need formatting");
       }
-      else
-      {
-        return std::unexpected("Found " + std::to_string(issues_found) + " formatting issues");
-      }
+      context.logger->info("All files are properly formatted");
     }
     else
     {
-      context.logger->info("Code formatting completed");
+      context.logger->info("Formatted " + std::to_string(formatted) + " files");
     }
 
     return 0;

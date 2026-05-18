@@ -1,13 +1,41 @@
+#include <cstdlib>
 #include <expected>
 #include <filesystem>
 #include <string>
+#include <vector>
 
-#include "../../configuration/compiler.hpp"
-#include "../../configuration/loader.hpp"
 #include "command_context.hpp"
+#include "commands.hpp"
 
 namespace cppup::cli
 {
+
+namespace
+{
+
+std::vector<std::filesystem::path> discoverTestBinaries(const std::filesystem::path& tests_dir)
+{
+  std::vector<std::filesystem::path> binaries;
+  if (!std::filesystem::exists(tests_dir))
+  {
+    return binaries;
+  }
+  for (const auto& entry : std::filesystem::directory_iterator(tests_dir))
+  {
+    if (!entry.is_regular_file())
+    {
+      continue;
+    }
+    const auto perms = entry.status().permissions();
+    if ((perms & std::filesystem::perms::owner_exec) != std::filesystem::perms::none)
+    {
+      binaries.push_back(entry.path());
+    }
+  }
+  return binaries;
+}
+
+}  // namespace
 
 std::expected<int, std::string> executeTest(bool                  enable_asan,
                                             const CommandContext& context) noexcept
@@ -16,111 +44,55 @@ std::expected<int, std::string> executeTest(bool                  enable_asan,
   {
     context.logger->info("Running tests...");
 
-    // Look for build.cpp in current directory
-    std::filesystem::path build_file = context.projectRoot / "build.cpp";
+    const std::filesystem::path build_file = context.projectRoot / "build.cpp";
     if (!std::filesystem::exists(build_file))
     {
       return std::unexpected("No build.cpp found in current directory");
     }
 
-    // Load configuration to find test targets
-    cppup::configuration::ConfigurationCompiler compiler;
-    auto                                        result = compiler.compile(build_file);
+    const std::filesystem::path tests_dir = context.projectRoot / "build" / "tests";
+    const auto                  binaries  = discoverTestBinaries(tests_dir);
 
-    if (!result.success)
+    if (binaries.empty())
     {
-      return std::unexpected("Failed to compile build configuration: " + result.error_message);
-    }
-
-    cppup::configuration::ConfigurationLoader loader;
-    auto load_result = loader.load_from_library(result.shared_library_path);
-
-    if (!load_result.success)
-    {
-      return std::unexpected("Failed to load build configuration: " + load_result.error_message);
-    }
-
-    auto& config = load_result.configuration.value();
-
-    if (config.tests.empty())
-    {
-      context.logger->info("No tests defined in build configuration");
+      context.logger->info("No test binaries found in " + tests_dir.string());
+      context.logger->info("Build tests first with: cppup build");
       return 0;
     }
 
-    // Build and run each test
-    int failed_tests = 0;
-    for (const auto& test : config.tests)
+    if (enable_asan)
     {
-      context.logger->info("Building test: " + test.name);
-
-      // Create build directory
-      std::filesystem::path build_dir = context.projectRoot / "build" / "tests";
-      std::filesystem::create_directories(build_dir);
-
-      // Construct compiler command for test
-      std::string compiler_cmd = config.toolchain ? config.toolchain->name : "g++";
-
-      // Add compile flags
-      for (const auto& flag : config.compile_flags)
-      {
-        compiler_cmd += " " + std::string(flag.flag);
-      }
-
-      // Add ASAN flags if requested
-      if (enable_asan)
-      {
-        compiler_cmd += " -fsanitize=address -fno-omit-frame-pointer";
-      }
-
-      // Add include paths
-      for (const auto& include : config.include_paths)
-      {
-        compiler_cmd += " -I" + include;
-      }
-
-      // Add definitions
-      for (const auto& def : config.definitions)
-      {
-        compiler_cmd += " -D" + std::string(def.name);
-        if (!def.value.empty())
-        {
-          compiler_cmd += "=" + std::string(def.value);
-        }
-      }
-
-      // Add test source files
-      for (const auto& source : test.sources)
-      {
-        compiler_cmd += " " + source;
-      }
-
-      // Add link flags
-      for (const auto& flag : config.link_flags)
-      {
-        compiler_cmd += " " + std::string(flag.flag);
-      }
-
-      // Output test binary
-      std::filesystem::path test_binary = build_dir / test.name;
-      compiler_cmd += " -o " + test_binary.string();
-
-      context.logger->info("Compiling test: " + compiler_cmd);
-
-      // Execute test binary (placeholder - would use ProcessRunner in real implementation)
-      context.logger->info("Running test: " + test.name);
-      // In real implementation, would execute the test binary and check return code
-
-      context.logger->info("Test " + test.name + " passed");
+      context.logger->info("AddressSanitizer enabled (tests must be built with --asan)");
     }
 
-    if (failed_tests == 0)
+    int passed = 0;
+    int failed = 0;
+
+    for (const auto& test_bin : binaries)
     {
-      context.logger->info("All tests passed");
+      context.logger->info("Running: " + test_bin.filename().string());
+
+      const std::string cmd = "\"" + test_bin.string() + "\"";
+      const int         rc  = std::system(cmd.c_str());
+      if (rc == 0)
+      {
+        context.logger->info("  PASS: " + test_bin.filename().string());
+        ++passed;
+      }
+      else
+      {
+        context.logger->error("  FAIL: " + test_bin.filename().string() +
+                              " (exit " + std::to_string(rc) + ")");
+        ++failed;
+      }
     }
-    else
+
+    context.logger->info("Test summary: " + std::to_string(passed) + " passed, " +
+                         std::to_string(failed) + " failed");
+
+    if (failed > 0)
     {
-      return std::unexpected("Some tests failed");
+      return std::unexpected(std::to_string(failed) + " test(s) failed");
     }
 
     return 0;

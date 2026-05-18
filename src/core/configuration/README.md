@@ -269,6 +269,6 @@ Contributions are welcome! Please see the main cppup project for contribution gu
 
 ## Documentation
 
-- [Full API Documentation](../../docs/configuration_api.md)
+- [Full API Documentation](../../../README.md#configuration-api)
 - [Examples](../../include/cppup/examples/)
 - [Integration Tests](tests/test_integration.cpp)
