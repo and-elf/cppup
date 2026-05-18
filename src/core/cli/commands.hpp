@@ -3,6 +3,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "command_context.hpp"
 
@@ -24,8 +25,13 @@ namespace cppup::cli
 [[nodiscard]] std::expected<int, std::string> executeTest(bool                  enable_asan,
                                                           const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeFormat(bool                  check_only,
-                                                            const CommandContext& context) noexcept;
+[[nodiscard]] std::expected<int, std::string> executeFormat(
+    bool check_only, const std::vector<std::string>& file_args,
+    const CommandContext& context) noexcept;
+
+[[nodiscard]] std::expected<int, std::string> executeTidy(
+    bool apply_fix, const std::vector<std::string>& file_args,
+    const CommandContext& context) noexcept;
 
 // Package commands
 [[nodiscard]] std::expected<int, std::string> executePackageList(

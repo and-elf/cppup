@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cstdlib>
 #include <expected>
 #include <filesystem>
@@ -7,75 +6,42 @@
 
 #include "command_context.hpp"
 #include "commands.hpp"
+#include "source_selection.hpp"
 
 namespace cppup::cli
 {
 
-namespace
-{
-
-bool isCppSourceExtension(const std::string& ext) noexcept
-{
-  static const std::vector<std::string> exts = {".cpp", ".cxx", ".cc", ".c",
-                                                ".hpp", ".hxx", ".h"};
-  return std::find(exts.begin(), exts.end(), ext) != exts.end();
-}
-
-bool isExcludedPath(const std::filesystem::path& path) noexcept
-{
-  for (const auto& component : path)
-  {
-    const std::string s = component.string();
-    if (s == "build" || s == "bootstrap_build" || s == ".cppup" || s == ".git" ||
-        (s.length() > 1 && s.front() == '.'))
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-std::vector<std::filesystem::path> findCppFiles(const std::filesystem::path& root)
-{
-  std::vector<std::filesystem::path> files;
-  for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
-  {
-    if (!entry.is_regular_file())
-    {
-      continue;
-    }
-    if (isExcludedPath(std::filesystem::relative(entry.path(), root)))
-    {
-      continue;
-    }
-    if (isCppSourceExtension(entry.path().extension().string()))
-    {
-      files.push_back(entry.path());
-    }
-  }
-  return files;
-}
-
-}  // namespace
-
-std::expected<int, std::string> executeFormat(bool                  check_only,
+std::expected<int, std::string> executeFormat(bool                            check_only,
+                                              const std::vector<std::string>& file_args,
                                               const CommandContext& context) noexcept
 {
   try
   {
     context.logger->info(check_only ? "Checking code formatting..." : "Formatting code...");
 
-    const bool has_clang_format =
-        std::filesystem::exists(context.projectRoot / ".clang-format");
+    const bool has_clang_format = std::filesystem::exists(context.projectRoot / ".clang-format");
     if (!has_clang_format)
     {
       context.logger->info("No .clang-format found, using Google style");
     }
 
-    const auto files = findCppFiles(context.projectRoot);
+    std::vector<std::filesystem::path> skipped_non_cpp;
+    std::vector<std::filesystem::path> skipped_missing;
+    const auto files = select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp,
+                                        &skipped_missing);
+
+    for (const auto& s : skipped_non_cpp)
+    {
+      context.logger->warning("Skipped non-C++ file: " + s.string());
+    }
+    for (const auto& m : skipped_missing)
+    {
+      context.logger->warning("Skipped missing path: " + m.string());
+    }
+
     if (files.empty())
     {
-      context.logger->info("No C++ source files found");
+      context.logger->info("No C++ source files to process");
       return 0;
     }
 
@@ -88,14 +54,7 @@ std::expected<int, std::string> executeFormat(bool                  check_only,
     for (const auto& file : files)
     {
       std::string cmd = "clang-format";
-      if (check_only)
-      {
-        cmd += " --dry-run --Werror";
-      }
-      else
-      {
-        cmd += " -i";
-      }
+      cmd += check_only ? " --dry-run --Werror" : " -i";
       cmd += style_arg;
       cmd += " \"";
       cmd += file.string();

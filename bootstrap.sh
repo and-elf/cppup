@@ -110,6 +110,8 @@ build_bootstrap() {
         "src/core/cli/commands/compile_commands_cmd.cpp"
         "src/core/cli/commands/test.cpp"
         "src/core/cli/commands/format.cpp"
+        "src/core/cli/commands/tidy.cpp"
+        "src/core/cli/commands/source_selection.cpp"
         "src/core/cli/commands/package.cpp"
         "src/core/cli/commands/module.cpp"
         "src/core/cli/commands/toolchain.cpp"

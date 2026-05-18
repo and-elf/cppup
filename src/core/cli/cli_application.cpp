@@ -51,7 +51,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   app.add_flag("--version,-v", show_version, "Show version information");
 
   // init
-  auto*       init_cmd  = app.add_subcommand("init", "Initialize a new project");
+  auto*       init_cmd = app.add_subcommand("init", "Initialize a new project");
   std::string init_name;
   std::string init_path;
   init_cmd->add_option("name", init_name, "Project name")->required();
@@ -63,9 +63,9 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
 
   // compile-commands
-  auto* cc_cmd  = app.add_subcommand("compile-commands",
-                                     "Emit compile_commands.json for clangd/LSP tooling");
-  bool  cc_asan = false;
+  auto* cc_cmd =
+      app.add_subcommand("compile-commands", "Emit compile_commands.json for clangd/LSP tooling");
+  bool cc_asan = false;
   cc_cmd->add_flag("--asan", cc_asan, "Mirror --asan flags in emitted commands");
 
   // test
@@ -77,6 +77,17 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto* format_cmd   = app.add_subcommand("format", "Format source code with clang-format");
   bool  format_check = false;
   format_cmd->add_flag("--check", format_check, "Check formatting without modifying files");
+  std::vector<std::string> format_files;
+  format_cmd->add_option("files", format_files,
+                         "Files or directories to format (default: whole project)");
+
+  // tidy
+  auto* tidy_cmd = app.add_subcommand("tidy", "Run clang-tidy across project sources");
+  bool  tidy_fix = false;
+  tidy_cmd->add_flag("--fix", tidy_fix, "Apply suggested fixes in place");
+  std::vector<std::string> tidy_files;
+  tidy_cmd->add_option("files", tidy_files,
+                       "Files or directories to lint (default: whole project)");
 
   // package
   auto* package_cmd = app.add_subcommand("package", "Manage project packages");
@@ -124,7 +135,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   std::string toolchain_remove_name;
   toolchain_remove_cmd->add_option("name", toolchain_remove_name, "Toolchain name")->required();
 
-  auto*       toolchain_select_cmd = toolchain_cmd->add_subcommand("select", "Select default toolchain");
+  auto* toolchain_select_cmd = toolchain_cmd->add_subcommand("select", "Select default toolchain");
   std::string toolchain_select_name;
   toolchain_select_cmd->add_option("name", toolchain_select_name, "Toolchain name")->required();
 
@@ -188,8 +199,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 
   if (*cc_cmd)
   {
-    return handleExpectedResult(executeCompileCommands(cc_asan, context_),
-                                "compile-commands",
+    return handleExpectedResult(executeCompileCommands(cc_asan, context_), "compile-commands",
                                 ErrorHandler::ErrorCode::BuildFailure);
   }
 
@@ -201,7 +211,13 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 
   if (*format_cmd)
   {
-    return handleExpectedResult(executeFormat(format_check, context_), "Format",
+    return handleExpectedResult(executeFormat(format_check, format_files, context_), "Format",
+                                ErrorHandler::ErrorCode::UnknownError);
+  }
+
+  if (*tidy_cmd)
+  {
+    return handleExpectedResult(executeTidy(tidy_fix, tidy_files, context_), "Tidy",
                                 ErrorHandler::ErrorCode::UnknownError);
   }
 

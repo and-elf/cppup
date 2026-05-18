@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Pre-commit hook for cppup.
+#
+# Runs three checks against the staged C++ files only (fast). If any of
+# them fails the commit is aborted. Each check can be skipped via env var
+# for the rare emergency commit:
+#
+#   CPPUP_SKIP_GITLEAKS=1   skip secret scan
+#   CPPUP_SKIP_FORMAT=1     skip clang-format check
+#   CPPUP_SKIP_TIDY=1       skip clang-tidy
+#   CPPUP_SKIP_HOOKS=1      skip everything (escape hatch)
+#
+# Install once per clone: scripts/setup-hooks.sh
+
+set -euo pipefail
+
+if [[ "${CPPUP_SKIP_HOOKS:-0}" == "1" ]]; then
+    echo "[pre-commit] CPPUP_SKIP_HOOKS=1, skipping all checks."
+    exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Resolve the cppup binary: prefer one on PATH, fall back to bootstrap_build,
+# then build/. If none exists we skip the cppup-driven checks rather than
+# fail — the developer may not have built yet.
+cppup_bin=""
+if command -v cppup >/dev/null 2>&1; then
+    cppup_bin="$(command -v cppup)"
+elif [[ -x "$repo_root/bootstrap_build/cppup" ]]; then
+    cppup_bin="$repo_root/bootstrap_build/cppup"
+elif [[ -x "$repo_root/build/cppup" ]]; then
+    cppup_bin="$repo_root/build/cppup"
+fi
+
+# Collect staged C++ files (added/copied/modified/renamed). Exclude deletions.
+mapfile -t staged < <(
+    git diff --cached --name-only --diff-filter=ACMR -- \
+        '*.cpp' '*.cxx' '*.cc' '*.c' '*.hpp' '*.hxx' '*.h'
+)
+
+# 1. gitleaks — runs whether or not staged C++ exists; secrets can hide anywhere.
+if [[ "${CPPUP_SKIP_GITLEAKS:-0}" != "1" ]]; then
+    if command -v gitleaks >/dev/null 2>&1; then
+        echo "[pre-commit] gitleaks (staged)…"
+        if ! gitleaks protect --staged --redact --no-banner; then
+            echo "[pre-commit] gitleaks found potential secrets — aborting."
+            echo "             Set CPPUP_SKIP_GITLEAKS=1 to override (don't, normally)."
+            exit 1
+        fi
+    else
+        echo "[pre-commit] gitleaks not installed — skipping. Install from"
+        echo "             https://github.com/gitleaks/gitleaks to enable."
+    fi
+fi
+
+# Short-circuit cppup checks if nothing C++ changed.
+if [[ ${#staged[@]} -eq 0 ]]; then
+    echo "[pre-commit] No staged C++ files; skipping format/tidy."
+    exit 0
+fi
+
+if [[ -z "$cppup_bin" ]]; then
+    echo "[pre-commit] cppup binary not found (looked in PATH, bootstrap_build/, build/)."
+    echo "             Skipping format/tidy. Run ./bootstrap.sh build to enable."
+    exit 0
+fi
+
+# 2. cppup format --check on staged files only.
+if [[ "${CPPUP_SKIP_FORMAT:-0}" != "1" ]]; then
+    echo "[pre-commit] cppup format --check (${#staged[@]} file(s))…"
+    if ! "$cppup_bin" format --check "${staged[@]}"; then
+        echo "[pre-commit] formatting issues — run \`cppup format ${staged[*]}\` to fix."
+        exit 1
+    fi
+fi
+
+# 3. cppup tidy on staged files only. Requires compile_commands.json.
+if [[ "${CPPUP_SKIP_TIDY:-0}" != "1" ]]; then
+    if [[ ! -f "$repo_root/compile_commands.json" ]]; then
+        echo "[pre-commit] compile_commands.json missing — skipping tidy."
+        echo "             Run \`cppup compile-commands\` to enable."
+    else
+        echo "[pre-commit] cppup tidy (${#staged[@]} file(s))…"
+        if ! "$cppup_bin" tidy "${staged[@]}"; then
+            echo "[pre-commit] clang-tidy reported issues — fix or set CPPUP_SKIP_TIDY=1."
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
