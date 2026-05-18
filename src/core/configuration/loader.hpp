@@ -1,8 +1,7 @@
 #pragma once
 
+#include <expected>
 #include <filesystem>
-#include <memory>
-#include <optional>
 #include <string>
 
 #include "build_configuration.hpp"
@@ -10,42 +9,15 @@
 namespace cppup::configuration
 {
 
-/**
- * Result of loading a configuration
- */
-struct LoadResult
-{
-  bool                              success = false;
-  std::optional<BuildConfiguration> configuration;
-  std::string                       error_message;
-
-  // Helper methods
-  [[nodiscard]] bool is_success() const noexcept
-  {
-    return success;
-  }
-  [[nodiscard]] bool is_failure() const noexcept
-  {
-    return !success;
-  }
-  [[nodiscard]] bool has_configuration() const noexcept
-  {
-    return configuration.has_value();
-  }
-};
-
-/**
- * Configuration loader class
- */
-class ConfigurationLoader
-{
- public:
-  ConfigurationLoader() = default;
-
-  /**
-   * Load configuration from a compiled shared library
-   */
-  [[nodiscard]] LoadResult load_from_library(const std::filesystem::path& library_path) const;
-};
+// Loads a compiled build.cpp shared library and invokes its `configure()`
+// entry point. Returns the produced BuildConfiguration on success, or a
+// human-readable error message on failure (missing file, dlopen/LoadLibrary
+// error, missing `configure` symbol, exception thrown by configure()).
+//
+// The library is intentionally not unloaded: build configurations may hold
+// std::function<void()> build steps whose code lives inside the loaded
+// module.
+[[nodiscard]] std::expected<BuildConfiguration, std::string> load_from_library(
+    const std::filesystem::path& library_path);
 
 }  // namespace cppup::configuration

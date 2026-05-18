@@ -1,209 +1,156 @@
 #include "../loader.hpp"
-#include "../compiler.hpp"
+
 #include <cassert>
-#include <iostream>
-#include <fstream>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <sstream>
+#include <string>
 
 using namespace cppup::configuration;
+namespace fs = std::filesystem;
 
-void create_test_build_cpp(const std::filesystem::path& path) {
-    std::ofstream file(path);
-    file << R"(
-#include "../configuration.hpp"
+namespace {
 
-using namespace cppup::configuration;
-
-extern "C" BuildConfiguration configure() {
-    return BuildConfiguration{
-        .toolchain = Toolchain{"gcc-13"},
-        .packages = {Package{"boost", "1.82.0"}},
-        .sources = {"src/main.cpp"},
-        .compile_flags = {Flag{"-Wall"}},
-        .binaries = {Binary{"test_app", {"src/main.cpp"}}}
-    };
-}
-)";
+fs::path make_tmp_dir(std::string_view tag) {
+    std::random_device rd;
+    auto name = std::string{"cppup_loader_test_"} + std::string{tag} + "_" +
+                std::to_string(rd());
+    auto path = fs::temp_directory_path() / name;
+    fs::create_directories(path);
+    return path;
 }
 
-void create_invalid_build_cpp(const std::filesystem::path& path) {
-    std::ofstream file(path);
-    file << R"(
-// Invalid build.cpp - missing extern "C" and wrong function signature
-#include "../configuration.hpp"
-
-using namespace cppup::configuration;
-
-BuildConfiguration wrong_configure() {
-    return BuildConfiguration{};
-}
-)";
-}
-
-void test_load_result() {
-    LoadResult result;
-    
-    // Test default state
-    assert(!result.is_success());
-    assert(result.is_failure());
-    assert(!result.has_configuration());
-    assert(result.error_message.empty());
-    
-    // Test success state
-    result.success = true;
-    result.configuration = BuildConfiguration{};
-    assert(result.is_success());
-    assert(!result.is_failure());
-    assert(result.has_configuration());
-    
-    // Test failure state
-    result.success = false;
-    result.configuration.reset();
-    result.error_message = "Test error";
-    assert(!result.is_success());
-    assert(result.is_failure());
-    assert(!result.has_configuration());
-    
-    std::cout << "LoadResult tests passed\n";
-}
-
-void test_shared_library_handle() {
-    // Test default construction
-    SharedLibraryHandle handle1;
-    assert(!handle1.is_valid());
-    assert(handle1.get() == nullptr);
-    
-    // Test move construction
-    SharedLibraryHandle handle2(nullptr);
-    assert(!handle2.is_valid());
-    
-    // Test move assignment
-    SharedLibraryHandle handle3;
-    handle3 = std::move(handle2);
-    assert(!handle3.is_valid());
-    
-    std::cout << "SharedLibraryHandle tests passed\n";
-}
-
-void test_load_from_nonexistent_file() {
-    ConfigurationLoader loader;
-    
-    // Test loading from non-existent library
-    auto result1 = loader.load_from_library("nonexistent.so");
-    assert(result1.is_failure());
-    assert(!result1.has_configuration());
-    assert(!result1.error_message.empty());
-    
-    // Test loading from non-existent source
-    auto result2 = loader.load_from_source("nonexistent_build.cpp");
-    assert(result2.is_failure());
-    assert(!result2.has_configuration());
-    assert(!result2.error_message.empty());
-    
-    std::cout << "Load from nonexistent file tests passed\n";
-}
-
-void test_is_valid_library() {
-    ConfigurationLoader loader;
-    
-    // Test with non-existent file
-    assert(!loader.is_valid_library("nonexistent.so"));
-    
-    // Test with regular file (not a shared library)
-    std::filesystem::create_directories("test_temp");
-    std::ofstream regular_file("test_temp/regular.txt");
-    regular_file << "This is not a shared library";
-    regular_file.close();
-    
-    assert(!loader.is_valid_library("test_temp/regular.txt"));
-    
-    // Cleanup
-    std::filesystem::remove_all("test_temp");
-    
-    std::cout << "Is valid library tests passed\n";
-}
-
-void test_compilation_and_loading_integration() {
-    // This test requires a working compiler, so we'll make it optional
-    std::cout << "Starting compilation and loading integration test...\n";
-    
-    // Create test directories
-    std::filesystem::create_directories("test_temp");
-    
-    // Create a test build.cpp file
-    std::filesystem::path build_cpp = "test_temp/build.cpp";
-    create_test_build_cpp(build_cpp);
-    
-    ConfigurationLoader loader;
-    
-    // Try to load from source (this will compile and then load)
-    auto result = loader.load_from_source(build_cpp);
-    
-    if (result.is_success()) {
-        std::cout << "Compilation and loading succeeded!\n";
-        
-        assert(result.has_configuration());
-        auto& config = result.configuration.value();
-        
-        // Verify the loaded configuration
-        assert(config.toolchain.has_value());
-        assert(config.toolchain->name == "gcc-13");
-        assert(config.packages.size() == 1);
-        assert(config.packages[0].name == "boost");
-        assert(config.packages[0].version.value() == "1.82.0");
-        assert(config.sources.size() == 1);
-        assert(config.sources[0] == "src/main.cpp");
-        assert(config.compile_flags.size() == 1);
-        assert(config.compile_flags[0].flag == "-Wall");
-        assert(config.binaries.size() == 1);
-        assert(config.binaries[0].name == "test_app");
-        
-        std::cout << "Configuration validation passed!\n";
+// Compile a .cpp file into a .so so we can load it; returns empty on failure.
+// The test is run from src/core/configuration/tests/ so the repo include/
+// directory is four levels up. Override with CPPUP_INCLUDE_DIR for other
+// invocation contexts.
+fs::path compile_to_shared(const fs::path& src, const fs::path& out_dir) {
+    fs::path include_dir;
+    if (const char* env = std::getenv("CPPUP_INCLUDE_DIR")) {
+        include_dir = env;
     } else {
-        std::cout << "Compilation failed (this is expected if no compiler is available): " 
-                  << result.error_message << std::endl;
-        // This is not a test failure - just means no compiler is available
+        include_dir = fs::current_path() / ".." / ".." / ".." / ".." / "include";
     }
-    
-    // Cleanup
-    std::filesystem::remove_all("test_temp");
-    std::filesystem::remove_all(".cppup");
-    
-    std::cout << "Compilation and loading integration test completed\n";
+
+    auto out = out_dir / "libtest_configure.so";
+    std::ostringstream cmd;
+    cmd << "g++ -std=c++23 -fPIC -shared "
+        << "-I" << include_dir.string() << ' '
+        << src.string() << " -o " << out.string()
+        << " 2>/dev/null";
+    if (std::system(cmd.str().c_str()) != 0) return {};
+    return out;
 }
 
-void test_error_handling() {
-    std::filesystem::create_directories("test_temp");
-    
-    // Create an invalid build.cpp file
-    std::filesystem::path invalid_build_cpp = "test_temp/invalid_build.cpp";
-    create_invalid_build_cpp(invalid_build_cpp);
-    
-    ConfigurationLoader loader;
-    
-    // Try to load the invalid configuration
-    auto result = loader.load_from_source(invalid_build_cpp);
-    
-    // Should fail (either at compilation or loading stage)
-    assert(result.is_failure());
-    assert(!result.has_configuration());
-    assert(!result.error_message.empty());
-    
-    std::cout << "Error handling test passed (error: " << result.error_message << ")\n";
-    
-    // Cleanup
-    std::filesystem::remove_all("test_temp");
-    std::filesystem::remove_all(".cppup");
+void write(const fs::path& p, std::string_view content) {
+    std::ofstream f(p);
+    f << content;
+}
+
+}  // namespace
+
+void test_missing_file_returns_error() {
+    auto result = load_from_library("/nonexistent/path/to/libfoo.so");
+    assert(!result);
+    assert(!result.error().empty());
+    assert(result.error().find("not found") != std::string::npos);
+    std::cout << "test_missing_file_returns_error passed\n";
+}
+
+void test_library_without_configure_symbol_returns_error() {
+    auto tmp = make_tmp_dir("no_symbol");
+    auto src = tmp / "no_symbol.cpp";
+    write(src, "int unrelated() { return 0; }\n");
+
+    auto so = compile_to_shared(src, tmp);
+    if (so.empty()) {
+        std::cout << "test_library_without_configure_symbol_returns_error skipped"
+                     " (g++ unavailable)\n";
+        fs::remove_all(tmp);
+        return;
+    }
+
+    auto result = load_from_library(so);
+    assert(!result);
+    assert(result.error().find("Configure function not found") != std::string::npos);
+
+    fs::remove_all(tmp);
+    std::cout << "test_library_without_configure_symbol_returns_error passed\n";
+}
+
+void test_loads_configuration_and_returns_value() {
+    auto tmp = make_tmp_dir("ok");
+    auto src = tmp / "build_ok.cpp";
+    write(src, R"(
+#include <cppup/configuration.hpp>
+using namespace cppup::configuration;
+extern "C" BuildConfiguration configure() {
+    BuildConfiguration c;
+    c.toolchain = Toolchain{"gcc-13"};
+    c.compile_flags = {Flag{"-Wall"}, Flag{"-std=c++23"}};
+    c.binaries.push_back(Binary{"app", {"src/main.cpp"}});
+    return c;
+}
+)");
+
+    auto so = compile_to_shared(src, tmp);
+    if (so.empty()) {
+        std::cout << "test_loads_configuration_and_returns_value skipped"
+                     " (compile failed)\n";
+        fs::remove_all(tmp);
+        return;
+    }
+
+    auto result = load_from_library(so);
+    assert(result && "load_from_library should succeed");
+    const auto& config = *result;
+    assert(config.toolchain.has_value());
+    assert(config.toolchain->name == "gcc-13");
+    assert(config.compile_flags.size() == 2);
+    assert(config.binaries.size() == 1);
+    assert(config.binaries[0].name == "app");
+
+    fs::remove_all(tmp);
+    std::cout << "test_loads_configuration_and_returns_value passed\n";
+}
+
+void test_configure_throwing_exception_returns_error() {
+    auto tmp = make_tmp_dir("throws");
+    auto src = tmp / "build_throws.cpp";
+    write(src, R"(
+#include <cppup/configuration.hpp>
+#include <stdexcept>
+using namespace cppup::configuration;
+extern "C" BuildConfiguration configure() {
+    throw std::runtime_error("intentional test failure");
+}
+)");
+
+    auto so = compile_to_shared(src, tmp);
+    if (so.empty()) {
+        std::cout << "test_configure_throwing_exception_returns_error skipped\n";
+        fs::remove_all(tmp);
+        return;
+    }
+
+    auto result = load_from_library(so);
+    assert(!result);
+    assert(result.error().find("Exception") != std::string::npos);
+    assert(result.error().find("intentional test failure") != std::string::npos);
+
+    fs::remove_all(tmp);
+    std::cout << "test_configure_throwing_exception_returns_error passed\n";
 }
 
 int main() {
-    test_load_result();
-    test_shared_library_handle();
-    test_load_from_nonexistent_file();
-    test_is_valid_library();
-    test_compilation_and_loading_integration();
-    test_error_handling();
-    
-    std::cout << "All configuration loader tests passed!\n";
+    test_missing_file_returns_error();
+    test_library_without_configure_symbol_returns_error();
+    test_loads_configuration_and_returns_value();
+    test_configure_throwing_exception_returns_error();
+    std::cout << "All loader tests passed\n";
     return 0;
 }

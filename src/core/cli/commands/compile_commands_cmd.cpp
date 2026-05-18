@@ -39,15 +39,14 @@ std::expected<int, std::string> executeCompileCommands(bool                  ena
       return std::unexpected("compile build.cpp failed: " + compile_result.error_message);
     }
 
-    conf::ConfigurationLoader loader;
-    auto load_result = loader.load_from_library(compile_result.shared_library_path);
-    if (!load_result.success || !load_result.configuration)
+    auto config_result = conf::load_from_library(compile_result.shared_library_path);
+    if (!config_result)
     {
-      return std::unexpected("load build configuration failed: " + load_result.error_message);
+      return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
-    auto cc = conf::emit_compile_commands(*load_result.configuration, context.projectRoot,
-                                          build_dir, enable_asan);
+    auto cc = conf::emit_compile_commands(*config_result, context.projectRoot, build_dir,
+                                          enable_asan);
     if (!cc)
     {
       return std::unexpected("compile_commands.json: " + cc.error());

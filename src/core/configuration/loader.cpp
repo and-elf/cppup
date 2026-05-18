@@ -1,10 +1,9 @@
 #include "loader.hpp"
 
+#include <expected>
 #include <filesystem>
-#include <iostream>
-#include <memory>
-#include <optional>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -12,108 +11,84 @@
 #include <dlfcn.h>
 #endif
 
-#include "build_configuration.hpp"
-
 namespace cppup::configuration
 {
 
-// Type definition for the configure function that must be exported by build.cpp
+namespace
+{
+
 using ConfigureFunction = BuildConfiguration (*)();
 
-// Implementation
-
-LoadResult ConfigurationLoader::load_from_library(const std::filesystem::path& library_path) const
+std::expected<BuildConfiguration, std::string> invoke_configure(ConfigureFunction fn) noexcept
 {
-  LoadResult result;
+  try
+  {
+    return fn();
+  }
+  catch (const std::exception& e)
+  {
+    return std::unexpected(std::string{"Exception in configure function: "} + e.what());
+  }
+  catch (...)
+  {
+    return std::unexpected(std::string{"Unknown exception in configure function"});
+  }
+}
 
-  // Check if the library file exists
+}  // namespace
+
+std::expected<BuildConfiguration, std::string> load_from_library(
+    const std::filesystem::path& library_path)
+{
   if (!std::filesystem::exists(library_path))
   {
-    result.error_message = "Shared library not found: " + library_path.string();
-    return result;
+    return std::unexpected("Shared library not found: " + library_path.string());
   }
 
 #ifdef _WIN32
-  // Load the shared library on Windows
   HMODULE handle = LoadLibraryA(library_path.string().c_str());
-  if (!handle)
+  if (handle == nullptr)
   {
-    result.error_message = "Failed to load shared library: " + library_path.string();
-    return result;
+    return std::unexpected("Failed to load shared library: " + library_path.string());
   }
 
-  // Get the configure function
-  ConfigureFunction configure_func =
-      reinterpret_cast<ConfigureFunction>(GetProcAddress(handle, "configure"));
-  if (!configure_func)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  auto configure_fn = reinterpret_cast<ConfigureFunction>(GetProcAddress(handle, "configure"));
+  if (configure_fn == nullptr)
   {
-    result.error_message = "Configure function not found in shared library";
     FreeLibrary(handle);
-    return result;
+    return std::unexpected("Configure function not found in shared library");
   }
 
-  // Call the configure function
-  try
-  {
-    auto config          = configure_func();
-    result.configuration = std::move(config);
-    result.success       = true;
-  }
-  catch (const std::exception& e)
-  {
-    result.error_message = "Exception in configure function: " + std::string(e.what());
-  }
-  catch (...)
-  {
-    result.error_message = "Unknown exception in configure function";
-  }
-
-  // Note: We don't unload the library here as the configuration might contain function pointers
-
+  // Library is deliberately leaked: configure() may have returned data
+  // (e.g. std::function build steps) whose code lives in this module.
+  return invoke_configure(configure_fn);
 #else
-  // Load the shared library on Unix-like systems
   void* handle = dlopen(library_path.c_str(), RTLD_LAZY);
-  if (!handle)
+  if (handle == nullptr)
   {
-    result.error_message = "Failed to load shared library: " + std::string(dlerror());
-    return result;
+    return std::unexpected(std::string{"Failed to load shared library: "} + dlerror());
   }
 
-  // Clear any existing error
-  dlerror();
+  dlerror();  // clear any prior error so we can distinguish a NULL symbol.
 
-  // Get the configure function
-  ConfigureFunction configure_func =
-      reinterpret_cast<ConfigureFunction>(dlsym(handle, "configure"));
-  if (!configure_func)
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  auto configure_fn = reinterpret_cast<ConfigureFunction>(dlsym(handle, "configure"));
+  if (configure_fn == nullptr)
   {
-    result.error_message =
-        "Configure function not found in shared library: " + std::string(dlerror());
+    std::string err = "Configure function not found in shared library";
+    if (const char* dl = dlerror())
+    {
+      err += ": ";
+      err += dl;
+    }
     dlclose(handle);
-    return result;
+    return std::unexpected(std::move(err));
   }
 
-  // Call the configure function
-  try
-  {
-    auto config          = configure_func();
-    result.configuration = std::move(config);
-    result.success       = true;
-  }
-  catch (const std::exception& e)
-  {
-    result.error_message = "Exception in configure function: " + std::string(e.what());
-  }
-  catch (...)
-  {
-    result.error_message = "Unknown exception in configure function";
-  }
-
-  // Note: We don't close the library here as the configuration might contain function pointers
-
+  // Library is deliberately leaked: see Windows branch above for rationale.
+  return invoke_configure(configure_fn);
 #endif
-
-  return result;
 }
 
 }  // namespace cppup::configuration

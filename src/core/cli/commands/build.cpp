@@ -253,14 +253,13 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
       return std::unexpected("compile build.cpp failed: " + compile_result.error_message);
     }
 
-    conf::ConfigurationLoader loader;
-    auto                      load_result = loader.load_from_library(compile_result.shared_library_path);
-    if (!load_result.success || !load_result.configuration)
+    auto config_result = conf::load_from_library(compile_result.shared_library_path);
+    if (!config_result)
     {
-      return std::unexpected("load build configuration failed: " + load_result.error_message);
+      return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
-    const auto& config = *load_result.configuration;
+    const auto& config = *config_result;
     logger.info("build configuration loaded");
 
     if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir,

@@ -51,7 +51,20 @@ else
 fi
 
 echo
+
+# Test configuration loader
+echo "=== Testing configuration loader ==="
+if g++ -std=c++23 -Wall -Wextra -I.. \
+       test_loader.cpp ../loader.cpp \
+       -ldl -o test_loader && ./test_loader; then
+    echo "✓ loader test passed"
+else
+    echo "✗ loader test failed"
+    exit 1
+fi
+
+echo
 echo "=== All tests passed! ==="
 
 # Clean up
-rm -f test_types test_outputs test_profile test_compile_commands
+rm -f test_types test_outputs test_profile test_compile_commands test_loader
