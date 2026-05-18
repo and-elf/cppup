@@ -7,6 +7,7 @@
 
 #include "../../configuration/compile_commands.hpp"
 #include "../../configuration/link_resolution.hpp"
+#include "../../configuration/subproject_loader.hpp"
 #include "common.h"
 
 namespace cppup::cli
@@ -272,20 +273,16 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
 
     conf::ConfigurationCompiler compiler(std::move(compiler_opts));
-    auto                        compile_result = compiler.compile(build_file);
-    if (!compile_result.success)
-    {
-      return std::unexpected("compile build.cpp failed: " + compile_result.error_message);
-    }
-
-    auto config_result = conf::load_from_library(compile_result.shared_library_path);
+    auto                        config_result =
+        conf::load_with_subprojects(context.projectRoot, compiler);
     if (!config_result)
     {
       return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
     const auto& config = *config_result;
-    logger.info("build configuration loaded");
+    logger.info("build configuration loaded (" + std::to_string(config.libraries.size()) +
+                " libraries, " + std::to_string(config.binaries.size()) + " binaries)");
 
     if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir, enable_asan))
     {
