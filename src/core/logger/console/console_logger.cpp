@@ -37,8 +37,8 @@ void ConsoleLogger::log(LogLevel level, std::string_view message) const
   if (level < minLevel) return;
 
   auto& out = (level >= LogLevel::Warning) ? std::cerr : std::cout;
-  out << levelToColor(level) << "[" << category_ << "] " << levelToString(level) << "\033[0m: "
-      << message << "\n";
+  out << levelToColor(level) << "[" << category_ << "] " << levelToString(level)
+      << "\033[0m: " << message << "\n";
 
   if (fileStream_)
   {
@@ -50,10 +50,14 @@ std::string_view ConsoleLogger::levelToString(LogLevel lvl)
 {
   switch (lvl)
   {
-    case LogLevel::Debug:   return "DEBUG";
-    case LogLevel::Info:    return "INFO";
-    case LogLevel::Warning: return "WARN";
-    case LogLevel::Error:   return "ERROR";
+    case LogLevel::Debug:
+      return "DEBUG";
+    case LogLevel::Info:
+      return "INFO";
+    case LogLevel::Warning:
+      return "WARN";
+    case LogLevel::Error:
+      return "ERROR";
   }
   return "UNKNOWN";
 }
@@ -62,10 +66,14 @@ const char* ConsoleLogger::levelToColor(LogLevel lvl)
 {
   switch (lvl)
   {
-    case LogLevel::Debug:   return "\033[36m";
-    case LogLevel::Info:    return "\033[32m";
-    case LogLevel::Warning: return "\033[33m";
-    case LogLevel::Error:   return "\033[31m";
+    case LogLevel::Debug:
+      return "\033[36m";
+    case LogLevel::Info:
+      return "\033[32m";
+    case LogLevel::Warning:
+      return "\033[33m";
+    case LogLevel::Error:
+      return "\033[31m";
   }
   return "\033[0m";
 }

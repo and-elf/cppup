@@ -1,9 +1,8 @@
-#include "common.h"
-
-#include "../../configuration/compile_commands.hpp"
-
 #include <filesystem>
 #include <string>
+
+#include "../../configuration/compile_commands.hpp"
+#include "common.h"
 
 namespace cppup::cli
 {
@@ -45,8 +44,8 @@ std::expected<int, std::string> executeCompileCommands(bool                  ena
       return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
-    auto cc = conf::emit_compile_commands(*config_result, context.projectRoot, build_dir,
-                                          enable_asan);
+    auto cc =
+        conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, enable_asan);
     if (!cc)
     {
       return std::unexpected("compile_commands.json: " + cc.error());

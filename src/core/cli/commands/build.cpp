@@ -1,13 +1,12 @@
-#include "common.h"
-
-#include "../../configuration/compile_commands.hpp"
-
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "../../configuration/compile_commands.hpp"
+#include "common.h"
 
 namespace cppup::cli
 {
@@ -18,10 +17,8 @@ namespace
 namespace conf = cppup::configuration;
 namespace bld  = cppup::build;
 
-void append_common_flags(std::vector<std::string>&     out,
-                         const conf::BuildConfiguration& config,
-                         const std::filesystem::path&  project_root,
-                         bool                          enable_asan)
+void append_common_flags(std::vector<std::string>& out, const conf::BuildConfiguration& config,
+                         const std::filesystem::path& project_root, bool enable_asan)
 {
   for (const auto& flag : config.compile_flags) out.emplace_back(flag.flag);
   for (const auto& def : config.definitions)
@@ -80,8 +77,7 @@ std::vector<bld::FileDependency> collect_dependencies(
 
 std::expected<std::filesystem::path, std::string> compile_object(
     const std::string& compiler, const std::filesystem::path& source,
-    const std::filesystem::path&    obj_path,
-    const std::vector<std::string>& flags, Logger& logger)
+    const std::filesystem::path& obj_path, const std::vector<std::string>& flags, Logger& logger)
 {
   std::ostringstream cmd;
   cmd << compiler << " -c";
@@ -102,8 +98,8 @@ std::expected<std::filesystem::path, std::string> build_library(
     bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
 {
   bld::BuildTarget target;
-  target.name = library.name;
-  target.type = "library";
+  target.name        = library.name;
+  target.type        = "library";
   const char* ext    = (library.type == conf::LibraryType::Static) ? ".a" : ".so";
   target.output_path = build_dir / ("lib" + library.name + ext);
   for (const auto& src : library.sources) target.source_files.push_back(project_root / src);
@@ -111,8 +107,7 @@ std::expected<std::filesystem::path, std::string> build_library(
   std::vector<std::string> compile_flags;
   append_common_flags(compile_flags, config, project_root, enable_asan);
   target.compile_flags = compile_flags;
-  for (const auto& inc : config.include_paths)
-    target.include_paths.push_back(project_root / inc);
+  for (const auto& inc : config.include_paths) target.include_paths.push_back(project_root / inc);
 
   if (cache)
   {
@@ -153,11 +148,10 @@ std::expected<std::filesystem::path, std::string> build_library(
 }
 
 std::expected<void, std::string> build_executable(
-    const std::string& kind, const std::string& name,
-    const std::vector<std::string>& sources, const conf::BuildConfiguration& config,
-    const std::vector<conf::Library>& libraries, const std::filesystem::path& project_root,
-    const std::filesystem::path& build_dir, bld::BuildCache* cache, bool enable_asan,
-    Logger& logger, std::size_t& cached_counter)
+    const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
+    const conf::BuildConfiguration& config, const std::vector<conf::Library>& libraries,
+    const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
+    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
 {
   bld::BuildTarget target;
   target.name        = name;
@@ -168,8 +162,7 @@ std::expected<void, std::string> build_executable(
   std::vector<std::string> compile_flags;
   append_common_flags(compile_flags, config, project_root, enable_asan);
   target.compile_flags = compile_flags;
-  for (const auto& inc : config.include_paths)
-    target.include_paths.push_back(project_root / inc);
+  for (const auto& inc : config.include_paths) target.include_paths.push_back(project_root / inc);
 
   std::vector<std::string> link_flags;
   link_flags.push_back("-L" + build_dir.string());
@@ -237,7 +230,8 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     std::filesystem::create_directories(build_dir);
 
     std::unique_ptr<bld::BuildCache> cache;
-    if (auto c = bld::create_build_cache(cache_dir, nullptr)) cache = std::move(*c);
+    if (auto c = bld::create_build_cache(cache_dir, nullptr))
+      cache = std::move(*c);
     else
       logger.warning("build cache unavailable: " + c.error());
 
@@ -262,8 +256,7 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     const auto& config = *config_result;
     logger.info("build configuration loaded");
 
-    if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir,
-                                              enable_asan))
+    if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir, enable_asan))
     {
       logger.debug("wrote " + cc->string());
     }
@@ -285,18 +278,18 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
 
     for (const auto& binary : config.binaries)
     {
-      auto r =
-          build_executable("binary", binary.name, binary.sources, config, config.libraries,
-                           context.projectRoot, build_dir, cache.get(), enable_asan, logger, cached);
+      auto r = build_executable("binary", binary.name, binary.sources, config, config.libraries,
+                                context.projectRoot, build_dir, cache.get(), enable_asan, logger,
+                                cached);
       if (!r) return std::unexpected(r.error());
       ++built;
     }
 
     for (const auto& test : config.tests)
     {
-      auto r =
-          build_executable("test", test.name, test.sources, config, config.libraries,
-                           context.projectRoot, build_dir, cache.get(), enable_asan, logger, cached);
+      auto r = build_executable("test", test.name, test.sources, config, config.libraries,
+                                context.projectRoot, build_dir, cache.get(), enable_asan, logger,
+                                cached);
       if (!r) return std::unexpected(r.error());
       ++built;
     }
@@ -311,14 +304,14 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
       }
     }
 
-    logger.info("build complete: " + std::to_string(built) + " built, " +
-                std::to_string(cached) + " cached");
+    logger.info("build complete: " + std::to_string(built) + " built, " + std::to_string(cached) +
+                " cached");
     if (cache)
     {
       auto stats = cache->get_stats();
       if (stats)
-        logger.info("cache hit rate: " +
-                    std::to_string(static_cast<int>(stats->hit_rate * 100.0)) + "%");
+        logger.info("cache hit rate: " + std::to_string(static_cast<int>(stats->hit_rate * 100.0)) +
+                    "%");
     }
     return 0;
   }

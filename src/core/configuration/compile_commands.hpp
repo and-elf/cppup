@@ -1,12 +1,13 @@
 #pragma once
 
-#include "build_configuration.hpp"
-
 #include <expected>
 #include <filesystem>
 #include <string>
 
-namespace cppup::configuration {
+#include "build_configuration.hpp"
+
+namespace cppup::configuration
+{
 
 /**
  * Writes <project_root>/compile_commands.json describing how every translation
@@ -26,10 +27,8 @@ namespace cppup::configuration {
  *
  * @return Absolute path to the written compile_commands.json on success.
  */
-std::expected<std::filesystem::path, std::string>
-emit_compile_commands(const BuildConfiguration&    config,
-                      const std::filesystem::path& project_root,
-                      const std::filesystem::path& build_dir,
-                      bool                         enable_asan = false) noexcept;
+std::expected<std::filesystem::path, std::string> emit_compile_commands(
+    const BuildConfiguration& config, const std::filesystem::path& project_root,
+    const std::filesystem::path& build_dir, bool enable_asan = false) noexcept;
 
 }  // namespace cppup::configuration

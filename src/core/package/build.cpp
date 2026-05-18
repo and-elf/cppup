@@ -6,9 +6,8 @@ extern "C" BuildConfiguration configure()
 {
   BuildConfiguration config;
 
-  config.libraries.push_back(Library{"cppup_package_core",
-                                     {"package_concept.cpp", "package_factory.cpp"},
-                                     LibraryType::Static});
+  config.libraries.push_back(Library{
+      "cppup_package_core", {"package_concept.cpp", "package_factory.cpp"}, LibraryType::Static});
 
   config.include_paths = {"../../.."};
 

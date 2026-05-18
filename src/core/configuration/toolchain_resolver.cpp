@@ -290,17 +290,15 @@ BuildConfiguration ToolchainResolver::apply_toolchain_settings(
   if (config.target_os.empty())
   {
     // Try to infer from toolchain name or use compile-time detection
-    if (resolved_toolchain.name.find("mingw") != std::string::npos ||
-        resolved_toolchain.name.find("msvc") != std::string::npos)
+    if (resolved_toolchain.name.contains("mingw") || resolved_toolchain.name.contains("msvc"))
     {
       config.target_os = "windows";
     }
-    else if (resolved_toolchain.name.find("linux") != std::string::npos ||
-             resolved_toolchain.name.find("gcc") != std::string::npos)
+    else if (resolved_toolchain.name.contains("linux") || resolved_toolchain.name.contains("gcc"))
     {
       config.target_os = "linux";
     }
-    else if (resolved_toolchain.name.find("clang") != std::string::npos)
+    else if (resolved_toolchain.name.contains("clang"))
     {
       // Clang can target multiple platforms, use compile-time detection
 #ifdef _WIN32
@@ -318,13 +316,12 @@ BuildConfiguration ToolchainResolver::apply_toolchain_settings(
   if (config.target_arch.empty())
   {
     // Try to infer from toolchain or use compile-time detection
-    if (resolved_toolchain.name.find("x86_64") != std::string::npos ||
-        resolved_toolchain.name.find("amd64") != std::string::npos)
+    if (resolved_toolchain.name.contains("x86_64") || resolved_toolchain.name.contains("amd64"))
     {
       config.target_arch = "x86_64";
     }
-    else if (resolved_toolchain.name.find("arm64") != std::string::npos ||
-             resolved_toolchain.name.find("aarch64") != std::string::npos)
+    else if (resolved_toolchain.name.contains("arm64") ||
+             resolved_toolchain.name.contains("aarch64"))
     {
       config.target_arch = "arm64";
     }

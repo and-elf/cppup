@@ -5,34 +5,35 @@
  * Include this header to access all configuration types and functionality
  */
 
-#include "types.hpp"
-#include "outputs.hpp"
-#include "profile.hpp"
 #include "build_configuration.hpp"
-#include "platform.hpp"
-#include "runtime.hpp"
 #include "compiler.hpp"
 #include "loader.hpp"
-#include "validation.hpp"
+#include "outputs.hpp"
 #include "package_resolver.hpp"
-#include "toolchain_resolver.hpp"
+#include "platform.hpp"
+#include "profile.hpp"
 #include "profile_processor.hpp"
+#include "runtime.hpp"
+#include "toolchain_resolver.hpp"
+#include "types.hpp"
+#include "validation.hpp"
 
-namespace cppup::configuration {
-    // Re-export all types for convenience
-    using Package = Package;
-    using Module = Module;
-    using Toolchain = Toolchain;
-    using Flag = Flag;
-    using Definition = Definition;
-    using LibraryType = LibraryType;
-    using Binary = Binary;
-    using Library = Library;
-    using Test = Test;
-    using BuildStep = BuildStep;
-    using Profile = Profile;
-    using BuildConfiguration = BuildConfiguration;
-}
+namespace cppup::configuration
+{
+// Re-export all types for convenience
+using Package            = Package;
+using Module             = Module;
+using Toolchain          = Toolchain;
+using Flag               = Flag;
+using Definition         = Definition;
+using LibraryType        = LibraryType;
+using Binary             = Binary;
+using Library            = Library;
+using Test               = Test;
+using BuildStep          = BuildStep;
+using Profile            = Profile;
+using BuildConfiguration = BuildConfiguration;
+}  // namespace cppup::configuration
 
 // Convenience namespace alias
 namespace cppup_config = cppup::configuration;

@@ -64,7 +64,8 @@ constexpr const char* CREATE_INDEXES = R"(
 // Helper to convert vector to JSON-like string
 std::string vector_to_json(const std::vector<std::string>& vec)
 {
-  if (vec.empty()) {
+  if (vec.empty())
+  {
     return "[]";
   }
 
@@ -72,7 +73,8 @@ std::string vector_to_json(const std::vector<std::string>& vec)
   oss << "[";
   for (size_t i = 0; i < vec.size(); ++i)
   {
-    if (i > 0) {
+    if (i > 0)
+    {
       oss << ",";
     }
     oss << "\"" << vec[i] << "\"";
@@ -85,16 +87,19 @@ std::string vector_to_json(const std::vector<std::string>& vec)
 std::vector<std::string> json_to_vector(const std::string& json)
 {
   std::vector<std::string> result;
-  if (json.empty() || json == "[]") {
+  if (json.empty() || json == "[]")
+  {
     return result;
   }
 
   // Simple JSON parsing - in production would use proper JSON library
   std::string content = json;
-  if (content.front() == '[') {
+  if (content.front() == '[')
+  {
     content = content.substr(1);
   }
-  if (content.back() == ']') {
+  if (content.back() == ']')
+  {
     content = content.substr(0, content.length() - 1);
   }
 
@@ -248,7 +253,7 @@ std::expected<void, std::string> DependencyDatabase::install_package(
         )";
 
     sqlite3_stmt* stmt = nullptr;
-    int           rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
+    int           rc   = sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr);
     if (rc != SQLITE_OK)
     {
       return std::unexpected("Failed to prepare insert statement: " +
@@ -344,42 +349,50 @@ std::expected<PackageInfo, std::string> DependencyDatabase::get_package(
     package.version = column_text(stmt, 1);
 
     const char* desc = column_cstr(stmt, 2);
-    if (desc != nullptr) {
+    if (desc != nullptr)
+    {
       package.description = desc;
     }
 
     const char* homepage = column_cstr(stmt, 3);
-    if (homepage != nullptr) {
+    if (homepage != nullptr)
+    {
       package.homepage = homepage;
     }
 
     const char* repo = column_cstr(stmt, 4);
-    if (repo != nullptr) {
+    if (repo != nullptr)
+    {
       package.repository_url = repo;
     }
 
     const char* license = column_cstr(stmt, 5);
-    if (license != nullptr) {
+    if (license != nullptr)
+    {
       package.license = license;
     }
 
     const char* authors = column_cstr(stmt, 6);
-    if (authors != nullptr) {
+    if (authors != nullptr)
+    {
       package.authors = json_to_vector(authors);
     }
 
     const char* keywords = column_cstr(stmt, 7);
-    if (keywords != nullptr) {
+    if (keywords != nullptr)
+    {
       package.keywords = json_to_vector(keywords);
     }
 
     const char* install_path = column_cstr(stmt, 8);
-    if (install_path != nullptr) {
+    if (install_path != nullptr)
+    {
       package.install_path = install_path;
     }
 
     const char* checksum = column_cstr(stmt, 9);
-    if (checksum != nullptr) {
+    if (checksum != nullptr)
+    {
       package.checksum = checksum;
     }
 
@@ -532,12 +545,14 @@ std::expected<std::vector<DependencyRelation>, std::string> DependencyDatabase::
       relation.dependency_name = column_text(stmt, 2);
 
       const char* constraint = column_cstr(stmt, 3);
-      if (constraint != nullptr) {
+      if (constraint != nullptr)
+      {
         relation.version_constraint = constraint;
       }
 
       const char* type = column_cstr(stmt, 4);
-      if (type != nullptr) {
+      if (type != nullptr)
+      {
         relation.dependency_type = type;
       }
 
@@ -576,22 +591,26 @@ void DependencyDatabase::cleanup() noexcept
 std::expected<void, std::string> DependencyDatabase::create_tables() noexcept
 {
   auto result = execute_sql(CREATE_PACKAGES_TABLE);
-  if (!result) {
+  if (!result)
+  {
     return result;
   }
 
   result = execute_sql(CREATE_DEPENDENCIES_TABLE);
-  if (!result) {
+  if (!result)
+  {
     return result;
   }
 
   result = execute_sql(CREATE_REGISTRY_TABLE);
-  if (!result) {
+  if (!result)
+  {
     return result;
   }
 
   result = execute_sql(CREATE_INDEXES);
-  if (!result) {
+  if (!result)
+  {
     return result;
   }
 
@@ -824,7 +843,8 @@ std::expected<void, std::string> DependencyDatabase::update_registry_entry(
   std::string versions_str;
   for (size_t i = 0; i < entry.available_versions.size(); ++i)
   {
-    if (i > 0) {
+    if (i > 0)
+    {
       versions_str += ",";
     }
     versions_str += entry.available_versions[i];
@@ -1026,7 +1046,7 @@ std::expected<std::vector<std::string>, std::string> DependencyDatabase::detect_
   for (const auto& package : *packages_result)
   {
     std::string package_key = package.name + "@" + package.version;
-    if (visited.find(package_key) == visited.end())
+    if (!visited.contains(package_key))
     {
       if (has_cycle_dfs(package_key, visited, recursion_stack))
       {

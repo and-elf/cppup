@@ -81,8 +81,8 @@ std::expected<int, std::string> executeTest(bool                  enable_asan,
       }
       else
       {
-        context.logger->error("  FAIL: " + test_bin.filename().string() +
-                              " (exit " + std::to_string(rc) + ")");
+        context.logger->error("  FAIL: " + test_bin.filename().string() + " (exit " +
+                              std::to_string(rc) + ")");
         ++failed;
       }
     }
