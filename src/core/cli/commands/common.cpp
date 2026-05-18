@@ -400,8 +400,8 @@ void createClangFormat(const std::filesystem::path& project_root, Logger* logger
 
 BasedOnStyle: Google
 
-# C++23 features
-Standard: c++23
+# Track the latest C++ standard known to clang-format
+Standard: Latest
 
 # Indentation
 IndentWidth: 4

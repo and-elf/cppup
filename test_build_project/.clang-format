@@ -3,8 +3,9 @@
 
 BasedOnStyle: Google
 
-# C++23 features
-Standard: c++23
+# Track the latest C++ standard known to clang-format (currently c++23 in
+# trunk; clang-format 19 only recognises Cpp03..Cpp20 / Latest / Auto).
+Standard: Latest
 
 # Indentation
 IndentWidth: 4

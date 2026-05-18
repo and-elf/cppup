@@ -74,7 +74,7 @@ int main() {
 }
 
 constexpr const char* kClangFormat = R"(BasedOnStyle: Google
-Standard: c++23
+Standard: Latest
 IndentWidth: 2
 ColumnLimit: 100
 PointerAlignment: Left
