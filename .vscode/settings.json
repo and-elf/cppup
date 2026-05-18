@@ -7,11 +7,9 @@
         "typeinfo": "cpp"
     },
     "cmake.ignoreCMakeListsMissing": true,
-
     "C_Cpp.intelliSenseEngine": "disabled",
     "C_Cpp.autocomplete": "disabled",
     "C_Cpp.errorSquiggles": "disabled",
-
     "clangd.arguments": [
         "--background-index",
         "--clang-tidy",
@@ -20,5 +18,36 @@
         "--pch-storage=memory",
         "--compile-commands-dir=${workspaceFolder}"
     ],
-    "clangd.checkUpdates": false
+    "clangd.checkUpdates": false,
+    "testMate.cpp.test.advancedExecutables": [
+        {
+            "pattern": "build/tests/test_*",
+            "cwd": "${workspaceFolder}",
+            "framework": {
+                "gtest": {
+                    "testGrouping": {
+                        "groupBySource": {}
+                    }
+                }
+            },
+            "runTask": {
+                "before": [
+                    "cppup: build"
+                ]
+            }
+        }
+    ],
+    "testMate.cpp.test.executableCleanup": true,
+    "testMate.cpp.discovery.runtimeLimit": 30,
+    "testMate.cpp.test.parallelExecutionOfExecutableLimit": 4,
+    "testMate.cpp.debug.configTemplate": {
+        "type": "lldb",
+        "MIMode": "lldb",
+        "request": "launch",
+        "program": "${exec}",
+        "args": "${argsArray}",
+        "cwd": "${cwd}",
+        "env": "${envObj}",
+        "sourceFileMap": "${sourceFileMapObj}"
+    }
 }

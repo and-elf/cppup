@@ -1,0 +1,82 @@
+{
+    "version": "0.2.0",
+    "inputs": [
+        {
+            "id": "cppupArgs",
+            "type": "promptString",
+            "description": "Args for cppup (space-separated)",
+            "default": "build"
+        },
+        {
+            "id": "gtestFilter",
+            "type": "promptString",
+            "description": "GoogleTest filter (e.g. Profile.* or *.DefaultConstruction*)",
+            "default": "*"
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Debug cppup (build)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cppup",
+            "args": ["build"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug cppup (test)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cppup",
+            "args": ["test"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug cppup (prompt for args)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cppup",
+            "args": "${input:cppupArgs}",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug cppup (build --asan)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/cppup",
+            "args": ["build", "--asan"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug current test file",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug current test file (filter case)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
+            "args": ["--gtest_filter=${input:gtestFilter}", "--gtest_break_on_failure"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: build"
+        },
+        {
+            "name": "Debug bootstrap cppup",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/bootstrap_build/cppup",
+            "args": "${input:cppupArgs}",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cppup: bootstrap (rebuild from scratch)"
+        }
+    ]
+}

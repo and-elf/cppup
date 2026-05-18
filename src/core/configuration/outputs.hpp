@@ -43,11 +43,18 @@ struct Library
 
 /**
  * Represents a test executable output
+ *
+ * `libraries` lists internal library names (matching the `Library::name` of
+ * entries declared in the same `BuildConfiguration`) that the test should link.
+ * `link_flags` is appended verbatim to the linker command, intended for
+ * external libraries such as `-lgtest -lgtest_main -lpthread`.
  */
 struct Test
 {
   std::string              name;
   std::vector<std::string> sources;
+  std::vector<std::string> libraries;
+  std::vector<Flag>        link_flags;
 
   Test(std::string name, std::vector<std::string> sources) noexcept :
       name(std::move(name)), sources(std::move(sources))

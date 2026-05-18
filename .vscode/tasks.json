@@ -1,0 +1,60 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cppup: build",
+            "type": "shell",
+            "command": "${workspaceFolder}/bootstrap_build/cppup",
+            "args": ["build"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "presentation": {
+                "reveal": "silent",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "cppup: build (with asan)",
+            "type": "shell",
+            "command": "${workspaceFolder}/bootstrap_build/cppup",
+            "args": ["build", "--asan"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "cppup: test",
+            "type": "shell",
+            "command": "${workspaceFolder}/bootstrap_build/cppup",
+            "args": ["test"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "cppup: build",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "cppup: bootstrap (rebuild from scratch)",
+            "type": "shell",
+            "command": "${workspaceFolder}/bootstrap.sh",
+            "args": ["build"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}

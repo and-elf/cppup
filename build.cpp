@@ -13,6 +13,7 @@ extern "C" BuildConfiguration configure()
                           Flag{"-Wno-return-type-c-linkage"},
                           Flag{"-std=c++23"},
                           Flag{"-O2"},
+                          Flag{"-g"},
                           Flag{"-DNDEBUG"},
                           Flag{"-fPIC"}};
   config.include_paths = {"include",

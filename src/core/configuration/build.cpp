@@ -13,5 +13,9 @@ extern "C" BuildConfiguration configure()
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-ldl"}},
   });
+
+  config.tests.push_back(Test{"test_profile", {"tests/test_profile.cpp"}});
+  config.tests.back().link_flags = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+
   return config;
 }

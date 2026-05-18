@@ -153,8 +153,11 @@ std::expected<void, std::string> build_executable(
     const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
     const conf::BuildConfiguration& config, const std::vector<std::string>& linked_library_names,
     const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
-    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
+    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter,
+    const std::vector<std::string>& extra_link_flags = {},
+    const std::filesystem::path&    output_dir       = {})
 {
+  const auto& target_dir = output_dir.empty() ? build_dir : output_dir;
   auto resolved = conf::resolve_link_set(linked_library_names, config.libraries);
   if (!resolved)
   {
@@ -165,7 +168,7 @@ std::expected<void, std::string> build_executable(
   bld::BuildTarget target;
   target.name        = name;
   target.type        = kind;
-  target.output_path = build_dir / name;
+  target.output_path = target_dir / name;
   for (const auto& src : sources)
   {
     target.source_files.push_back(project_root / src);
@@ -197,6 +200,10 @@ std::expected<void, std::string> build_executable(
   for (const auto& f : config.link_flags)
   {
     link_flags.emplace_back(f.flag);
+  }
+  for (const auto& f : extra_link_flags)
+  {
+    link_flags.emplace_back(f);
   }
   if (enable_asan)
   {
@@ -314,19 +321,26 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
       ++built;
     }
 
-    // Tests have no per-target libraries field yet; link against every internal
-    // library so test executables can pull in whatever they need.
-    std::vector<std::string> all_library_names;
-    all_library_names.reserve(config.libraries.size());
-    for (const auto& lib : config.libraries)
+    // Tests link only the internal libraries they explicitly name in
+    // Test::libraries, plus any verbatim flags in Test::link_flags
+    // (e.g. "-lgtest -lgtest_main -lpthread"). Binaries land in build/tests/
+    // so the test runner and VSCode testMate glob can both find them.
+    const auto tests_dir = build_dir / "tests";
+    if (!config.tests.empty())
     {
-      all_library_names.push_back(lib.name);
+      std::filesystem::create_directories(tests_dir);
     }
     for (const auto& test : config.tests)
     {
-      auto r = build_executable("test", test.name, test.sources, config, all_library_names,
+      std::vector<std::string> test_link_flag_strings;
+      test_link_flag_strings.reserve(test.link_flags.size());
+      for (const auto& f : test.link_flags)
+      {
+        test_link_flag_strings.emplace_back(f.flag);
+      }
+      auto r = build_executable("test", test.name, test.sources, config, test.libraries,
                                 context.projectRoot, build_dir, cache.get(), enable_asan, logger,
-                                cached);
+                                cached, test_link_flag_strings, tests_dir);
       if (!r)
       {
         return std::unexpected(r.error());
