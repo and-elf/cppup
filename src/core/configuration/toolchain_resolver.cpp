@@ -1,6 +1,3 @@
-#include <algorithm>
-#include <filesystem>
-#include <iostream>
 #include <map>
 #include <optional>
 #include <string>
@@ -192,6 +189,7 @@ class MockToolchainInfoProvider : public ToolchainInfoProvider
   [[nodiscard]] std::vector<std::string> get_available_toolchains() const override
   {
     std::vector<std::string> names;
+    names.reserve(toolchains_.size());
     for (const auto& [name, _] : toolchains_)
     {
       names.push_back(name);

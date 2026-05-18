@@ -20,14 +20,14 @@ namespace cppup::configuration {
 template<typename Func>
 void when_feature(const BuildConfiguration& config, const std::string& feature, Func&& func) {
     if (has_feature(config, feature)) {
-        func();
+        std::forward<Func>(func)();
     }
 }
 
 template<typename Func>
 void when_env(const BuildConfiguration& config, const std::string& var, const std::string& value, Func&& func) {
     if (auto env_val = get_env(config, var); env_val && *env_val == value) {
-        func();
+        std::forward<Func>(func)();
     }
 }
 
@@ -35,7 +35,7 @@ void when_env(const BuildConfiguration& config, const std::string& var, const st
 template<typename Func>
 void when_env_exists(const BuildConfiguration& config, const std::string& var, Func&& func) {
     if (get_env(config, var).has_value()) {
-        func();
+        std::forward<Func>(func)();
     }
 }
 

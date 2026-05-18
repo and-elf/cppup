@@ -42,7 +42,7 @@ struct PackageInfo {
     std::optional<std::string> git_commit = std::nullopt;
     
     // Build options
-    std::vector<std::string> build_args = {};
+    std::vector<std::string> build_args;
     std::optional<std::string> subdirectory = std::nullopt;
     
     explicit constexpr PackageInfo(std::string name) noexcept : name(std::move(name)) {}
@@ -89,13 +89,17 @@ public:
     Package& operator=(Package&&) = default;
     
     // Core package interface
-    const PackageInfo& info() const { 
-        if (!impl_) throw std::runtime_error("Invalid package");
+    [[nodiscard]] const PackageInfo& info() const { 
+        if (!impl_){
+            throw std::runtime_error("Invalid package");
+        } 
         return impl_->info(); 
     }
     
     std::expected<std::filesystem::path, std::string> resolve_source() const { 
-        if (!impl_) return std::unexpected("Invalid package");
+        if (!impl_) {
+            return std::unexpected("Invalid package");
+        }
         return impl_->resolve_source(); 
     }
     
@@ -115,12 +119,16 @@ public:
     }
     
     // Convenience accessors
-    const std::string& name() const { return info().name; }
-    const std::optional<std::string>& version() const { return info().version; }
+    [[nodiscard]] const std::string& name() const { return info().name; }
+    [[nodiscard]] const std::optional<std::string>& version() const { return info().version; }
     
     bool operator==(const Package& other) const {
-        if (!impl_ && !other.impl_) return true;
-        if (!impl_ || !other.impl_) return false;
+        if (!impl_ && !other.impl_) {
+            return true;
+        }
+        if (!impl_ || !other.impl_) {
+            return false;
+        }
         return impl_->info().name == other.impl_->info().name &&
                impl_->info().version == other.impl_->info().version;
     }
@@ -128,9 +136,9 @@ public:
 private:
     struct PackageInterface {
         virtual ~PackageInterface() = default;
-        virtual std::unique_ptr<PackageInterface> clone() const = 0;
-        virtual const PackageInfo& info() const = 0;
-        virtual std::expected<std::filesystem::path, std::string> resolve_source() const = 0;
+        [[nodiscard]] virtual std::unique_ptr<PackageInterface> clone() const = 0;
+        [[nodiscard]] virtual const PackageInfo& info() const = 0;
+        [[nodiscard]] virtual std::expected<std::filesystem::path, std::string> resolve_source() const = 0;
         virtual void set_command_executor(std::shared_ptr<void> executor) = 0;
         virtual void set_cache(std::shared_ptr<void> cache) = 0;
     };
@@ -149,7 +157,7 @@ private:
             return package_.info(); 
         }
         
-        std::expected<std::filesystem::path, std::string> resolve_source() const override { 
+        [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const override { 
             return package_.resolve_source(); 
         }
         
@@ -200,7 +208,7 @@ struct Definition {
     std::string_view name;
     std::string_view value;
     
-    constexpr Definition(std::string_view name) noexcept : name(name), value("") {}
+    constexpr Definition(std::string_view name) noexcept : name(name) {}
     constexpr Definition(std::string_view name, std::string_view value) noexcept : name(name), value(value) {}
 };
 

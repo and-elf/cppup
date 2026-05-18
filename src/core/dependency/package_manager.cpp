@@ -2,6 +2,8 @@
 #include <fstream>
 #include <chrono>
 #include <iostream>
+#include <expected>
+#include <filesystem>
 
 namespace cppup::dependency {
 
@@ -38,7 +40,7 @@ std::expected<void, std::string> PackageManager::initialize() noexcept {
         if (!sources_result) {
             // If loading fails, use default sources
             sources_ = default_sources::get_default_sources();
-            save_sources(); // Save defaults for next time
+            return save_sources(); // Save defaults for next time
         }
         
         return {};
