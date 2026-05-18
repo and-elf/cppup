@@ -5,10 +5,15 @@
 #include <string>
 #include <vector>
 
+#include "../configuration/build_options.hpp"
 #include "command_context.hpp"
 
 namespace cppup::cli
 {
+
+using cppup::configuration::Asan;
+using cppup::configuration::BuildOptions;
+using cppup::configuration::Coverage;
 
 // Command implementation functions
 
@@ -16,13 +21,13 @@ namespace cppup::cli
     const std::string& project_name, const std::optional<std::string>& venv_path,
     const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeBuild(bool                  enable_asan,
+[[nodiscard]] std::expected<int, std::string> executeBuild(BuildOptions          options,
                                                            const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeCompileCommands(
-    bool enable_asan, const CommandContext& context) noexcept;
+    BuildOptions options, const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeTest(bool                  enable_asan,
+[[nodiscard]] std::expected<int, std::string> executeTest(BuildOptions          options,
                                                           const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeFormat(

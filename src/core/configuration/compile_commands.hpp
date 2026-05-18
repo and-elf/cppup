@@ -5,6 +5,7 @@
 #include <string>
 
 #include "build_configuration.hpp"
+#include "build_options.hpp"
 
 namespace cppup::configuration
 {
@@ -23,12 +24,13 @@ namespace cppup::configuration
  * @param build_dir     Build output directory (currently unused for emission
  *                      but accepted to keep signatures aligned with the build
  *                      path; future per-target object paths may use it).
- * @param enable_asan   Mirror the same `--asan` flag the build accepts.
+ * @param options       Mirror the same toggles the build accepts (--asan,
+ *                      --coverage). Defaults to all-off.
  *
  * @return Absolute path to the written compile_commands.json on success.
  */
 std::expected<std::filesystem::path, std::string> emit_compile_commands(
     const BuildConfiguration& config, const std::filesystem::path& project_root,
-    const std::filesystem::path& build_dir, bool enable_asan = false) noexcept;
+    const std::filesystem::path& build_dir, BuildOptions options = {}) noexcept;
 
 }  // namespace cppup::configuration

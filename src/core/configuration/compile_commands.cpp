@@ -63,11 +63,11 @@ std::filesystem::path normalize(const std::filesystem::path& p)
 // Keep the two in lockstep so clangd sees what the build actually compiles.
 std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
                                            const std::filesystem::path& project_root,
-                                           bool                         enable_asan)
+                                           BuildOptions                 options)
 {
   std::vector<std::string> args;
   args.reserve(config.compile_flags.size() + config.definitions.size() +
-               config.include_paths.size() + 2);
+               config.include_paths.size() + 3);
 
   for (const auto& f : config.compile_flags)
   {
@@ -88,10 +88,14 @@ std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
   {
     args.push_back("-I" + normalize(project_root / inc).string());
   }
-  if (enable_asan)
+  if (enabled(options.asan))
   {
     args.emplace_back("-fsanitize=address");
     args.emplace_back("-fno-omit-frame-pointer");
+  }
+  if (enabled(options.coverage))
+  {
+    args.emplace_back("--coverage");
   }
   return args;
 }
@@ -122,13 +126,13 @@ void emit_entry(std::ostringstream& os, bool& first, const std::string& compiler
 
 std::expected<std::filesystem::path, std::string> emit_compile_commands(
     const BuildConfiguration& config, const std::filesystem::path& project_root,
-    const std::filesystem::path& /*build_dir*/, bool               enable_asan) noexcept
+    const std::filesystem::path& /*build_dir*/, BuildOptions options) noexcept
 {
   try
   {
     const std::string compiler = config.toolchain ? config.toolchain->name : std::string{"g++"};
     const auto        root     = normalize(project_root);
-    const auto        flags    = compile_flags_for(config, root, enable_asan);
+    const auto        flags    = compile_flags_for(config, root, options);
 
     std::ostringstream os;
     os << "[\n";

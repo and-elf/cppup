@@ -58,7 +58,7 @@ TEST(CompileCommands, OneEntryPerSource)
   BuildConfiguration config;
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp", "src/util.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value()) << "emit_compile_commands should succeed";
   EXPECT_TRUE(fs::exists(*result));
   EXPECT_EQ(result->filename(), "compile_commands.json");
@@ -82,7 +82,7 @@ TEST(CompileCommands, IncludesDefinesAndFlags)
   config.include_paths = {"include", "src"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
 
   auto json = slurp(*result);
@@ -103,7 +103,7 @@ TEST(CompileCommands, ToolchainCompilerUsed)
   config.toolchain = Toolchain{"clang++"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
   EXPECT_TRUE(contains(json, "\"clang++\""));
@@ -111,7 +111,7 @@ TEST(CompileCommands, ToolchainCompilerUsed)
   BuildConfiguration default_config;
   default_config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
   auto default_root = make_tmp_dir("toolchain_default");
-  auto r2 = emit_compile_commands(default_config, default_root, default_root / "build", false);
+  auto r2 = emit_compile_commands(default_config, default_root, default_root / "build");
   ASSERT_TRUE(r2.has_value());
   auto json2 = slurp(*r2);
   EXPECT_TRUE(contains(json2, "\"g++\""));
@@ -128,7 +128,7 @@ TEST(CompileCommands, AllTargetKindsEmitted)
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
   config.tests.push_back(cppup::configuration::Test{"unit", {"tests/t.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
 
   auto json = slurp(*result);
@@ -147,14 +147,32 @@ TEST(CompileCommands, AsanAddsFsanitize)
   BuildConfiguration config;
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
-  auto without = emit_compile_commands(config, root, root / "build", false);
+  auto without = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(without.has_value());
   EXPECT_FALSE(contains(slurp(*without), "-fsanitize=address"));
 
-  auto with = emit_compile_commands(config, root, root / "build", true);
+  auto with = emit_compile_commands(config, root, root / "build", BuildOptions{.asan = Asan::On});
   ASSERT_TRUE(with.has_value());
   EXPECT_TRUE(contains(slurp(*with), "-fsanitize=address"));
   EXPECT_TRUE(contains(slurp(*with), "-fno-omit-frame-pointer"));
+
+  fs::remove_all(root);
+}
+
+TEST(CompileCommands, CoverageAddsCoverageFlag)
+{
+  auto               root = make_tmp_dir("coverage");
+  BuildConfiguration config;
+  config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
+
+  auto without = emit_compile_commands(config, root, root / "build");
+  ASSERT_TRUE(without.has_value());
+  EXPECT_FALSE(contains(slurp(*without), "--coverage"));
+
+  auto with =
+      emit_compile_commands(config, root, root / "build", BuildOptions{.coverage = Coverage::On});
+  ASSERT_TRUE(with.has_value());
+  EXPECT_TRUE(contains(slurp(*with), "--coverage"));
 
   fs::remove_all(root);
 }
@@ -165,7 +183,7 @@ TEST(CompileCommands, PathsAreAbsolute)
   BuildConfiguration config;
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
 
@@ -182,7 +200,7 @@ TEST(CompileCommands, QuotesInDefinitionValueAreEscaped)
   config.definitions = {Definition{"VERSION", "\"1.2\""}};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build", false);
+  auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
   EXPECT_TRUE(contains(json, "\\\"1.2\\\""));

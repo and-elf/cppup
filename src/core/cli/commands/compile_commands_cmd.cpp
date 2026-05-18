@@ -9,7 +9,7 @@ namespace cppup::cli
 
 namespace conf = cppup::configuration;
 
-std::expected<int, std::string> executeCompileCommands(bool                  enable_asan,
+std::expected<int, std::string> executeCompileCommands(conf::BuildOptions    options,
                                                        const CommandContext& context) noexcept
 {
   try
@@ -44,8 +44,7 @@ std::expected<int, std::string> executeCompileCommands(bool                  ena
       return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
-    auto cc =
-        conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, enable_asan);
+    auto cc = conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, options);
     if (!cc)
     {
       return std::unexpected("compile_commands.json: " + cc.error());

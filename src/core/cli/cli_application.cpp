@@ -58,20 +58,27 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   init_cmd->add_option("--path", init_path, "Virtual environment path");
 
   // build
-  auto* build_cmd  = app.add_subcommand("build", "Build the project");
-  bool  build_asan = false;
+  auto* build_cmd      = app.add_subcommand("build", "Build the project");
+  bool  build_asan     = false;
+  bool  build_coverage = false;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
+  build_cmd->add_flag("--coverage", build_coverage, "Instrument with gcov coverage flags");
 
   // compile-commands
   auto* cc_cmd =
       app.add_subcommand("compile-commands", "Emit compile_commands.json for clangd/LSP tooling");
-  bool cc_asan = false;
+  bool cc_asan     = false;
+  bool cc_coverage = false;
   cc_cmd->add_flag("--asan", cc_asan, "Mirror --asan flags in emitted commands");
+  cc_cmd->add_flag("--coverage", cc_coverage, "Mirror --coverage flags in emitted commands");
 
   // test
-  auto* test_cmd  = app.add_subcommand("test", "Run tests");
-  bool  test_asan = false;
+  auto* test_cmd      = app.add_subcommand("test", "Run tests");
+  bool  test_asan     = false;
+  bool  test_coverage = false;
   test_cmd->add_flag("--asan", test_asan, "Enable AddressSanitizer");
+  test_cmd->add_flag("--coverage", test_coverage,
+                     "Collect gcov coverage after tests (build with --coverage first)");
 
   // format
   auto* format_cmd   = app.add_subcommand("format", "Format source code with clang-format");
@@ -191,21 +198,27 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
                                 ErrorHandler::ErrorCode::FileNotFound);
   }
 
+  const auto opts_from = [](bool asan, bool coverage)
+  {
+    return BuildOptions{.asan     = asan ? Asan::On : Asan::Off,
+                        .coverage = coverage ? Coverage::On : Coverage::Off};
+  };
+
   if (*build_cmd)
   {
-    return handleExpectedResult(executeBuild(build_asan, context_), "Build",
-                                ErrorHandler::ErrorCode::BuildFailure);
+    return handleExpectedResult(executeBuild(opts_from(build_asan, build_coverage), context_),
+                                "Build", ErrorHandler::ErrorCode::BuildFailure);
   }
 
   if (*cc_cmd)
   {
-    return handleExpectedResult(executeCompileCommands(cc_asan, context_), "compile-commands",
-                                ErrorHandler::ErrorCode::BuildFailure);
+    return handleExpectedResult(executeCompileCommands(opts_from(cc_asan, cc_coverage), context_),
+                                "compile-commands", ErrorHandler::ErrorCode::BuildFailure);
   }
 
   if (*test_cmd)
   {
-    return handleExpectedResult(executeTest(test_asan, context_), "Test",
+    return handleExpectedResult(executeTest(opts_from(test_asan, test_coverage), context_), "Test",
                                 ErrorHandler::ErrorCode::TestFailure);
   }
 

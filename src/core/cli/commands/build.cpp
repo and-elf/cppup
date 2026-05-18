@@ -20,7 +20,7 @@ namespace conf = cppup::configuration;
 namespace bld  = cppup::build;
 
 void append_common_flags(std::vector<std::string>& out, const conf::BuildConfiguration& config,
-                         const std::filesystem::path& project_root, bool enable_asan)
+                         const std::filesystem::path& project_root, conf::BuildOptions options)
 {
   for (const auto& flag : config.compile_flags) out.emplace_back(flag.flag);
   for (const auto& def : config.definitions)
@@ -33,10 +33,14 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
   {
     out.push_back("-I" + (project_root / inc).string());
   }
-  if (enable_asan)
+  if (conf::enabled(options.asan))
   {
     out.emplace_back("-fsanitize=address");
     out.emplace_back("-fno-omit-frame-pointer");
+  }
+  if (conf::enabled(options.coverage))
+  {
+    out.emplace_back("--coverage");
   }
 }
 
@@ -97,7 +101,8 @@ std::expected<std::filesystem::path, std::string> compile_object(
 std::expected<std::filesystem::path, std::string> build_library(
     const conf::BuildConfiguration& config, const conf::Library& library,
     const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
-    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter)
+    bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
+    std::size_t& cached_counter)
 {
   bld::BuildTarget target;
   target.name        = library.name;
@@ -107,7 +112,7 @@ std::expected<std::filesystem::path, std::string> build_library(
   for (const auto& src : library.sources) target.source_files.push_back(project_root / src);
 
   std::vector<std::string> compile_flags;
-  append_common_flags(compile_flags, config, project_root, enable_asan);
+  append_common_flags(compile_flags, config, project_root, options);
   target.compile_flags = compile_flags;
   for (const auto& inc : config.include_paths) target.include_paths.push_back(project_root / inc);
 
@@ -153,9 +158,9 @@ std::expected<void, std::string> build_executable(
     const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
     const conf::BuildConfiguration& config, const std::vector<std::string>& linked_library_names,
     const std::filesystem::path& project_root, const std::filesystem::path& build_dir,
-    bld::BuildCache* cache, bool enable_asan, Logger& logger, std::size_t& cached_counter,
-    const std::vector<std::string>& extra_link_flags = {},
-    const std::filesystem::path&    output_dir       = {})
+    bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
+    std::size_t& cached_counter, const std::vector<std::string>& extra_link_flags = {},
+    const std::filesystem::path& output_dir = {})
 {
   const auto& target_dir = output_dir.empty() ? build_dir : output_dir;
   auto resolved = conf::resolve_link_set(linked_library_names, config.libraries);
@@ -175,7 +180,7 @@ std::expected<void, std::string> build_executable(
   }
 
   std::vector<std::string> compile_flags;
-  append_common_flags(compile_flags, config, project_root, enable_asan);
+  append_common_flags(compile_flags, config, project_root, options);
   target.compile_flags = compile_flags;
   for (const auto& inc : config.include_paths)
   {
@@ -205,9 +210,13 @@ std::expected<void, std::string> build_executable(
   {
     link_flags.emplace_back(f);
   }
-  if (enable_asan)
+  if (conf::enabled(options.asan))
   {
     link_flags.emplace_back("-fsanitize=address");
+  }
+  if (conf::enabled(options.coverage))
+  {
+    link_flags.emplace_back("--coverage");
   }
   target.link_flags = link_flags;
 
@@ -248,7 +257,7 @@ std::expected<void, std::string> build_executable(
 
 }  // namespace
 
-std::expected<int, std::string> executeBuild(bool                  enable_asan,
+std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
                                              const CommandContext& context) noexcept
 {
   try
@@ -289,7 +298,7 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     logger.info("build configuration loaded (" + std::to_string(config.libraries.size()) +
                 " libraries, " + std::to_string(config.binaries.size()) + " binaries)");
 
-    if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir, enable_asan))
+    if (auto cc = conf::emit_compile_commands(config, context.projectRoot, build_dir, options))
     {
       logger.debug("wrote " + cc->string());
     }
@@ -303,8 +312,8 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
 
     for (const auto& library : config.libraries)
     {
-      auto r = build_library(config, library, context.projectRoot, build_dir, cache.get(),
-                             enable_asan, logger, cached);
+      auto r = build_library(config, library, context.projectRoot, build_dir, cache.get(), options,
+                             logger, cached);
       if (!r) return std::unexpected(r.error());
       ++built;
     }
@@ -312,7 +321,7 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
     for (const auto& binary : config.binaries)
     {
       auto r = build_executable("binary", binary.name, binary.sources, config, binary.libraries,
-                                context.projectRoot, build_dir, cache.get(), enable_asan, logger,
+                                context.projectRoot, build_dir, cache.get(), options, logger,
                                 cached);
       if (!r)
       {
@@ -339,7 +348,7 @@ std::expected<int, std::string> executeBuild(bool                  enable_asan,
         test_link_flag_strings.emplace_back(f.flag);
       }
       auto r = build_executable("test", test.name, test.sources, config, test.libraries,
-                                context.projectRoot, build_dir, cache.get(), enable_asan, logger,
+                                context.projectRoot, build_dir, cache.get(), options, logger,
                                 cached, test_link_flag_strings, tests_dir);
       if (!r)
       {
