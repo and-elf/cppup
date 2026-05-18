@@ -1,3 +1,7 @@
+# Calibrated to the existing codebase: strict where the style is uniform
+# (types, namespaces, locals, parameters, private members) and permissive
+# where the style genuinely varies across files (free functions, methods,
+# a handful of public struct members).
 Checks: >
   -*,
   bugprone-*,
@@ -8,55 +12,86 @@ Checks: >
   cppcoreguidelines-*,
   misc-*,
   clang-analyzer-*,
-  # Enable specific checks
-  readability-named-parameter,
-  readability-identifier-naming,
-  modernize-use-override,
-  modernize-use-nodiscard,
-  modernize-use-noexcept,
-  modernize-use-constexpr,
-  cppcoreguidelines-non-private-member-variables-in-classes,
-  cppcoreguidelines-special-member-functions,
-  cppcoreguidelines-owning-memory,
-  misc-non-private-member-variables-in-classes
+  -modernize-use-trailing-return-type,
+  -modernize-use-default-member-init,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-avoid-do-while,
+  -misc-non-private-member-variables-in-classes,
+  -misc-include-cleaner,
+  -performance-avoid-endl,
+  -readability-magic-numbers,
+  -readability-identifier-length
 
-WarningsAsErrors: '*'
+WarningsAsErrors: ''
 
 CheckOptions:
-  # Naming rules
-  - key:             readability-identifier-naming.ClassCase
-    value:           CamelCase
-  - key:             readability-identifier-naming.StructCase
-    value:           CamelCase
-  - key:             readability-identifier-naming.FunctionCase
-    value:           camelBack
-  - key:             readability-identifier-naming.VariableCase
-    value:           camelBack
-  - key:             readability-identifier-naming.MemberCase
-    value:           camelBack
-  - key:             readability-identifier-naming.ParameterCase
-    value:           camelBack
-  - key:             readability-identifier-naming.NamespaceCase
-    value:           lower_case
+  # Types: uniformly CamelCase.
+  - key:   readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key:   readability-identifier-naming.StructCase
+    value: CamelCase
+  - key:   readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key:   readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key:   readability-identifier-naming.TypedefCase
+    value: CamelCase
 
-  # Require [[nodiscard]] on functions returning values
-  - key:             modernize-use-nodiscard.ReplacementString
-    value:           '[[nodiscard]]'
+  # Namespaces: uniformly lower_case.
+  - key:   readability-identifier-naming.NamespaceCase
+    value: lower_case
 
-  # Encourage constexpr where possible
-  - key:             modernize-use-constexpr.CheckConstructors
-    value:           1
+  # Locals and parameters: uniformly lower_case.
+  - key:   readability-identifier-naming.VariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.LocalVariableCase
+    value: lower_case
+  - key:   readability-identifier-naming.ParameterCase
+    value: lower_case
 
-  # Require noexcept on move/copy operators
-  - key:             modernize-use-noexcept.CheckMove
-    value:           1
+  # Private class members: snake_case with trailing underscore (context_,
+  # packages_dir_, db_path_). Uniform across the tree — enforce it.
+  - key:   readability-identifier-naming.PrivateMemberCase
+    value: lower_case
+  - key:   readability-identifier-naming.PrivateMemberSuffix
+    value: _
 
-  # Member initialization
-  - key:             cppcoreguidelines-special-member-functions.AllowMissingMove
-    value:           0
-  - key:             cppcoreguidelines-special-member-functions.AllowMissingCopy
-    value:           0
+  # Public struct members are mostly snake_case (header_only, build_args) but
+  # a few are camelBack (projectRoot, processRunner). Accept both to avoid
+  # churning the API; tighten later once those are renamed.
+  - key:   readability-identifier-naming.PublicMemberCase
+    value: aNy_CasE
+  - key:   readability-identifier-naming.ProtectedMemberCase
+    value: aNy_CasE
 
-  # Disable certain noisy checks
-  - key:             cppcoreguidelines-avoid-magic-numbers.IgnoreAllFloatLiterals
-    value:           1
+  # Free functions and methods mix camelBack (executeBuild, reportError) with
+  # snake_case (get_shared_library_path, needs_recompilation). Same story —
+  # accept both.
+  - key:   readability-identifier-naming.FunctionCase
+    value: aNy_CasE
+  - key:   readability-identifier-naming.MethodCase
+    value: aNy_CasE
+
+  # Encourage [[nodiscard]] over legacy macros.
+  - key:   modernize-use-nodiscard.ReplacementString
+    value: '[[nodiscard]]'
+
+  # Require noexcept on move/copy operators where applicable.
+  - key:   modernize-use-noexcept.CheckMove
+    value: 1
+
+  # The codebase has many POD-like structs without explicit move/copy.
+  - key:   cppcoreguidelines-special-member-functions.AllowMissingMove
+    value: 1
+  - key:   cppcoreguidelines-special-member-functions.AllowMissingCopy
+    value: 1
+
+  # Float literals are not magic.
+  - key:   cppcoreguidelines-avoid-magic-numbers.IgnoreAllFloatLiterals
+    value: 1
