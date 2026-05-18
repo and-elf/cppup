@@ -42,7 +42,8 @@ struct CompilerOptions
   std::string              compiler     = "g++";
   std::string              cpp_standard = "c++23";
   std::vector<std::string> include_paths;
-  std::vector<std::string> compile_flags    = {"-Wall", "-Wextra", "-fPIC"};
+  std::vector<std::string> compile_flags = {"-Wall", "-Wextra", "-Wno-missing-field-initializers",
+                                            "-Wno-missing-designated-field-initializers", "-fPIC"};
   std::vector<std::string> link_flags       = {"-shared"};
   std::string              output_directory = ".cppup/build/config";
   bool                     debug_symbols    = false;
