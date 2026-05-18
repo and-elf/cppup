@@ -37,7 +37,7 @@
             }
         }
     ],
-    "testMate.cpp.test.executableCleanup": true,
+    "testMate.cpp.test.executableCleanup": false,
     "testMate.cpp.discovery.runtimeLimit": 30,
     "testMate.cpp.test.parallelExecutionOfExecutableLimit": 4,
     "testMate.cpp.debug.configTemplate": {
