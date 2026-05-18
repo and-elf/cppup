@@ -1,7 +1,7 @@
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <string>
 
 #include "../subproject.hpp"
@@ -37,7 +37,7 @@ class TempDir
     std::ofstream(p) << "";
   }
 
-  const fs::path& path() const
+  [[nodiscard]] const fs::path& path() const
   {
     return path_;
   }
@@ -46,158 +46,118 @@ class TempDir
   fs::path path_;
 };
 
-void test_build_cpp_infers_cppup()
+}  // namespace
+
+TEST(Subproject, BuildCppInfersCppup)
 {
   TempDir dir;
   dir.touch("build.cpp");
   auto r = infer_build_system(dir.path());
-  assert(r.has_value());
-  assert(*r == BuildSystem::Cppup);
-  std::cout << "build.cpp infers Cppup passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, BuildSystem::Cppup);
 }
 
-void test_cmakelists_infers_cmake()
+TEST(Subproject, CMakeListsInfersCMake)
 {
   TempDir dir;
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path());
-  assert(r.has_value());
-  assert(*r == BuildSystem::CMake);
-  std::cout << "CMakeLists.txt infers CMake passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, BuildSystem::CMake);
 }
 
-void test_makefile_infers_make()
+TEST(Subproject, MakefileInfersMake)
 {
   TempDir dir;
   dir.touch("Makefile");
   auto r = infer_build_system(dir.path());
-  assert(r.has_value());
-  assert(*r == BuildSystem::Make);
-  std::cout << "Makefile infers Make passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, BuildSystem::Make);
 }
 
-void test_gnumakefile_infers_make()
+TEST(Subproject, GNUmakefileInfersMake)
 {
   TempDir dir;
   dir.touch("GNUmakefile");
   auto r = infer_build_system(dir.path());
-  assert(r.has_value());
-  assert(*r == BuildSystem::Make);
-  std::cout << "GNUmakefile infers Make passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, BuildSystem::Make);
 }
 
-void test_headers_only_infers_header_only()
+TEST(Subproject, HeadersOnlyInfersHeaderOnly)
 {
   TempDir dir;
   dir.touch("foo.hpp");
   dir.touch("bar.h");
   auto r = infer_build_system(dir.path());
-  assert(r.has_value());
-  assert(*r == BuildSystem::HeaderOnly);
-  std::cout << "headers-only infers HeaderOnly passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_EQ(*r, BuildSystem::HeaderOnly);
 }
 
-void test_no_markers_is_error()
+TEST(Subproject, NoMarkersIsError)
 {
   TempDir dir;
-  // Empty directory — no markers, no headers.
-  auto r = infer_build_system(dir.path());
-  assert(!r.has_value());
-  std::cout << "no markers → error passed\n";
+  auto    r = infer_build_system(dir.path());
+  EXPECT_FALSE(r.has_value());
 }
 
-void test_cpp_sources_without_markers_is_error()
+TEST(Subproject, CppSourcesWithoutMarkersIsError)
 {
   TempDir dir;
   dir.touch("orphan.cpp");
-  // .cpp present but no build.cpp / CMakeLists.txt / Makefile — ambiguous,
-  // not header-only either.
   auto r = infer_build_system(dir.path());
-  assert(!r.has_value());
-  std::cout << "loose .cpp without markers → error passed\n";
+  EXPECT_FALSE(r.has_value());
 }
 
-void test_ambiguous_build_cpp_and_cmakelists_is_error()
+TEST(Subproject, AmbiguousBuildCppAndCMakeListsIsError)
 {
   TempDir dir;
   dir.touch("build.cpp");
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path());
-  assert(!r.has_value());
-  assert(r.error().find("ambiguous") != std::string::npos);
-  std::cout << "ambiguous markers → error passed\n";
+  ASSERT_FALSE(r.has_value());
+  EXPECT_NE(r.error().find("ambiguous"), std::string::npos);
 }
 
-void test_nonexistent_directory_is_error()
+TEST(Subproject, NonexistentDirectoryIsError)
 {
   auto r = infer_build_system("/this/path/does/not/exist/cppup_test");
-  assert(!r.has_value());
-  std::cout << "nonexistent directory → error passed\n";
+  EXPECT_FALSE(r.has_value());
 }
 
-void test_subproject_construction()
+TEST(Subproject, ConstructionDefaults)
 {
   Subproject sp{.path = "src/core/build", .build_system = BuildSystem::Cppup};
-  assert(sp.path == "src/core/build");
-  assert(sp.build_system.has_value());
-  assert(*sp.build_system == BuildSystem::Cppup);
-  assert(sp.build_args.empty());
-  // Default Cppup build file is "build.cpp" to match existing convention.
-  assert(sp.build_file == "build.cpp");
+  EXPECT_EQ(sp.path, "src/core/build");
+  ASSERT_TRUE(sp.build_system.has_value());
+  EXPECT_EQ(*sp.build_system, BuildSystem::Cppup);
+  EXPECT_TRUE(sp.build_args.empty());
+  EXPECT_EQ(sp.build_file, "build.cpp");
 
-  // Default: build_system unset (infer at executor time)
   Subproject sp2{.path = "src/core/configuration"};
-  assert(!sp2.build_system.has_value());
+  EXPECT_FALSE(sp2.build_system.has_value());
 
-  // Custom build_file lets a subproject pick a non-default name to avoid
-  // clashing with an existing build.cpp.
   Subproject sp3{.path = "src/core/cli", .build_file = "cli.build.cpp"};
-  assert(sp3.build_file == "cli.build.cpp");
-
-  std::cout << "Subproject construction passed\n";
+  EXPECT_EQ(sp3.build_file, "cli.build.cpp");
 }
 
-void test_inference_respects_custom_cppup_build_file()
+TEST(Subproject, InferenceRespectsCustomCppupBuildFile)
 {
   TempDir dir;
   dir.touch("cli.build.cpp");
-  // Default probe (build.cpp) should fail with no markers.
   auto default_r = infer_build_system(dir.path());
-  assert(!default_r.has_value());
-  // With the custom name passed in, inference picks it up as Cppup.
+  EXPECT_FALSE(default_r.has_value());
   auto custom_r = infer_build_system(dir.path(), "cli.build.cpp");
-  assert(custom_r.has_value());
-  assert(*custom_r == BuildSystem::Cppup);
-  std::cout << "custom Cppup build_file is honored by inference passed\n";
+  ASSERT_TRUE(custom_r.has_value());
+  EXPECT_EQ(*custom_r, BuildSystem::Cppup);
 }
 
-void test_inference_ambiguity_with_custom_build_file()
+TEST(Subproject, InferenceAmbiguityWithCustomBuildFile)
 {
   TempDir dir;
   dir.touch("cli.build.cpp");
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path(), "cli.build.cpp");
-  assert(!r.has_value());
-  assert(r.error().find("ambiguous") != std::string::npos);
-  std::cout << "ambiguity check still fires with custom build_file passed\n";
-}
-
-}  // namespace
-
-int main()
-{
-  test_build_cpp_infers_cppup();
-  test_cmakelists_infers_cmake();
-  test_makefile_infers_make();
-  test_gnumakefile_infers_make();
-  test_headers_only_infers_header_only();
-  test_no_markers_is_error();
-  test_cpp_sources_without_markers_is_error();
-  test_ambiguous_build_cpp_and_cmakelists_is_error();
-  test_nonexistent_directory_is_error();
-  test_subproject_construction();
-  test_inference_respects_custom_cppup_build_file();
-  test_inference_ambiguity_with_custom_build_file();
-  std::cout << "All subproject tests passed!\n";
-  return 0;
+  ASSERT_FALSE(r.has_value());
+  EXPECT_NE(r.error().find("ambiguous"), std::string::npos);
 }

@@ -16,5 +16,11 @@ extern "C" BuildConfiguration configure()
       .link_flags = {Flag{"-pthread"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency"},
   });
+
+  config.tests.push_back(Test{"test_source_selection", {"commands/test_source_selection.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
   return config;
 }

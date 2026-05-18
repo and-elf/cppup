@@ -1,8 +1,8 @@
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
@@ -52,160 +52,140 @@ bool contains(const std::string& s, std::string_view needle)
 
 }  // namespace
 
-void test_one_entry_per_source()
+TEST(CompileCommands, OneEntryPerSource)
 {
   auto               root = make_tmp_dir("one_per_src");
   BuildConfiguration config;
-  config.binaries.push_back(Binary{"app", {"src/main.cpp", "src/util.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp", "src/util.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result && "emit_compile_commands should succeed");
-  assert(fs::exists(*result));
-  assert(result->filename() == "compile_commands.json");
+  ASSERT_TRUE(result.has_value()) << "emit_compile_commands should succeed";
+  EXPECT_TRUE(fs::exists(*result));
+  EXPECT_EQ(result->filename(), "compile_commands.json");
 
   auto json = slurp(*result);
-  assert(count_entries(json) == 2);
-  assert(contains(json, "src/main.cpp"));
-  assert(contains(json, "src/util.cpp"));
-  assert(contains(json, "\"directory\": \"" + root.string() + "\""));
-  assert(contains(json, "\"arguments\":"));
+  EXPECT_EQ(count_entries(json), 2U);
+  EXPECT_TRUE(contains(json, "src/main.cpp"));
+  EXPECT_TRUE(contains(json, "src/util.cpp"));
+  EXPECT_TRUE(contains(json, "\"directory\": \"" + root.string() + "\""));
+  EXPECT_TRUE(contains(json, "\"arguments\":"));
 
   fs::remove_all(root);
-  std::cout << "test_one_entry_per_source passed\n";
 }
 
-void test_includes_defines_and_flags()
+TEST(CompileCommands, IncludesDefinesAndFlags)
 {
   auto               root = make_tmp_dir("flags");
   BuildConfiguration config;
   config.compile_flags = {Flag{"-Wall"}, Flag{"-std=c++23"}};
   config.definitions   = {Definition{"FOO", "bar"}, Definition{"NDEBUG"}};
   config.include_paths = {"include", "src"};
-  config.binaries.push_back(Binary{"app", {"src/main.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result);
+  ASSERT_TRUE(result.has_value());
 
   auto json = slurp(*result);
-  assert(contains(json, "\"-Wall\""));
-  assert(contains(json, "\"-std=c++23\""));
-  assert(contains(json, "\"-DFOO=bar\""));
-  assert(contains(json, "\"-DNDEBUG\""));
-  assert(contains(json, "\"-I" + (root / "include").string() + "\""));
-  assert(contains(json, "\"-I" + (root / "src").string() + "\""));
+  EXPECT_TRUE(contains(json, "\"-Wall\""));
+  EXPECT_TRUE(contains(json, "\"-std=c++23\""));
+  EXPECT_TRUE(contains(json, "\"-DFOO=bar\""));
+  EXPECT_TRUE(contains(json, "\"-DNDEBUG\""));
+  EXPECT_TRUE(contains(json, "\"-I" + (root / "include").string() + "\""));
+  EXPECT_TRUE(contains(json, "\"-I" + (root / "src").string() + "\""));
 
   fs::remove_all(root);
-  std::cout << "test_includes_defines_and_flags passed\n";
 }
 
-void test_toolchain_compiler_used()
+TEST(CompileCommands, ToolchainCompilerUsed)
 {
   auto               root = make_tmp_dir("toolchain");
   BuildConfiguration config;
   config.toolchain = Toolchain{"clang++"};
-  config.binaries.push_back(Binary{"app", {"main.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result);
+  ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
-  assert(contains(json, "\"clang++\""));
+  EXPECT_TRUE(contains(json, "\"clang++\""));
 
   BuildConfiguration default_config;
-  default_config.binaries.push_back(Binary{"app", {"main.cpp"}});
+  default_config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
   auto default_root = make_tmp_dir("toolchain_default");
   auto r2 = emit_compile_commands(default_config, default_root, default_root / "build", false);
-  assert(r2);
+  ASSERT_TRUE(r2.has_value());
   auto json2 = slurp(*r2);
-  assert(contains(json2, "\"g++\""));
+  EXPECT_TRUE(contains(json2, "\"g++\""));
 
   fs::remove_all(root);
   fs::remove_all(default_root);
-  std::cout << "test_toolchain_compiler_used passed\n";
 }
 
-void test_all_target_kinds_emitted()
+TEST(CompileCommands, AllTargetKindsEmitted)
 {
   auto               root = make_tmp_dir("targets");
   BuildConfiguration config;
-  config.libraries.push_back(Library{"lib", {"lib/a.cpp", "lib/b.cpp"}});
-  config.binaries.push_back(Binary{"app", {"src/main.cpp"}});
-  config.tests.push_back(Test{"unit", {"tests/t.cpp"}});
+  config.libraries.push_back(Library{.name = "lib", .sources = {"lib/a.cpp", "lib/b.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
+  config.tests.push_back(cppup::configuration::Test{"unit", {"tests/t.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result);
+  ASSERT_TRUE(result.has_value());
 
   auto json = slurp(*result);
-  assert(count_entries(json) == 4);
-  assert(contains(json, "lib/a.cpp"));
-  assert(contains(json, "lib/b.cpp"));
-  assert(contains(json, "src/main.cpp"));
-  assert(contains(json, "tests/t.cpp"));
+  EXPECT_EQ(count_entries(json), 4U);
+  EXPECT_TRUE(contains(json, "lib/a.cpp"));
+  EXPECT_TRUE(contains(json, "lib/b.cpp"));
+  EXPECT_TRUE(contains(json, "src/main.cpp"));
+  EXPECT_TRUE(contains(json, "tests/t.cpp"));
 
   fs::remove_all(root);
-  std::cout << "test_all_target_kinds_emitted passed\n";
 }
 
-void test_asan_adds_fsanitize()
+TEST(CompileCommands, AsanAddsFsanitize)
 {
   auto               root = make_tmp_dir("asan");
   BuildConfiguration config;
-  config.binaries.push_back(Binary{"app", {"main.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
   auto without = emit_compile_commands(config, root, root / "build", false);
-  assert(without);
-  assert(!contains(slurp(*without), "-fsanitize=address"));
+  ASSERT_TRUE(without.has_value());
+  EXPECT_FALSE(contains(slurp(*without), "-fsanitize=address"));
 
   auto with = emit_compile_commands(config, root, root / "build", true);
-  assert(with);
-  assert(contains(slurp(*with), "-fsanitize=address"));
-  assert(contains(slurp(*with), "-fno-omit-frame-pointer"));
+  ASSERT_TRUE(with.has_value());
+  EXPECT_TRUE(contains(slurp(*with), "-fsanitize=address"));
+  EXPECT_TRUE(contains(slurp(*with), "-fno-omit-frame-pointer"));
 
   fs::remove_all(root);
-  std::cout << "test_asan_adds_fsanitize passed\n";
 }
 
-void test_paths_are_absolute()
+TEST(CompileCommands, PathsAreAbsolute)
 {
   auto               root = make_tmp_dir("abs");
   BuildConfiguration config;
-  config.binaries.push_back(Binary{"app", {"src/main.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result);
+  ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
 
   auto expected = (root / "src" / "main.cpp").string();
-  assert(contains(json, "\"file\": \"" + expected + "\""));
+  EXPECT_TRUE(contains(json, "\"file\": \"" + expected + "\""));
 
   fs::remove_all(root);
-  std::cout << "test_paths_are_absolute passed\n";
 }
 
-void test_quotes_in_definition_value_are_escaped()
+TEST(CompileCommands, QuotesInDefinitionValueAreEscaped)
 {
   auto               root = make_tmp_dir("escape");
   BuildConfiguration config;
   config.definitions = {Definition{"VERSION", "\"1.2\""}};
-  config.binaries.push_back(Binary{"app", {"main.cpp"}});
+  config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build", false);
-  assert(result);
+  ASSERT_TRUE(result.has_value());
   auto json = slurp(*result);
-  assert(contains(json, "\\\"1.2\\\""));
+  EXPECT_TRUE(contains(json, "\\\"1.2\\\""));
 
   fs::remove_all(root);
-  std::cout << "test_quotes_in_definition_value_are_escaped passed\n";
-}
-
-int main()
-{
-  test_one_entry_per_source();
-  test_includes_defines_and_flags();
-  test_toolchain_compiler_used();
-  test_all_target_kinds_emitted();
-  test_asan_adds_fsanitize();
-  test_paths_are_absolute();
-  test_quotes_in_definition_value_are_escaped();
-  std::cout << "All compile_commands tests passed\n";
-  return 0;
 }

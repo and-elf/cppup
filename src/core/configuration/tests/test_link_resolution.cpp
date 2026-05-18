@@ -1,5 +1,5 @@
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
 
@@ -22,112 +22,91 @@ Library make_lib(std::string name, std::vector<Flag> link_flags = {},
                  .libraries  = std::move(deps)};
 }
 
-void test_empty_roots_returns_empty()
+}  // namespace
+
+TEST(LinkResolution, EmptyRootsReturnsEmpty)
 {
   std::vector<Library> all{make_lib("a")};
   auto                 r = resolve_link_set({}, all);
-  assert(r.has_value());
-  assert(r->empty());
-  std::cout << "empty roots → empty link set passed\n";
+  ASSERT_TRUE(r.has_value());
+  EXPECT_TRUE(r->empty());
 }
 
-void test_single_root_no_deps()
+TEST(LinkResolution, SingleRootNoDeps)
 {
   std::vector<Library> all{make_lib("a")};
   auto                 r = resolve_link_set({"a"}, all);
-  assert(r.has_value());
-  assert(r->size() == 1);
-  assert((*r)[0] == "a");
-  std::cout << "single root no deps passed\n";
+  ASSERT_TRUE(r.has_value());
+  ASSERT_EQ(r->size(), 1U);
+  EXPECT_EQ((*r)[0], "a");
 }
 
-void test_transitive_closure_topo_order()
+TEST(LinkResolution, TransitiveClosurePreservesTopoOrder)
 {
-  // a -> b -> c ; root is a
   std::vector<Library> all{
       make_lib("a", {}, {"b"}),
       make_lib("b", {}, {"c"}),
       make_lib("c"),
   };
   auto r = resolve_link_set({"a"}, all);
-  assert(r.has_value());
-  assert(r->size() == 3);
-  // Topo order: dependents before deps, so a before b before c
-  assert((*r)[0] == "a");
-  assert((*r)[1] == "b");
-  assert((*r)[2] == "c");
-  std::cout << "transitive closure preserves topo order passed\n";
+  ASSERT_TRUE(r.has_value());
+  ASSERT_EQ(r->size(), 3U);
+  EXPECT_EQ((*r)[0], "a");
+  EXPECT_EQ((*r)[1], "b");
+  EXPECT_EQ((*r)[2], "c");
 }
 
-void test_shared_dep_deduplicated()
+TEST(LinkResolution, SharedDepDeduplicated)
 {
-  // a -> c ; b -> c ; roots: a, b
   std::vector<Library> all{
       make_lib("a", {}, {"c"}),
       make_lib("b", {}, {"c"}),
       make_lib("c"),
   };
   auto r = resolve_link_set({"a", "b"}, all);
-  assert(r.has_value());
-  assert(r->size() == 3);
-  // c must appear exactly once and after both dependents
+  ASSERT_TRUE(r.has_value());
+  ASSERT_EQ(r->size(), 3U);
   std::size_t c_pos = 0;
   for (std::size_t i = 0; i < r->size(); ++i)
   {
-    if ((*r)[i] == "c") c_pos = i;
+    if ((*r)[i] == "c")
+    {
+      c_pos = i;
+    }
   }
-  assert(c_pos == 2);
-  std::cout << "shared dep deduplicated passed\n";
+  EXPECT_EQ(c_pos, 2U);
 }
 
-void test_missing_library_is_error()
+TEST(LinkResolution, MissingLibraryIsError)
 {
   std::vector<Library> all{make_lib("a", {}, {"nonexistent"})};
   auto                 r = resolve_link_set({"a"}, all);
-  assert(!r.has_value());
-  assert(r.error().find("nonexistent") != std::string::npos);
-  std::cout << "missing library → error passed\n";
+  ASSERT_FALSE(r.has_value());
+  EXPECT_NE(r.error().find("nonexistent"), std::string::npos);
 }
 
-void test_cycle_is_error()
+TEST(LinkResolution, CycleIsError)
 {
   std::vector<Library> all{
       make_lib("a", {}, {"b"}),
       make_lib("b", {}, {"a"}),
   };
   auto r = resolve_link_set({"a"}, all);
-  assert(!r.has_value());
-  assert(r.error().find("cycle") != std::string::npos);
-  std::cout << "cycle → error passed\n";
+  ASSERT_FALSE(r.has_value());
+  EXPECT_NE(r.error().find("cycle"), std::string::npos);
 }
 
-void test_aggregate_link_flags_dedupes_preserving_order()
+TEST(LinkResolution, AggregateLinkFlagsDedupesPreservingOrder)
 {
   std::vector<Library> all{
       make_lib("a", {Flag{"-lsqlite3"}, Flag{"-lcrypto"}}, {"b"}),
       make_lib("b", {Flag{"-lsqlite3"}, Flag{"-ldl"}}),
   };
   auto names = resolve_link_set({"a"}, all);
-  assert(names.has_value());
+  ASSERT_TRUE(names.has_value());
   auto flags = aggregate_link_flags(*names, all);
-  assert(flags.size() == 3);
-  assert(flags[0] == "-lsqlite3");
-  assert(flags[1] == "-lcrypto");
-  assert(flags[2] == "-ldl");
-  std::cout << "aggregate_link_flags dedupes preserving order passed\n";
-}
-
-}  // namespace
-
-int main()
-{
-  test_empty_roots_returns_empty();
-  test_single_root_no_deps();
-  test_transitive_closure_topo_order();
-  test_shared_dep_deduplicated();
-  test_missing_library_is_error();
-  test_cycle_is_error();
-  test_aggregate_link_flags_dedupes_preserving_order();
-  std::cout << "All link_resolution tests passed!\n";
-  return 0;
+  ASSERT_EQ(flags.size(), 3U);
+  EXPECT_EQ(flags[0], "-lsqlite3");
+  EXPECT_EQ(flags[1], "-lcrypto");
+  EXPECT_EQ(flags[2], "-ldl");
 }

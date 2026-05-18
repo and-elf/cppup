@@ -1,9 +1,9 @@
-#include <cassert>
+#include <gtest/gtest.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <random>
 #include <sstream>
 #include <string>
@@ -25,21 +25,29 @@ fs::path make_tmp_dir(std::string_view tag)
   return path;
 }
 
-// Compile a .cpp file into a .so so we can load it; returns empty on failure.
-// The test is run from src/core/configuration/tests/ so the repo include/
-// directory is four levels up. Override with CPPUP_INCLUDE_DIR for other
-// invocation contexts.
-fs::path compile_to_shared(const fs::path& src, const fs::path& out_dir)
+fs::path find_include_dir()
 {
-  fs::path include_dir;
   if (const char* env = std::getenv("CPPUP_INCLUDE_DIR"))
   {
-    include_dir = env;
+    return env;
   }
-  else
+  // Search upwards for an `include/cppup/configuration.hpp` marker so the test
+  // works whether invoked from project root, build/, or src/core/configuration/tests/.
+  for (auto candidate = fs::current_path(); !candidate.empty() && candidate != candidate.root_path();
+       candidate      = candidate.parent_path())
   {
-    include_dir = fs::current_path() / ".." / ".." / ".." / ".." / "include";
+    if (fs::exists(candidate / "include" / "cppup" / "configuration.hpp"))
+    {
+      return candidate / "include";
+    }
   }
+  return {};
+}
+
+fs::path compile_to_shared(const fs::path& src, const fs::path& out_dir)
+{
+  auto include_dir = find_include_dir();
+  if (include_dir.empty()) return {};
 
   auto               out = out_dir / "libtest_configure.so";
   std::ostringstream cmd;
@@ -50,7 +58,7 @@ fs::path compile_to_shared(const fs::path& src, const fs::path& out_dir)
   return out;
 }
 
-void write(const fs::path& p, std::string_view content)
+void write_file(const fs::path& p, std::string_view content)
 {
   std::ofstream f(p);
   f << content;
@@ -58,43 +66,39 @@ void write(const fs::path& p, std::string_view content)
 
 }  // namespace
 
-void test_missing_file_returns_error()
+TEST(Loader, MissingFileReturnsError)
 {
   auto result = load_from_library("/nonexistent/path/to/libfoo.so");
-  assert(!result);
-  assert(!result.error().empty());
-  assert(result.error().find("not found") != std::string::npos);
-  std::cout << "test_missing_file_returns_error passed\n";
+  ASSERT_FALSE(result.has_value());
+  EXPECT_FALSE(result.error().empty());
+  EXPECT_NE(result.error().find("not found"), std::string::npos);
 }
 
-void test_library_without_configure_symbol_returns_error()
+TEST(Loader, LibraryWithoutConfigureSymbolReturnsError)
 {
   auto tmp = make_tmp_dir("no_symbol");
   auto src = tmp / "no_symbol.cpp";
-  write(src, "int unrelated() { return 0; }\n");
+  write_file(src, "int unrelated() { return 0; }\n");
 
   auto so = compile_to_shared(src, tmp);
   if (so.empty())
   {
-    std::cout << "test_library_without_configure_symbol_returns_error skipped"
-                 " (g++ unavailable)\n";
     fs::remove_all(tmp);
-    return;
+    GTEST_SKIP() << "g++ unavailable";
   }
 
   auto result = load_from_library(so);
-  assert(!result);
-  assert(result.error().find("Configure function not found") != std::string::npos);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_NE(result.error().find("Configure function not found"), std::string::npos);
 
   fs::remove_all(tmp);
-  std::cout << "test_library_without_configure_symbol_returns_error passed\n";
 }
 
-void test_loads_configuration_and_returns_value()
+TEST(Loader, LoadsConfigurationAndReturnsValue)
 {
   auto tmp = make_tmp_dir("ok");
   auto src = tmp / "build_ok.cpp";
-  write(src, R"(
+  write_file(src, R"(
 #include <cppup/configuration.hpp>
 using namespace cppup::configuration;
 extern "C" BuildConfiguration configure() {
@@ -109,30 +113,27 @@ extern "C" BuildConfiguration configure() {
   auto so = compile_to_shared(src, tmp);
   if (so.empty())
   {
-    std::cout << "test_loads_configuration_and_returns_value skipped"
-                 " (compile failed)\n";
     fs::remove_all(tmp);
-    return;
+    GTEST_SKIP() << "compile failed";
   }
 
   auto result = load_from_library(so);
-  assert(result && "load_from_library should succeed");
+  ASSERT_TRUE(result.has_value()) << "load_from_library should succeed";
   const auto& config = *result;
-  assert(config.toolchain.has_value());
-  assert(config.toolchain->name == "gcc-13");
-  assert(config.compile_flags.size() == 2);
-  assert(config.binaries.size() == 1);
-  assert(config.binaries[0].name == "app");
+  ASSERT_TRUE(config.toolchain.has_value());
+  EXPECT_EQ(config.toolchain->name, "gcc-13");
+  EXPECT_EQ(config.compile_flags.size(), 2U);
+  ASSERT_EQ(config.binaries.size(), 1U);
+  EXPECT_EQ(config.binaries[0].name, "app");
 
   fs::remove_all(tmp);
-  std::cout << "test_loads_configuration_and_returns_value passed\n";
 }
 
-void test_configure_throwing_exception_returns_error()
+TEST(Loader, ConfigureThrowingExceptionReturnsError)
 {
   auto tmp = make_tmp_dir("throws");
   auto src = tmp / "build_throws.cpp";
-  write(src, R"(
+  write_file(src, R"(
 #include <cppup/configuration.hpp>
 #include <stdexcept>
 using namespace cppup::configuration;
@@ -144,26 +145,14 @@ extern "C" BuildConfiguration configure() {
   auto so = compile_to_shared(src, tmp);
   if (so.empty())
   {
-    std::cout << "test_configure_throwing_exception_returns_error skipped\n";
     fs::remove_all(tmp);
-    return;
+    GTEST_SKIP() << "compile failed";
   }
 
   auto result = load_from_library(so);
-  assert(!result);
-  assert(result.error().find("Exception") != std::string::npos);
-  assert(result.error().find("intentional test failure") != std::string::npos);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_NE(result.error().find("Exception"), std::string::npos);
+  EXPECT_NE(result.error().find("intentional test failure"), std::string::npos);
 
   fs::remove_all(tmp);
-  std::cout << "test_configure_throwing_exception_returns_error passed\n";
-}
-
-int main()
-{
-  test_missing_file_returns_error();
-  test_library_without_configure_symbol_returns_error();
-  test_loads_configuration_and_returns_value();
-  test_configure_throwing_exception_returns_error();
-  std::cout << "All loader tests passed\n";
-  return 0;
 }

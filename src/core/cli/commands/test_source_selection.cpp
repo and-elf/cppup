@@ -1,8 +1,8 @@
+#include <gtest/gtest.h>
+
 #include <algorithm>
-#include <cassert>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <random>
 #include <string>
 
@@ -37,59 +37,56 @@ bool contains_path(const std::vector<fs::path>& v, const fs::path& needle)
 
 }  // namespace
 
-void test_extension_predicate()
+TEST(SourceSelection, ExtensionPredicate)
 {
-  assert(is_cpp_source_extension(".cpp"));
-  assert(is_cpp_source_extension(".hpp"));
-  assert(is_cpp_source_extension(".h"));
-  assert(is_cpp_source_extension(".c"));
-  assert(is_cpp_source_extension(".cxx"));
-  assert(is_cpp_source_extension(".cc"));
-  assert(is_cpp_source_extension(".hxx"));
-  assert(!is_cpp_source_extension(".ixx"));  // modules removed
-  assert(!is_cpp_source_extension(".py"));
-  assert(!is_cpp_source_extension(".md"));
-  assert(!is_cpp_source_extension(""));
-  std::cout << "test_extension_predicate passed\n";
+  EXPECT_TRUE(is_cpp_source_extension(".cpp"));
+  EXPECT_TRUE(is_cpp_source_extension(".hpp"));
+  EXPECT_TRUE(is_cpp_source_extension(".h"));
+  EXPECT_TRUE(is_cpp_source_extension(".c"));
+  EXPECT_TRUE(is_cpp_source_extension(".cxx"));
+  EXPECT_TRUE(is_cpp_source_extension(".cc"));
+  EXPECT_TRUE(is_cpp_source_extension(".hxx"));
+  EXPECT_FALSE(is_cpp_source_extension(".ixx"));
+  EXPECT_FALSE(is_cpp_source_extension(".py"));
+  EXPECT_FALSE(is_cpp_source_extension(".md"));
+  EXPECT_FALSE(is_cpp_source_extension(""));
 }
 
-void test_excluded_path_predicate()
+TEST(SourceSelection, ExcludedPathPredicate)
 {
-  assert(is_excluded_path("build/foo.cpp"));
-  assert(is_excluded_path("bootstrap_build/x.o"));
-  assert(is_excluded_path(".cppup/cache/y"));
-  assert(is_excluded_path(".git/refs/heads/main"));
-  assert(is_excluded_path(".vscode/settings.json"));  // any dot-prefixed dir
-  assert(!is_excluded_path("src/main.cpp"));
-  assert(!is_excluded_path("include/foo.hpp"));
-  std::cout << "test_excluded_path_predicate passed\n";
+  EXPECT_TRUE(is_excluded_path("build/foo.cpp"));
+  EXPECT_TRUE(is_excluded_path("bootstrap_build/x.o"));
+  EXPECT_TRUE(is_excluded_path(".cppup/cache/y"));
+  EXPECT_TRUE(is_excluded_path(".git/refs/heads/main"));
+  EXPECT_TRUE(is_excluded_path(".vscode/settings.json"));
+  EXPECT_FALSE(is_excluded_path("src/main.cpp"));
+  EXPECT_FALSE(is_excluded_path("include/foo.hpp"));
 }
 
-void test_select_with_empty_args_walks_project()
+TEST(SourceSelection, EmptyArgsWalksProject)
 {
   auto root = make_tmp_root("walk");
   touch(root / "src" / "main.cpp");
   touch(root / "include" / "lib.hpp");
-  touch(root / "README.md");        // non-cpp, should be ignored
-  touch(root / "build" / "x.cpp");  // excluded directory
+  touch(root / "README.md");
+  touch(root / "build" / "x.cpp");
 
   auto result = select_cpp_files({}, root);
-  assert(result.size() == 2);
-  assert(contains_path(result, root / "src" / "main.cpp"));
-  assert(contains_path(result, root / "include" / "lib.hpp"));
+  EXPECT_EQ(result.size(), 2U);
+  EXPECT_TRUE(contains_path(result, root / "src" / "main.cpp"));
+  EXPECT_TRUE(contains_path(result, root / "include" / "lib.hpp"));
 
   fs::remove_all(root);
-  std::cout << "test_select_with_empty_args_walks_project passed\n";
 }
 
-void test_select_explicit_files_kept_and_filtered()
+TEST(SourceSelection, ExplicitFilesKeptAndFiltered)
 {
   auto root = make_tmp_root("explicit");
   touch(root / "a.cpp");
   touch(root / "b.hpp");
   touch(root / "c.py");
   touch(root / "missing.cpp");
-  fs::remove(root / "missing.cpp");  // make absent
+  fs::remove(root / "missing.cpp");
 
   std::vector<fs::path> skipped_non_cpp;
   std::vector<fs::path> skipped_missing;
@@ -97,19 +94,18 @@ void test_select_explicit_files_kept_and_filtered()
                                   (root / "c.py").string(), (root / "missing.cpp").string()},
                                  root, &skipped_non_cpp, &skipped_missing);
 
-  assert(result.size() == 2);
-  assert(contains_path(result, root / "a.cpp"));
-  assert(contains_path(result, root / "b.hpp"));
-  assert(skipped_non_cpp.size() == 1);
-  assert(skipped_non_cpp[0].filename() == "c.py");
-  assert(skipped_missing.size() == 1);
-  assert(skipped_missing[0].filename() == "missing.cpp");
+  EXPECT_EQ(result.size(), 2U);
+  EXPECT_TRUE(contains_path(result, root / "a.cpp"));
+  EXPECT_TRUE(contains_path(result, root / "b.hpp"));
+  ASSERT_EQ(skipped_non_cpp.size(), 1U);
+  EXPECT_EQ(skipped_non_cpp[0].filename(), "c.py");
+  ASSERT_EQ(skipped_missing.size(), 1U);
+  EXPECT_EQ(skipped_missing[0].filename(), "missing.cpp");
 
   fs::remove_all(root);
-  std::cout << "test_select_explicit_files_kept_and_filtered passed\n";
 }
 
-void test_select_directory_arg_is_walked()
+TEST(SourceSelection, DirectoryArgIsWalked)
 {
   auto root = make_tmp_root("dir");
   touch(root / "src" / "main.cpp");
@@ -118,16 +114,15 @@ void test_select_directory_arg_is_walked()
   touch(root / "other" / "x.cpp");
 
   auto result = select_cpp_files({(root / "src").string()}, root);
-  assert(result.size() == 2);
-  assert(contains_path(result, root / "src" / "main.cpp"));
-  assert(contains_path(result, root / "src" / "util.cpp"));
-  assert(!contains_path(result, root / "other" / "x.cpp"));  // not under src/
+  EXPECT_EQ(result.size(), 2U);
+  EXPECT_TRUE(contains_path(result, root / "src" / "main.cpp"));
+  EXPECT_TRUE(contains_path(result, root / "src" / "util.cpp"));
+  EXPECT_FALSE(contains_path(result, root / "other" / "x.cpp"));
 
   fs::remove_all(root);
-  std::cout << "test_select_directory_arg_is_walked passed\n";
 }
 
-void test_select_dedupes_overlapping_args()
+TEST(SourceSelection, DedupesOverlappingArgs)
 {
   auto root = make_tmp_root("dedup");
   touch(root / "src" / "a.cpp");
@@ -135,36 +130,21 @@ void test_select_dedupes_overlapping_args()
   auto result = select_cpp_files({(root / "src").string(), (root / "src" / "a.cpp").string(),
                                   (root / "src" / "a.cpp").string()},
                                  root);
-  assert(result.size() == 1);
-  assert(contains_path(result, root / "src" / "a.cpp"));
+  EXPECT_EQ(result.size(), 1U);
+  EXPECT_TRUE(contains_path(result, root / "src" / "a.cpp"));
 
   fs::remove_all(root);
-  std::cout << "test_select_dedupes_overlapping_args passed\n";
 }
 
-void test_select_skips_excluded_dirs_when_explicit_root_arg()
+TEST(SourceSelection, SkipsExcludedDirsWhenExplicitRootArg)
 {
   auto root = make_tmp_root("excl_arg");
   touch(root / "src" / "main.cpp");
   touch(root / "build" / "obj.cpp");
 
   auto result = select_cpp_files({root.string()}, root);
-  assert(result.size() == 1);
-  assert(contains_path(result, root / "src" / "main.cpp"));
+  EXPECT_EQ(result.size(), 1U);
+  EXPECT_TRUE(contains_path(result, root / "src" / "main.cpp"));
 
   fs::remove_all(root);
-  std::cout << "test_select_skips_excluded_dirs_when_explicit_root_arg passed\n";
-}
-
-int main()
-{
-  test_extension_predicate();
-  test_excluded_path_predicate();
-  test_select_with_empty_args_walks_project();
-  test_select_explicit_files_kept_and_filtered();
-  test_select_directory_arg_is_walked();
-  test_select_dedupes_overlapping_args();
-  test_select_skips_excluded_dirs_when_explicit_root_arg();
-  std::cout << "All source_selection tests passed\n";
-  return 0;
 }
