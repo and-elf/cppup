@@ -26,6 +26,8 @@ struct BuildOptions
 {
   Asan     asan     = Asan::Off;
   Coverage coverage = Coverage::Off;
+  // 0 = auto (std::thread::hardware_concurrency()); 1 = serial.
+  unsigned jobs = 0;
 };
 
 [[nodiscard]] constexpr bool enabled(Asan a) noexcept

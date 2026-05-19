@@ -150,11 +150,14 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 #endif
 
   // build
-  auto* build_cmd      = app.add_subcommand("build", "Build the project");
-  bool  build_asan     = false;
-  bool  build_coverage = false;
+  auto*    build_cmd      = app.add_subcommand("build", "Build the project");
+  bool     build_asan     = false;
+  bool     build_coverage = false;
+  unsigned build_jobs     = 0;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
   build_cmd->add_flag("--coverage", build_coverage, "Instrument with gcov coverage flags");
+  build_cmd->add_option("-j,--jobs", build_jobs,
+                        "Parallel compile jobs (0 = auto / hardware_concurrency)");
 
 #ifndef CPPUP_SLIM
   // compile-commands
@@ -309,16 +312,18 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   }
 #endif
 
-  const auto opts_from = [](bool asan, bool coverage)
+  const auto opts_from = [](bool asan, bool coverage, unsigned jobs = 0)
   {
     return BuildOptions{.asan     = asan ? Asan::On : Asan::Off,
-                        .coverage = coverage ? Coverage::On : Coverage::Off};
+                        .coverage = coverage ? Coverage::On : Coverage::Off,
+                        .jobs     = jobs};
   };
 
   if (*build_cmd)
   {
-    return handleExpectedResult(executeBuild(opts_from(build_asan, build_coverage), context_),
-                                "Build", ErrorHandler::ErrorCode::BuildFailure);
+    return handleExpectedResult(
+        executeBuild(opts_from(build_asan, build_coverage, build_jobs), context_), "Build",
+        ErrorHandler::ErrorCode::BuildFailure);
   }
 
 #ifndef CPPUP_SLIM
