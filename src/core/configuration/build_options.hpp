@@ -21,6 +21,12 @@ enum class Verbose : unsigned char
   On
 };
 
+enum class WithTests : unsigned char
+{
+  Off,
+  On
+};
+
 /**
  * Runtime build toggles that affect compile + link flags.
  *
@@ -30,9 +36,10 @@ enum class Verbose : unsigned char
  */
 struct BuildOptions
 {
-  Asan     asan     = Asan::Off;
-  Coverage coverage = Coverage::Off;
-  Verbose  verbose  = Verbose::Off;
+  Asan      asan       = Asan::Off;
+  Coverage  coverage   = Coverage::Off;
+  Verbose   verbose    = Verbose::Off;
+  WithTests with_tests = WithTests::Off;
   // 0 = auto (std::thread::hardware_concurrency()); 1 = serial.
   unsigned jobs = 0;
 };
@@ -48,6 +55,10 @@ struct BuildOptions
 [[nodiscard]] constexpr bool enabled(Verbose v) noexcept
 {
   return v == Verbose::On;
+}
+[[nodiscard]] constexpr bool enabled(WithTests w) noexcept
+{
+  return w == WithTests::On;
 }
 
 }  // namespace cppup::configuration

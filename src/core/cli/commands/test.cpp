@@ -172,13 +172,28 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
   try
   {
     auto& logger = *context.logger;
-    logger.info("Running tests...");
 
     const fs::path build_file = context.projectRoot / "build.cpp";
     if (!fs::exists(build_file))
     {
       return std::unexpected("No build.cpp found in current directory");
     }
+
+    // Tests aren't built by `cppup build` (it builds libs + binaries only).
+    // Drive a build with `with_tests` on so any stale or missing test binary
+    // is produced before we try to run it. The cache no-ops the libs/bins
+    // when they're already up to date.
+    {
+      conf::BuildOptions build_opts = options;
+      build_opts.with_tests         = conf::WithTests::On;
+      auto rc                       = executeBuild(build_opts, context);
+      if (!rc)
+      {
+        return std::unexpected(rc.error());
+      }
+    }
+
+    logger.info("Running tests...");
 
     const fs::path build_dir = context.projectRoot / "build";
     const fs::path tests_dir = build_dir / "tests";
@@ -187,7 +202,6 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
     if (binaries.empty())
     {
       logger.info("No test binaries found in " + tests_dir.string());
-      logger.info("Build tests first with: cppup build");
       return 0;
     }
 

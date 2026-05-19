@@ -16,6 +16,7 @@ using cppup::configuration::Asan;
 using cppup::configuration::BuildOptions;
 using cppup::configuration::Coverage;
 using cppup::configuration::Verbose;
+using cppup::configuration::WithTests;
 
 // Optional feature toggles for `cppup init` (no raw bools in APIs).
 enum class Vscode : unsigned char

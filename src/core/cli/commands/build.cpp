@@ -640,18 +640,22 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config,
                                                  binary.libraries, project_root, build_dir, options,
                                                  {}, {}));
   }
-  const auto tests_dir = build_dir / "tests";
-  for (const auto& test : config.tests)
+  if (conf::enabled(options.with_tests))
   {
-    std::vector<std::string> test_link_flag_strings;
-    test_link_flag_strings.reserve(test.link_flags.size());
-    for (const auto& f : test.link_flags)
+    const auto tests_dir = build_dir / "tests";
+    for (const auto& test : config.tests)
     {
-      test_link_flag_strings.emplace_back(f.flag);
+      std::vector<std::string> test_link_flag_strings;
+      test_link_flag_strings.reserve(test.link_flags.size());
+      for (const auto& f : test.link_flags)
+      {
+        test_link_flag_strings.emplace_back(f.flag);
+      }
+      total +=
+          contribution(plan_executable_target("test", test.name, test.sources, config,
+                                              test.libraries, project_root, build_dir, options,
+                                              test_link_flag_strings, tests_dir));
     }
-    total += contribution(plan_executable_target("test", test.name, test.sources, config,
-                                                 test.libraries, project_root, build_dir, options,
-                                                 test_link_flag_strings, tests_dir));
   }
   return total;
 }
@@ -780,38 +784,46 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     // Test::libraries, plus any verbatim flags in Test::link_flags
     // (e.g. "-lgtest -lgtest_main -lpthread"). Binaries land in build/tests/
     // so the test runner and VSCode testMate glob can both find them.
-    const auto tests_dir = build_dir / "tests";
-    if (!config.tests.empty())
+    // Skipped unless `--with-tests` is set; `cppup test` re-enters with the
+    // flag on before running the binaries.
+    if (conf::enabled(options.with_tests))
     {
-      std::filesystem::create_directories(tests_dir);
-    }
+      const auto tests_dir = build_dir / "tests";
+      if (!config.tests.empty())
+      {
+        std::filesystem::create_directories(tests_dir);
+      }
 
-    std::atomic<std::size_t> test_cached{0};
-    if (auto r = run_in_parallel(config.tests, options.jobs,
-                                 [&](const conf::Test& test) -> std::expected<void, std::string>
-                                 {
-                                   std::vector<std::string> test_link_flag_strings;
-                                   test_link_flag_strings.reserve(test.link_flags.size());
-                                   for (const auto& f : test.link_flags)
-                                   {
-                                     test_link_flag_strings.emplace_back(f.flag);
-                                   }
-                                   std::size_t local_cached = 0;
-                                   auto        rr           = build_executable(
-                                       "test", test.name, test.sources, config, test.libraries,
-                                       context.projectRoot, build_dir, cache.get(), inner_opts,
-                                       logger, local_cached, progress, test_link_flag_strings,
-                                       tests_dir);
-                                   if (!rr) return std::unexpected(rr.error());
-                                   test_cached.fetch_add(local_cached, std::memory_order_relaxed);
-                                   return {};
-                                 });
-        !r)
-    {
-      return std::unexpected(r.error());
+      std::atomic<std::size_t> test_cached{0};
+      if (auto r = run_in_parallel(
+              config.tests, options.jobs,
+              [&](const conf::Test& test) -> std::expected<void, std::string>
+              {
+                std::vector<std::string> test_link_flag_strings;
+                test_link_flag_strings.reserve(test.link_flags.size());
+                for (const auto& f : test.link_flags)
+                {
+                  test_link_flag_strings.emplace_back(f.flag);
+                }
+                std::size_t local_cached = 0;
+                auto        rr           = build_executable(
+                    "test", test.name, test.sources, config, test.libraries, context.projectRoot,
+                    build_dir, cache.get(), inner_opts, logger, local_cached, progress,
+                    test_link_flag_strings, tests_dir);
+                if (!rr)
+                {
+                  return std::unexpected(rr.error());
+                }
+                test_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                return {};
+              });
+          !r)
+      {
+        return std::unexpected(r.error());
+      }
+      built += config.tests.size();
+      cached += test_cached.load();
     }
-    built += config.tests.size();
-    cached += test_cached.load();
 
     if (!config.build_steps.empty())
     {
@@ -840,8 +852,20 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       }
       return std::to_string(whole_sec / 60) + "m" + std::to_string(whole_sec % 60) + "s";
     };
-    logger.info("build complete: " + std::to_string(built) + " built, " + std::to_string(cached) +
-                " cached in " + format_wall(wall_ms));
+    const std::size_t steps    = progress.done.load(std::memory_order_relaxed);
+    const std::size_t rebuilt  = built - cached;
+    std::string       summary  = "build complete: ";
+    summary += std::to_string(rebuilt) + "/" + std::to_string(built) + " targets rebuilt";
+    if (cached > 0)
+    {
+      summary += " (" + std::to_string(cached) + " cached)";
+    }
+    if (steps > 0)
+    {
+      summary += ", " + std::to_string(steps) + " compile/link steps";
+    }
+    summary += " in " + format_wall(wall_ms);
+    logger.info(summary);
     if (cache != nullptr)
     {
       auto stats = cache->get_stats();

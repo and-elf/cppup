@@ -150,15 +150,18 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 #endif
 
   // build
-  auto*    build_cmd      = app.add_subcommand("build", "Build the project");
-  bool     build_asan     = false;
-  bool     build_coverage = false;
-  bool     build_verbose  = false;
-  unsigned build_jobs     = 0;
+  auto*    build_cmd        = app.add_subcommand("build", "Build the project");
+  bool     build_asan       = false;
+  bool     build_coverage   = false;
+  bool     build_verbose    = false;
+  bool     build_with_tests = false;
+  unsigned build_jobs       = 0;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
   build_cmd->add_flag("--coverage", build_coverage, "Instrument with gcov coverage flags");
   build_cmd->add_flag("--verbose,-V", build_verbose,
                       "Print the exact compile/link commands as they run");
+  build_cmd->add_flag("--with-tests", build_with_tests,
+                      "Also compile test binaries (default: libraries + binaries only)");
   build_cmd->add_option("-j,--jobs", build_jobs,
                         "Parallel compile jobs (0 = auto / hardware_concurrency)");
 
@@ -315,12 +318,14 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   }
 #endif
 
-  const auto opts_from = [](bool asan, bool coverage, bool verbose = false, unsigned jobs = 0)
+  const auto opts_from = [](bool asan, bool coverage, bool verbose = false, bool with_tests = false,
+                            unsigned jobs = 0)
   {
-    return BuildOptions{.asan     = asan ? Asan::On : Asan::Off,
-                        .coverage = coverage ? Coverage::On : Coverage::Off,
-                        .verbose  = verbose ? Verbose::On : Verbose::Off,
-                        .jobs     = jobs};
+    return BuildOptions{.asan       = asan ? Asan::On : Asan::Off,
+                        .coverage   = coverage ? Coverage::On : Coverage::Off,
+                        .verbose    = verbose ? Verbose::On : Verbose::Off,
+                        .with_tests = with_tests ? WithTests::On : WithTests::Off,
+                        .jobs       = jobs};
   };
 
   if (*build_cmd)
@@ -330,7 +335,9 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
       context_.logger->set_verbose(true);
     }
     return handleExpectedResult(
-        executeBuild(opts_from(build_asan, build_coverage, build_verbose, build_jobs), context_),
+        executeBuild(opts_from(build_asan, build_coverage, build_verbose, build_with_tests,
+                               build_jobs),
+                     context_),
         "Build", ErrorHandler::ErrorCode::BuildFailure);
   }
 
