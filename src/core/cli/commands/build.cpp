@@ -11,6 +11,7 @@
 #include "../../configuration/compile_commands.hpp"
 #include "../../configuration/link_resolution.hpp"
 #include "../../configuration/subproject_loader.hpp"
+#include "../../configuration/toolchain_flags.hpp"
 #include "common.h"
 
 namespace cppup::cli
@@ -25,6 +26,10 @@ namespace bld  = cppup::build;
 void append_common_flags(std::vector<std::string>& out, const conf::BuildConfiguration& config,
                          const std::filesystem::path& project_root, conf::BuildOptions options)
 {
+  if (config.toolchain)
+  {
+    for (auto& f : conf::dialect_flags(*config.toolchain)) out.emplace_back(std::move(f));
+  }
   for (const auto& flag : config.compile_flags) out.emplace_back(flag.flag);
   for (const auto& def : config.definitions)
   {

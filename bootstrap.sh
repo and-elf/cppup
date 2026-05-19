@@ -64,6 +64,7 @@ build_slim() {
         src/core/configuration/validation.cpp
         src/core/configuration/package_resolver.cpp
         src/core/configuration/toolchain_resolver.cpp
+        src/core/configuration/toolchain_flags.cpp
         src/core/configuration/profile_processor.cpp
         src/core/configuration/build_executor.cpp
         src/core/configuration/build_step_executor.cpp

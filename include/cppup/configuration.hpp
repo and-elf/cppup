@@ -78,6 +78,7 @@
 #include "../src/core/configuration/build_configuration.hpp"
 #include "../src/core/configuration/outputs.hpp"
 #include "../src/core/configuration/profile.hpp"
+#include "../src/core/configuration/toolchain_flags.hpp"
 #include "../src/core/configuration/types.hpp"
 
 // Package system

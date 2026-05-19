@@ -7,6 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "toolchain_flags.hpp"
+
 namespace cppup::configuration
 {
 
@@ -69,6 +71,13 @@ std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
   args.reserve(config.compile_flags.size() + config.definitions.size() +
                config.include_paths.size() + 3);
 
+  if (config.toolchain)
+  {
+    for (auto& f : dialect_flags(*config.toolchain))
+    {
+      args.emplace_back(std::move(f));
+    }
+  }
   for (const auto& f : config.compile_flags)
   {
     args.emplace_back(f.flag);

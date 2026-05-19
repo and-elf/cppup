@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <memory>
@@ -218,11 +219,56 @@ struct Module
 };
 
 /**
- * Represents a toolchain reference
+ * C++ language standard. Toolchain-agnostic; the toolchain expander maps it
+ * to the right compiler flag (`-std=c++23` for gcc/clang, `/std:c++latest`
+ * for MSVC, etc.). `Unspecified` emits no `-std` flag so the project keeps
+ * whatever the compiler defaults to.
+ */
+enum class CxxStandard : std::uint8_t
+{
+  Unspecified,
+  Cxx17,
+  Cxx20,
+  Cxx23,
+  Cxx26,
+};
+
+/**
+ * Warning policy. The toolchain expander turns this into the right warning
+ * flag set for the active compiler family. Keep this coarse; per-flag
+ * overrides and other compiler-family-specific knobs go in
+ * Toolchain::extra_flags.
+ *
+ * - None: emit no warning flags.
+ * - Standard: -Wall (gcc/clang).
+ * - Strict: -Wall -Wextra -Wpedantic.
+ * - Werror: Strict + -Werror.
+ */
+enum class WarningLevel : std::uint8_t
+{
+  None,
+  Standard,
+  Strict,
+  Werror,
+};
+
+/**
+ * Represents a toolchain reference. `name` selects the compiler ("g++",
+ * "clang++", "gcc-13", ...); the dialect/warning knobs let the build emit
+ * the right family-specific flag strings without each build.cpp having to
+ * hardcode `-Wall -Werror -std=c++23` (which is gcc/clang-ese and wrong on
+ * MSVC anyway). Anything compiler-family-specific that doesn't fit the
+ * enums — per-flag warning overrides, codegen toggles, ISA flags — goes in
+ * `extra_flags` verbatim (e.g. `"-Wno-return-type-c-linkage"`,
+ * `"-fno-rtti"`, `"-mavx2"`). Project-wide flags that don't depend on the
+ * compiler family stay in `BuildConfiguration::compile_flags`.
  */
 struct Toolchain
 {
-  std::string name;
+  std::string              name;
+  CxxStandard              cxx_standard = CxxStandard::Unspecified;
+  WarningLevel             warnings     = WarningLevel::None;
+  std::vector<std::string> extra_flags  = {};
 
   explicit Toolchain(std::string name) noexcept : name(std::move(name)) {}
 };

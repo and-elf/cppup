@@ -13,17 +13,11 @@ extern "C" BuildConfiguration configure()
 
   BuildConfiguration config;
 
-  config.toolchain     = Toolchain{"g++"};
-  config.compile_flags = {Flag{"-Wall"},
-                          Flag{"-Wextra"},
-                          Flag{"-Wpedantic"},
-                          Flag{"-Werror"},
-                          Flag{"-Wno-return-type-c-linkage"},
-                          Flag{"-std=c++23"},
-                          Flag{"-O2"},
-                          Flag{"-g"},
-                          Flag{"-DNDEBUG"},
-                          Flag{"-fPIC"}};
+  config.toolchain                    = Toolchain{"g++"};
+  config.toolchain->cxx_standard      = CxxStandard::Cxx23;
+  config.toolchain->warnings          = WarningLevel::Werror;
+  config.toolchain->extra_flags       = {"-Wno-return-type-c-linkage"};
+  config.compile_flags                = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
   config.include_paths = {"include",
                           "src",
                           "src/cli",

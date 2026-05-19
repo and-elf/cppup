@@ -26,8 +26,8 @@ extern "C" BuildConfiguration configure()
   config.libraries.push_back(Library{
       .name       = "cppup_config",
       .sources    = {"compiler.cpp", "compile_commands.cpp", "loader.cpp", "validation.cpp",
-                     "package_resolver.cpp", "toolchain_resolver.cpp", "profile_processor.cpp",
-                     "build_step_executor.cpp"},
+                     "package_resolver.cpp", "toolchain_resolver.cpp", "toolchain_flags.cpp",
+                     "profile_processor.cpp", "build_step_executor.cpp"},
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-ldl"}},
   });
