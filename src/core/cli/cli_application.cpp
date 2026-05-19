@@ -1,8 +1,11 @@
 #include "cli_application.hpp"
 
+#ifndef CPPUP_SLIM
 #include <unistd.h>
 
 #include <iostream>
+#endif
+
 #include <print>
 #include <string>
 
@@ -43,6 +46,7 @@ int handleExpectedResult(std::expected<int, std::string> result, const std::stri
   return ErrorHandler::getExitCode(error_code);
 }
 
+#ifndef CPPUP_SLIM
 // Read a y/N answer from stdin, defaulting to No on EOF or empty line.
 bool prompt_yes_no(const std::string& question)
 {
@@ -105,6 +109,7 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   }
   return opts;
 }
+#endif  // !CPPUP_SLIM
 
 }  // anonymous namespace
 
@@ -116,6 +121,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   bool show_version = false;
   app.add_flag("--version,-v", show_version, "Show version information");
 
+#ifndef CPPUP_SLIM
   // init
   auto*       init_cmd = app.add_subcommand("init", "Initialize a new project");
   std::string init_name;
@@ -141,6 +147,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
                      "Scaffold Dockerfile (debian:trixie-slim base)");
   init_cmd->add_flag("--with-gitlab-ci", init_with_gitlab_ci,
                      "Scaffold .gitlab-ci.yml (cppup build/test/format/tidy pipeline)");
+#endif
 
   // build
   auto* build_cmd      = app.add_subcommand("build", "Build the project");
@@ -149,6 +156,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
   build_cmd->add_flag("--coverage", build_coverage, "Instrument with gcov coverage flags");
 
+#ifndef CPPUP_SLIM
   // compile-commands
   auto* cc_cmd =
       app.add_subcommand("compile-commands", "Emit compile_commands.json for clangd/LSP tooling");
@@ -256,6 +264,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto*       module_add_cmd = module_cmd->add_subcommand("add", "Create a new module");
   std::string module_add_name;
   module_add_cmd->add_option("name", module_add_name, "Module name")->required();
+#endif  // !CPPUP_SLIM
 
   // update
   auto*       update_cmd = app.add_subcommand("update", "Install the latest released cppup binary");
@@ -284,6 +293,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     return 0;
   }
 
+#ifndef CPPUP_SLIM
   if (*init_cmd)
   {
     std::optional<std::string> path_opt;
@@ -297,6 +307,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     return handleExpectedResult(executeInit(init_name, path_opt, init_opts, context_), "Init",
                                 ErrorHandler::ErrorCode::FileNotFound);
   }
+#endif
 
   const auto opts_from = [](bool asan, bool coverage)
   {
@@ -310,6 +321,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
                                 "Build", ErrorHandler::ErrorCode::BuildFailure);
   }
 
+#ifndef CPPUP_SLIM
   if (*cc_cmd)
   {
     return handleExpectedResult(executeCompileCommands(opts_from(cc_asan, cc_coverage), context_),
@@ -399,6 +411,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     return handleExpectedResult(executeModuleAdd(module_add_name, context_), "Module add",
                                 ErrorHandler::ErrorCode::UnknownError);
   }
+#endif  // !CPPUP_SLIM
 
   if (*update_cmd)
   {
