@@ -356,7 +356,7 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 
   if (*clean_cmd)
   {
-    CleanOptions clean_opts{.scope = clean_all ? CleanScope::All : CleanScope::Build};
+    CleanOptions const clean_opts{.scope = clean_all ? CleanScope::All : CleanScope::Build};
     return handleExpectedResult(executeClean(clean_opts, context_), "Clean",
                                 ErrorHandler::ErrorCode::UnknownError);
   }

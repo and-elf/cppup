@@ -196,7 +196,7 @@ std::expected<void, std::string> DependencyDatabase::initialize() noexcept
     std::filesystem::create_directories(db_path_.parent_path());
 
     // Open database
-    int rc = sqlite3_open(db_path_.string().c_str(), &db_);
+    int const rc = sqlite3_open(db_path_.string().c_str(), &db_);
     if (rc != SQLITE_OK)
     {
       std::string error = "Cannot open database: ";
@@ -268,8 +268,8 @@ std::expected<void, std::string> DependencyDatabase::install_package(
     sqlite3_bind_text(stmt, 5, package.repository_url.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 6, package.license.c_str(), -1, SQLITE_STATIC);
 
-    std::string authors_json  = vector_to_json(package.authors);
-    std::string keywords_json = vector_to_json(package.keywords);
+    std::string const authors_json  = vector_to_json(package.authors);
+    std::string const keywords_json = vector_to_json(package.keywords);
     sqlite3_bind_text(stmt, 7, authors_json.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 8, keywords_json.c_str(), -1, SQLITE_STATIC);
 
@@ -448,8 +448,8 @@ std::expected<std::vector<PackageInfo>, std::string> DependencyDatabase::list_in
     std::vector<PackageInfo> packages;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
     {
-      std::string name    = column_text(stmt, 0);
-      std::string version = column_text(stmt, 1);
+      std::string const name    = column_text(stmt, 0);
+      std::string const version = column_text(stmt, 1);
 
       auto package_result = get_package(name, version);
       if (package_result)
@@ -626,8 +626,8 @@ std::expected<void, std::string> DependencyDatabase::prepare_statements() noexce
 
 std::expected<void, std::string> DependencyDatabase::execute_sql(const std::string& sql) noexcept
 {
-  char* error_msg = nullptr;
-  int   rc        = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
+  char*     error_msg = nullptr;
+  int const rc        = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
 
   if (rc != SQLITE_OK)
   {
@@ -753,8 +753,8 @@ std::expected<bool, std::string> DependencyDatabase::is_package_installed(
 
     if (rc == SQLITE_ROW)
     {
-      int count = sqlite3_column_int(stmt, 0);
-      installed = count > 0;
+      int const count = sqlite3_column_int(stmt, 0);
+      installed       = count > 0;
     }
 
     sqlite3_finalize(stmt);
@@ -857,7 +857,7 @@ std::expected<void, std::string> DependencyDatabase::update_registry_entry(
   sqlite3_bind_text(stmt, 5, versions_str.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 6, entry.last_updated.c_str(), -1, SQLITE_TRANSIENT);
 
-  int result = sqlite3_step(stmt);
+  int const result = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
   if (result != SQLITE_DONE)
@@ -885,7 +885,7 @@ std::expected<RegistryEntry, std::string> DependencyDatabase::get_registry_entry
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
 
   RegistryEntry entry;
-  int           result = sqlite3_step(stmt);
+  int const     result = sqlite3_step(stmt);
   if (result == SQLITE_ROW)
   {
     entry.name           = column_text(stmt, 0);
@@ -925,7 +925,7 @@ std::expected<RegistryEntry, std::string> DependencyDatabase::get_registry_entry
 std::expected<std::vector<RegistryEntry>, std::string> DependencyDatabase::search_registry(
     const std::string& query) const noexcept
 {
-  std::string sql = R"(
+  std::string const sql = R"(
         SELECT name, latest_version, description, repository_url, available_versions, last_updated
         FROM registry WHERE name LIKE ? OR description LIKE ?
     )";
@@ -937,7 +937,7 @@ std::expected<std::vector<RegistryEntry>, std::string> DependencyDatabase::searc
                            std::string(sqlite3_errmsg(db_)));
   }
 
-  std::string search_pattern = "%" + query + "%";
+  std::string const search_pattern = "%" + query + "%";
   sqlite3_bind_text(stmt, 1, search_pattern.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 2, search_pattern.c_str(), -1, SQLITE_TRANSIENT);
 
@@ -986,7 +986,7 @@ std::expected<std::vector<PackageInfo>, std::string> DependencyDatabase::resolve
 
   while (!to_process.empty())
   {
-    std::string current = to_process.front();
+    std::string const current = to_process.front();
     to_process.pop();
 
     // Get all versions of this package
@@ -1045,7 +1045,7 @@ std::expected<std::vector<std::string>, std::string> DependencyDatabase::detect_
 
   for (const auto& package : *packages_result)
   {
-    std::string package_key = package.name + "@" + package.version;
+    std::string const package_key = package.name + "@" + package.version;
     if (!visited.contains(package_key))
     {
       if (has_cycle_dfs(package_key, visited, recursion_stack))
@@ -1094,14 +1094,14 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
                                        std::set<std::string>& recursion_stack) const noexcept
 {
   // Parse package key (format: "name@version")
-  size_t at_pos = package_key.find('@');
+  size_t const at_pos = package_key.find('@');
   if (at_pos == std::string::npos)
   {
     return false;  // Invalid format, skip
   }
 
-  std::string name    = package_key.substr(0, at_pos);
-  std::string version = package_key.substr(at_pos + 1);
+  std::string const name    = package_key.substr(0, at_pos);
+  std::string const version = package_key.substr(at_pos + 1);
 
   // Mark as visited and add to recursion stack
   visited.insert(package_key);
@@ -1136,7 +1136,7 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
       }
     }
 
-    std::string dep_key = std::format("{}@{}", dep_name, latest_version);
+    std::string const dep_key = std::format("{}@{}", dep_name, latest_version);
 
     // If dependency is in recursion stack, we found a cycle
     if (recursion_stack.find(dep_key) != recursion_stack.end())

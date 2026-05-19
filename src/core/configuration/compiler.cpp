@@ -34,7 +34,7 @@ CompilationResult ConfigurationCompiler::compile(const std::filesystem::path& bu
   }
 
   // Build the compiler command
-  std::string command = build_compiler_command(build_cpp_path, shared_lib_path);
+  std::string const command = build_compiler_command(build_cpp_path, shared_lib_path);
 
   if (options_.verbose)
   {
@@ -179,8 +179,8 @@ CompilationResult ConfigurationCompiler::execute_command(const std::string& comm
   }
 
   // Get the exit code
-  int exit_code    = pclose(pipe);
-  result.exit_code = exit_code;
+  int const exit_code = pclose(pipe);
+  result.exit_code    = exit_code;
 
   // Parse the output into lines
   std::istringstream iss(output);

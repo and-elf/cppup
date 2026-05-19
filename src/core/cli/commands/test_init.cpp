@@ -45,8 +45,8 @@ CommandContext make_ctx(const fs::path& root)
 
 std::string slurp(const fs::path& p)
 {
-  std::ifstream      in(p);
-  std::ostringstream os;
+  std::ifstream const in(p);
+  std::ostringstream  os;
   os << in.rdbuf();
   return os.str();
 }
@@ -128,7 +128,7 @@ TEST(Init, WithVscodeEmitsVscodeDir)
   auto       root = make_tmp_root("vscode");
   const auto ctx  = make_ctx(root);
 
-  InitOptions opts{.vscode = Vscode::On};
+  InitOptions const opts{.vscode = Vscode::On};
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   const auto vs = root / ".vscode";
@@ -149,7 +149,7 @@ TEST(Init, WithDevcontainerEmitsDevcontainerJson)
   auto       root = make_tmp_root("dc");
   const auto ctx  = make_ctx(root);
 
-  InitOptions opts{.devcontainer = Devcontainer::On};
+  InitOptions const opts{.devcontainer = Devcontainer::On};
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   EXPECT_TRUE(fs::exists(root / ".devcontainer" / "devcontainer.json"));
@@ -162,7 +162,7 @@ TEST(Init, WithDockerEmitsDockerfile)
   auto       root = make_tmp_root("docker");
   const auto ctx  = make_ctx(root);
 
-  InitOptions opts{.docker = Docker::On};
+  InitOptions const opts{.docker = Docker::On};
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   EXPECT_TRUE(fs::exists(root / "Dockerfile"));
@@ -177,7 +177,7 @@ TEST(Init, WithGitlabCiEmitsGitlabCiYml)
   auto       root = make_tmp_root("gl");
   const auto ctx  = make_ctx(root);
 
-  InitOptions opts{.gitlab_ci = GitlabCi::On};
+  InitOptions const opts{.gitlab_ci = GitlabCi::On};
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   EXPECT_TRUE(fs::exists(root / ".gitlab-ci.yml"));
@@ -234,7 +234,7 @@ TEST(Init, GitignoreDoesNotExcludeShippedVscodeDir)
   auto       root = make_tmp_root("gi_vs");
   const auto ctx  = make_ctx(root);
 
-  InitOptions opts{.vscode = Vscode::On};
+  InitOptions const opts{.vscode = Vscode::On};
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   const auto gi = slurp(root / ".gitignore");

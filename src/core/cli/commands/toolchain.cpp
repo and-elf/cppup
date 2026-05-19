@@ -18,8 +18,8 @@ std::expected<int, std::string> executeToolchainList(const CommandContext& conte
     context.logger->info("Listing available toolchains...");
 
     // Check for common toolchains in PATH
-    std::vector<std::string> toolchains = {"gcc", "g++", "clang", "clang++", "msvc"};
-    std::vector<std::string> available;
+    std::vector<std::string> const toolchains = {"gcc", "g++", "clang", "clang++", "msvc"};
+    std::vector<std::string>       available;
 
     for (const auto& toolchain : toolchains)
     {
@@ -40,7 +40,7 @@ std::expected<int, std::string> executeToolchainList(const CommandContext& conte
     }
 
     // Check for custom toolchains
-    std::filesystem::path toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
+    std::filesystem::path const toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
     if (std::filesystem::exists(toolchains_dir))
     {
       std::cout << "\nCustom toolchains:" << std::endl;
@@ -69,11 +69,11 @@ std::expected<int, std::string> executeToolchainAdd(const ToolchainAddOptions& o
     context.logger->info("Adding toolchain: " + options.name);
 
     // Create toolchains directory
-    std::filesystem::path toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
+    std::filesystem::path const toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
     std::filesystem::create_directories(toolchains_dir);
 
     // Create toolchain directory
-    std::filesystem::path toolchain_dir = toolchains_dir / options.name;
+    std::filesystem::path const toolchain_dir = toolchains_dir / options.name;
     if (std::filesystem::exists(toolchain_dir))
     {
       return std::unexpected("Toolchain already exists: " + options.name);
@@ -121,7 +121,7 @@ std::expected<int, std::string> executeToolchainRemove(const std::string&    too
     context.logger->info("Removing toolchain: " + toolchain_name);
 
     // Check if toolchain exists
-    std::filesystem::path toolchain_dir =
+    std::filesystem::path const toolchain_dir =
         context.projectRoot / ".cppup" / "toolchains" / toolchain_name;
     if (!std::filesystem::exists(toolchain_dir))
     {
@@ -149,8 +149,8 @@ std::expected<int, std::string> executeToolchainSelect(const std::string&    too
     context.logger->info("Selecting toolchain: " + toolchain_name);
 
     // Create or update toolchain selection file
-    std::filesystem::path config_file = context.projectRoot / ".cppup" / "toolchain.txt";
-    std::ofstream         file(config_file);
+    std::filesystem::path const config_file = context.projectRoot / ".cppup" / "toolchain.txt";
+    std::ofstream               file(config_file);
     file << toolchain_name << std::endl;
 
     context.logger->info("Toolchain selected successfully");

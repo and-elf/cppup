@@ -2,6 +2,7 @@
 #include <string>
 
 #include "../../configuration/compile_commands.hpp"
+#include "commands.hpp"
 #include "common.h"
 
 namespace cppup::cli

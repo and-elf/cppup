@@ -27,8 +27,8 @@ fs::path make_tmp_dir(std::string_view tag)
 
 std::string slurp(const fs::path& p)
 {
-  std::ifstream      f(p);
-  std::ostringstream ss;
+  std::ifstream const f(p);
+  std::ostringstream  ss;
   ss << f.rdbuf();
   return ss.str();
 }

@@ -4,6 +4,8 @@
 #include <string>
 
 #include "command_context.hpp"
+#include "commands.hpp"
+
 namespace cppup::cli
 {
 std::expected<int, std::string> executeModuleAdd(const std::string&    module_name,
@@ -14,7 +16,7 @@ std::expected<int, std::string> executeModuleAdd(const std::string&    module_na
     context.logger->info("Adding module: " + module_name);
 
     // Create module directory structure
-    std::filesystem::path module_dir = context.projectRoot / "src" / module_name;
+    std::filesystem::path const module_dir = context.projectRoot / "src" / module_name;
     if (std::filesystem::exists(module_dir))
     {
       return std::unexpected("Module directory already exists: " + module_dir.string());

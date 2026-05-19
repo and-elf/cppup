@@ -40,8 +40,8 @@ std::expected<std::filesystem::path, std::string> ArchivePackage::download_and_e
   auto cache_path = cache_->get_package_cache_path(info_.name, info_);
 
   // Download archive
-  std::string extension    = get_archive_extension();
-  auto        archive_path = cache_path.parent_path() / (info_.name + extension);
+  std::string const extension    = get_archive_extension();
+  auto              archive_path = cache_path.parent_path() / (info_.name + extension);
 
   std::filesystem::create_directories(cache_path.parent_path());
 

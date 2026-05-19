@@ -19,7 +19,7 @@ std::string json_escape(std::string_view s)
 {
   std::string out;
   out.reserve(s.size() + 2);
-  for (char c : s)
+  for (char const c : s)
   {
     switch (c)
     {

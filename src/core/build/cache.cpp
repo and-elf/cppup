@@ -350,7 +350,7 @@ class SqliteBuildCache final : public BuildCache
     char* err = nullptr;
     if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK)
     {
-      std::string msg = err ? err : "unknown sqlite error";
+      std::string const msg = err ? err : "unknown sqlite error";
       sqlite3_free(err);
       return std::unexpected(msg);
     }
@@ -394,7 +394,7 @@ std::expected<sqlite3*, std::string> open_cache_db(const std::filesystem::path& 
   sqlite3* db = nullptr;
   if (sqlite3_open(db_path.string().c_str(), &db) != SQLITE_OK)
   {
-    std::string msg = sqlite3_errmsg(db);
+    std::string const msg = sqlite3_errmsg(db);
     sqlite3_close(db);
     return std::unexpected("sqlite3_open failed: " + msg);
   }
@@ -419,7 +419,7 @@ std::expected<sqlite3*, std::string> open_cache_db(const std::filesystem::path& 
   char* err = nullptr;
   if (sqlite3_exec(db, schema, nullptr, nullptr, &err) != SQLITE_OK)
   {
-    std::string msg = err ? err : "unknown sqlite error";
+    std::string const msg = err ? err : "unknown sqlite error";
     sqlite3_free(err);
     sqlite3_close(db);
     return std::unexpected("schema init failed: " + msg);

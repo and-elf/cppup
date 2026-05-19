@@ -86,7 +86,7 @@ std::expected<void, std::string> CMakePackage::configure_cmake(
   auto build_dir = source_path / "build";
   std::filesystem::create_directories(build_dir);
 
-  std::string configure_command = get_cmake_configure_command(source_path);
+  std::string const configure_command = get_cmake_configure_command(source_path);
 
   auto result =
       cppup::package::utils::execute_command(*command_executor_, configure_command, source_path);

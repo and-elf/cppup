@@ -94,7 +94,7 @@ bool command_exists(const std::string& command)
 #ifdef _WIN32
   std::string check_cmd = "where " + command + " >nul 2>&1";
 #else
-  std::string check_cmd = "which " + command + " >/dev/null 2>&1";
+  std::string const check_cmd = "which " + command + " >/dev/null 2>&1";
 #endif
   return std::system(check_cmd.c_str()) == 0;
 }
@@ -119,7 +119,7 @@ bool download_file(const std::string& url, const std::filesystem::path& destinat
                     destination.string() + "'\"";
 #else
   // Use curl on Unix-like systems
-  std::string cmd = "curl -L -o '" + destination.string() + "' '" + url + "'";
+  std::string const cmd = "curl -L -o '" + destination.string() + "' '" + url + "'";
 #endif
 
   return std::system(cmd.c_str()) == 0;
@@ -129,8 +129,8 @@ bool extract_archive(const std::filesystem::path& archive, const std::filesystem
 {
   std::filesystem::create_directories(destination);
 
-  std::string ext = archive.extension().string();
-  std::string cmd;
+  std::string const ext = archive.extension().string();
+  std::string       cmd;
 
   if (ext == ".zip")
   {
@@ -177,7 +177,7 @@ bool setup_ninja(const std::filesystem::path& bin_dir, Logger* logger)
   ninja_filename = "ninja-linux.zip";
 #endif
 
-  std::filesystem::path ninja_archive = bin_dir / ninja_filename;
+  std::filesystem::path const ninja_archive = bin_dir / ninja_filename;
 
   if (!download_file(ninja_url, ninja_archive))
   {
@@ -196,7 +196,7 @@ bool setup_ninja(const std::filesystem::path& bin_dir, Logger* logger)
 
   // Make executable on Unix-like systems
 #ifndef _WIN32
-  std::filesystem::path ninja_binary = bin_dir / "ninja";
+  std::filesystem::path const ninja_binary = bin_dir / "ninja";
   std::filesystem::permissions(ninja_binary,
                                std::filesystem::perms::owner_exec |
                                    std::filesystem::perms::group_exec |
@@ -220,8 +220,8 @@ bool setup_clang_format(const std::filesystem::path& bin_dir, Logger* logger)
 
   // For simplicity, we'll download a pre-built binary
   // In a real implementation, this would be more sophisticated
-  std::string clang_format_url;
-  std::string clang_format_filename;
+  std::string const clang_format_url;
+  std::string const clang_format_filename;
 
 #ifdef _WIN32
   clang_format_url =
@@ -237,7 +237,7 @@ bool setup_clang_format(const std::filesystem::path& bin_dir, Logger* logger)
   return true;  // Don't fail the init process
 #endif
 
-  std::filesystem::path clang_format_binary = bin_dir / clang_format_filename;
+  std::filesystem::path const clang_format_binary = bin_dir / clang_format_filename;
 
   if (!download_file(clang_format_url, clang_format_binary))
   {
@@ -253,7 +253,7 @@ std::vector<std::filesystem::path> find_files(const std::filesystem::path& root,
                                               const std::string&           pattern)
 {
   std::vector<std::filesystem::path> files;
-  std::regex                         pattern_regex(pattern);
+  std::regex const                   pattern_regex(pattern);
 
   try
   {
@@ -261,7 +261,7 @@ std::vector<std::filesystem::path> find_files(const std::filesystem::path& root,
     {
       if (entry.is_regular_file())
       {
-        std::string filename = entry.path().filename().string();
+        std::string const filename = entry.path().filename().string();
         if (std::regex_match(filename, pattern_regex))
         {
           files.push_back(entry.path());
@@ -280,8 +280,8 @@ std::vector<std::filesystem::path> find_files(const std::filesystem::path& root,
 void createBuildConfig(const std::filesystem::path& project_root, const std::string& project_name,
                        Logger* logger)
 {
-  std::filesystem::path build_file = project_root / "build.cpp";
-  std::ofstream         file(build_file);
+  std::filesystem::path const build_file = project_root / "build.cpp";
+  std::ofstream               file(build_file);
 
   file << R"(
 /**
@@ -336,8 +336,8 @@ extern "C" BuildConfiguration configure() {
 void createMainCpp(const std::filesystem::path& project_root, const std::string& project_name,
                    Logger* logger)
 {
-  std::filesystem::path main_file = project_root / "src" / "main.cpp";
-  std::ofstream         file(main_file);
+  std::filesystem::path const main_file = project_root / "src" / "main.cpp";
+  std::ofstream               file(main_file);
 
   file << R"(
 #include <print>
@@ -364,8 +364,8 @@ int main() {
 void createTestFile(const std::filesystem::path& project_root, const std::string& project_name,
                     Logger* logger)
 {
-  std::filesystem::path test_file = project_root / "tests" / "test_main.cpp";
-  std::ofstream         file(test_file);
+  std::filesystem::path const test_file = project_root / "tests" / "test_main.cpp";
+  std::ofstream               file(test_file);
 
   file << R"(
 #include <print>
@@ -391,8 +391,8 @@ int main() {
 
 void createClangFormat(const std::filesystem::path& project_root, Logger* logger)
 {
-  std::filesystem::path clang_format_file = project_root / ".clang-format";
-  std::ofstream         file(clang_format_file);
+  std::filesystem::path const clang_format_file = project_root / ".clang-format";
+  std::ofstream               file(clang_format_file);
 
   file << R"(
 # C++ formatting configuration for )"
@@ -443,8 +443,8 @@ NamespaceIndentation: None
 
 void createGitIgnore(const std::filesystem::path& project_root, Logger* logger)
 {
-  std::filesystem::path gitignore_file = project_root / ".gitignore";
-  std::ofstream         file(gitignore_file);
+  std::filesystem::path const gitignore_file = project_root / ".gitignore";
+  std::ofstream               file(gitignore_file);
 
   file << R"(
 # Build artifacts
@@ -489,8 +489,8 @@ logs/
 void createReadme(const std::filesystem::path& project_root, const std::string& project_name,
                   Logger* logger)
 {
-  std::filesystem::path readme_file = project_root / "README.md";
-  std::ofstream         file(readme_file);
+  std::filesystem::path const readme_file = project_root / "README.md";
+  std::ofstream               file(readme_file);
 
   file << R"(# )" << project_name << R"(
 
@@ -545,11 +545,11 @@ Add unit tests to the `tests/` directory. Run `cppup test` to execute all tests.
 
 void createEnvScripts(const std::filesystem::path& project_root, Logger* logger)
 {
-  std::filesystem::path cppup_dir = project_root / ".cppup";
+  std::filesystem::path const cppup_dir = project_root / ".cppup";
 
   // Unix shell script
-  std::filesystem::path setup_sh = cppup_dir / "setup_env.sh";
-  std::ofstream         sh_file(setup_sh);
+  std::filesystem::path const setup_sh = cppup_dir / "setup_env.sh";
+  std::ofstream               sh_file(setup_sh);
 
   sh_file << R"EOF(#!/bin/bash
 
@@ -578,8 +578,8 @@ echo "Tools available: $(ls )EOF"
                                std::filesystem::perm_options::add);
 
   // Windows batch script
-  std::filesystem::path setup_bat = cppup_dir / "setup_env.bat";
-  std::ofstream         bat_file(setup_bat);
+  std::filesystem::path const setup_bat = cppup_dir / "setup_env.bat";
+  std::ofstream               bat_file(setup_bat);
 
   bat_file << R"(@echo off
 
@@ -606,7 +606,7 @@ dir /b )" << cppup_dir.string()
 
 void setupTools(const std::filesystem::path& cppup_dir, Logger* logger)
 {
-  std::filesystem::path bin_dir = cppup_dir / "bin";
+  std::filesystem::path const bin_dir = cppup_dir / "bin";
 
   // Setup ninja
   if (!setup_ninja(bin_dir, logger))

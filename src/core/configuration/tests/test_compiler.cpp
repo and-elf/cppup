@@ -11,7 +11,7 @@ using namespace cppup::configuration;
 
 TEST(CompilerOptions, Defaults)
 {
-  CompilerOptions options;
+  CompilerOptions const options;
   EXPECT_EQ(options.compiler, "g++");
   EXPECT_EQ(options.cpp_standard, "c++23");
   EXPECT_FALSE(options.compile_flags.empty());
@@ -23,9 +23,9 @@ TEST(CompilerOptions, Defaults)
 
 TEST(ConfigurationCompiler, SharedLibraryPathDiffersByInput)
 {
-  ConfigurationCompiler compiler;
-  auto                  path1 = compiler.get_shared_library_path("build.cpp");
-  auto                  path2 = compiler.get_shared_library_path("src/module/build.cpp");
+  ConfigurationCompiler const compiler;
+  auto                        path1 = compiler.get_shared_library_path("build.cpp");
+  auto                        path2 = compiler.get_shared_library_path("src/module/build.cpp");
   EXPECT_NE(path1, path2);
   EXPECT_EQ(path1.parent_path(), ".cppup/build/config");
   EXPECT_EQ(path2.parent_path(), ".cppup/build/config");
@@ -43,12 +43,12 @@ TEST(ConfigurationCompiler, SharedLibraryPathDiffersByInput)
 
 TEST(ConfigurationCompiler, NeedsRecompilationDetectsStaleness)
 {
-  ConfigurationCompiler compiler;
+  ConfigurationCompiler const compiler;
 
   std::filesystem::create_directories("test_temp");
   std::filesystem::create_directories(".cppup/build/config");
 
-  std::filesystem::path build_cpp = "test_temp/build.cpp";
+  std::filesystem::path const build_cpp = "test_temp/build.cpp";
   std::ofstream(build_cpp) << "// build file";
 
   auto shared_lib_path = compiler.get_shared_library_path(build_cpp);

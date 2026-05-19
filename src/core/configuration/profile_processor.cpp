@@ -209,8 +209,8 @@ ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfigurat
   }
 
   // Get the effective profile name
-  std::string effective_profile = get_effective_profile_name(config, profile_name);
-  result.active_profile         = effective_profile;
+  std::string const effective_profile = get_effective_profile_name(config, profile_name);
+  result.active_profile               = effective_profile;
 
   // If no profiles are defined, just return the base configuration
   if (config.profiles.empty())

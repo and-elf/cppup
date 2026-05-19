@@ -41,7 +41,7 @@ std::vector<SourceType> PackageFactory::get_supported_source_types()
 
 std::map<SourceType, PackageFactory::PackageCreator> PackageFactory::get_package_creators()
 {
-  static std::map<SourceType, PackageCreator> creators = {
+  static std::map<SourceType, PackageCreator> const creators = {
       {SourceType::GIT,
        [](PackageInfo info) -> Package { return Package(git::GitPackage(std::move(info))); }},
       {SourceType::DIRECTORY, [](PackageInfo info) -> Package

@@ -6,7 +6,7 @@ using namespace cppup::configuration;
 
 TEST(Types, PackageInfoSingleArgumentConstruction)
 {
-  PackageInfo info("boost");
+  PackageInfo const info("boost");
   EXPECT_EQ(info.name, "boost");
   EXPECT_FALSE(info.version.has_value());
 }
@@ -21,13 +21,13 @@ TEST(Types, PackageInfoTwoArgumentConstruction)
 
 TEST(Types, ModuleConstruction)
 {
-  Module mod("Logger");
+  Module const mod("Logger");
   EXPECT_EQ(mod.name, "Logger");
 }
 
 TEST(Types, ToolchainConstruction)
 {
-  Toolchain tc("gcc-13");
+  Toolchain const tc("gcc-13");
   EXPECT_EQ(tc.name, "gcc-13");
 }
 
@@ -37,7 +37,7 @@ TEST(Types, FlagConstexprAndRuntime)
   static_assert(flag1.flag == "-Wall");
 
   const char* flag_str = "-Wextra";
-  Flag        flag2(flag_str);
+  Flag const  flag2(flag_str);
   EXPECT_EQ(flag2.flag, "-Wextra");
 }
 

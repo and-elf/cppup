@@ -50,7 +50,7 @@ class TempDir
 
 TEST(Subproject, BuildCppInfersCppup)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("build.cpp");
   auto r = infer_build_system(dir.path());
   ASSERT_TRUE(r.has_value());
@@ -59,7 +59,7 @@ TEST(Subproject, BuildCppInfersCppup)
 
 TEST(Subproject, CMakeListsInfersCMake)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path());
   ASSERT_TRUE(r.has_value());
@@ -68,7 +68,7 @@ TEST(Subproject, CMakeListsInfersCMake)
 
 TEST(Subproject, MakefileInfersMake)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("Makefile");
   auto r = infer_build_system(dir.path());
   ASSERT_TRUE(r.has_value());
@@ -77,7 +77,7 @@ TEST(Subproject, MakefileInfersMake)
 
 TEST(Subproject, GNUmakefileInfersMake)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("GNUmakefile");
   auto r = infer_build_system(dir.path());
   ASSERT_TRUE(r.has_value());
@@ -86,7 +86,7 @@ TEST(Subproject, GNUmakefileInfersMake)
 
 TEST(Subproject, HeadersOnlyInfersHeaderOnly)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("foo.hpp");
   dir.touch("bar.h");
   auto r = infer_build_system(dir.path());
@@ -96,14 +96,14 @@ TEST(Subproject, HeadersOnlyInfersHeaderOnly)
 
 TEST(Subproject, NoMarkersIsError)
 {
-  TempDir dir;
-  auto    r = infer_build_system(dir.path());
+  TempDir const dir;
+  auto          r = infer_build_system(dir.path());
   EXPECT_FALSE(r.has_value());
 }
 
 TEST(Subproject, CppSourcesWithoutMarkersIsError)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("orphan.cpp");
   auto r = infer_build_system(dir.path());
   EXPECT_FALSE(r.has_value());
@@ -111,7 +111,7 @@ TEST(Subproject, CppSourcesWithoutMarkersIsError)
 
 TEST(Subproject, AmbiguousBuildCppAndCMakeListsIsError)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("build.cpp");
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path());
@@ -134,16 +134,16 @@ TEST(Subproject, ConstructionDefaults)
   EXPECT_TRUE(sp.build_args.empty());
   EXPECT_EQ(sp.build_file, "build.cpp");
 
-  Subproject sp2{.path = "src/core/configuration"};
+  Subproject const sp2{.path = "src/core/configuration"};
   EXPECT_FALSE(sp2.build_system.has_value());
 
-  Subproject sp3{.path = "src/core/cli", .build_file = "cli.build.cpp"};
+  Subproject const sp3{.path = "src/core/cli", .build_file = "cli.build.cpp"};
   EXPECT_EQ(sp3.build_file, "cli.build.cpp");
 }
 
 TEST(Subproject, InferenceRespectsCustomCppupBuildFile)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("cli.build.cpp");
   auto default_r = infer_build_system(dir.path());
   EXPECT_FALSE(default_r.has_value());
@@ -154,7 +154,7 @@ TEST(Subproject, InferenceRespectsCustomCppupBuildFile)
 
 TEST(Subproject, InferenceAmbiguityWithCustomBuildFile)
 {
-  TempDir dir;
+  TempDir const dir;
   dir.touch("cli.build.cpp");
   dir.touch("CMakeLists.txt");
   auto r = infer_build_system(dir.path(), "cli.build.cpp");

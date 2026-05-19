@@ -61,7 +61,7 @@ bool MakePackage::has_makefile(const std::filesystem::path& source_path) const
 std::expected<void, std::string> MakePackage::execute_make(
     const std::filesystem::path& source_path) const
 {
-  std::string make_command = get_make_command();
+  std::string const make_command = get_make_command();
 
   auto result = execute_command(make_command, source_path);
   if (!result)

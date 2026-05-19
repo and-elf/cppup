@@ -6,7 +6,7 @@ using namespace cppup::configuration;
 
 TEST(BuildConfiguration, DefaultConstructionLeavesContainersEmpty)
 {
-  BuildConfiguration config;
+  BuildConfiguration const config;
 
   EXPECT_FALSE(config.toolchain.has_value());
   EXPECT_TRUE(config.packages.empty());

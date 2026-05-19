@@ -84,7 +84,7 @@ std::expected<void, std::string> PackageManager::install_package(
     package.is_dev_dependency = false;
 
     // Create package directory
-    std::filesystem::path package_dir = packages_dir_ / name;
+    std::filesystem::path const package_dir = packages_dir_ / name;
     std::filesystem::create_directories(package_dir);
 
     notify_progress(name, 50, 100);
@@ -126,7 +126,7 @@ std::expected<void, std::string> PackageManager::remove_package(
     }
 
     // Remove package directory
-    std::filesystem::path package_dir = packages_dir_ / name;
+    std::filesystem::path const package_dir = packages_dir_ / name;
     if (std::filesystem::exists(package_dir))
     {
       std::filesystem::remove_all(package_dir);
@@ -183,8 +183,9 @@ std::expected<void, std::string> PackageManager::load_sources() noexcept
     }
 
     // Simple JSON parsing - in production would use proper JSON library
-    std::ifstream file(sources_config_);
-    std::string   content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    std::ifstream     file(sources_config_);
+    std::string const content((std::istreambuf_iterator<char>(file)),
+                              std::istreambuf_iterator<char>());
 
     // For now, just use default sources
     sources_ = default_sources::get_default_sources();

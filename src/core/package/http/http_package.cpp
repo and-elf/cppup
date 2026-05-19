@@ -42,9 +42,9 @@ std::expected<std::filesystem::path, std::string> HttpPackage::download_resource
   std::filesystem::create_directories(cache_path.parent_path());
 
   // Determine file extension from URL
-  std::string           url = info_.url.value();
-  std::filesystem::path url_path(url);
-  std::string           extension = url_path.extension().string();
+  std::string const           url = info_.url.value();
+  std::filesystem::path const url_path(url);
+  std::string const           extension = url_path.extension().string();
 
   auto download_path = cache_path.parent_path() / (info_.name + extension);
 

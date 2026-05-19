@@ -26,16 +26,16 @@ Library make_lib(std::string name, std::vector<Flag> link_flags = {},
 
 TEST(LinkResolution, EmptyRootsReturnsEmpty)
 {
-  std::vector<Library> all{make_lib("a")};
-  auto                 r = resolve_link_set({}, all);
+  std::vector<Library> const all{make_lib("a")};
+  auto                       r = resolve_link_set({}, all);
   ASSERT_TRUE(r.has_value());
   EXPECT_TRUE(r->empty());
 }
 
 TEST(LinkResolution, SingleRootNoDeps)
 {
-  std::vector<Library> all{make_lib("a")};
-  auto                 r = resolve_link_set({"a"}, all);
+  std::vector<Library> const all{make_lib("a")};
+  auto                       r = resolve_link_set({"a"}, all);
   ASSERT_TRUE(r.has_value());
   ASSERT_EQ(r->size(), 1U);
   EXPECT_EQ((*r)[0], "a");
@@ -43,7 +43,7 @@ TEST(LinkResolution, SingleRootNoDeps)
 
 TEST(LinkResolution, TransitiveClosurePreservesTopoOrder)
 {
-  std::vector<Library> all{
+  std::vector<Library> const all{
       make_lib("a", {}, {"b"}),
       make_lib("b", {}, {"c"}),
       make_lib("c"),
@@ -58,7 +58,7 @@ TEST(LinkResolution, TransitiveClosurePreservesTopoOrder)
 
 TEST(LinkResolution, SharedDepDeduplicated)
 {
-  std::vector<Library> all{
+  std::vector<Library> const all{
       make_lib("a", {}, {"c"}),
       make_lib("b", {}, {"c"}),
       make_lib("c"),
@@ -79,15 +79,15 @@ TEST(LinkResolution, SharedDepDeduplicated)
 
 TEST(LinkResolution, MissingLibraryIsError)
 {
-  std::vector<Library> all{make_lib("a", {}, {"nonexistent"})};
-  auto                 r = resolve_link_set({"a"}, all);
+  std::vector<Library> const all{make_lib("a", {}, {"nonexistent"})};
+  auto                       r = resolve_link_set({"a"}, all);
   ASSERT_FALSE(r.has_value());
   EXPECT_NE(r.error().find("nonexistent"), std::string::npos);
 }
 
 TEST(LinkResolution, CycleIsError)
 {
-  std::vector<Library> all{
+  std::vector<Library> const all{
       make_lib("a", {}, {"b"}),
       make_lib("b", {}, {"a"}),
   };
@@ -98,7 +98,7 @@ TEST(LinkResolution, CycleIsError)
 
 TEST(LinkResolution, AggregateLinkFlagsDedupesPreservingOrder)
 {
-  std::vector<Library> all{
+  std::vector<Library> const all{
       make_lib("a", {Flag{"-lsqlite3"}, Flag{"-lcrypto"}}, {"b"}),
       make_lib("b", {Flag{"-lsqlite3"}, Flag{"-ldl"}}),
   };

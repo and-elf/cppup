@@ -7,8 +7,8 @@ using namespace cppup::configuration;
 
 TEST(Binary, ConstructionFromVectorAndInitializerList)
 {
-  std::vector<std::string> sources1 = {"main.cpp", "utils.cpp"};
-  Binary                   bin1("myapp", sources1);
+  std::vector<std::string> const sources1 = {"main.cpp", "utils.cpp"};
+  Binary                         bin1("myapp", sources1);
   EXPECT_EQ(bin1.name, "myapp");
   ASSERT_EQ(bin1.sources.size(), 2U);
   EXPECT_EQ(bin1.sources[0], "main.cpp");
@@ -28,7 +28,7 @@ TEST(Binary, LibrariesFieldRetained)
   ASSERT_EQ(bin.libraries.size(), 1U);
   EXPECT_EQ(bin.libraries[0], "cppup_cli");
 
-  Binary bin2("myapp", {"main.cpp"});
+  Binary const bin2("myapp", {"main.cpp"});
   EXPECT_TRUE(bin2.libraries.empty());
 
   Binary bin3{.name = "tool", .sources = {"tool.cpp"}, .libraries = {"libA", "libB"}};
@@ -38,7 +38,7 @@ TEST(Binary, LibrariesFieldRetained)
 
 TEST(Library, DefaultStaticConstruction)
 {
-  Library lib1("mylib", {"lib.cpp", "utils.cpp"});
+  Library const lib1("mylib", {"lib.cpp", "utils.cpp"});
   EXPECT_EQ(lib1.name, "mylib");
   EXPECT_EQ(lib1.sources.size(), 2U);
   EXPECT_EQ(lib1.type, LibraryType::Static);
@@ -48,7 +48,7 @@ TEST(Library, DefaultStaticConstruction)
 
 TEST(Library, ExplicitSharedConstruction)
 {
-  Library lib2("mysharedlib", {"lib.cpp"}, LibraryType::Shared);
+  Library const lib2("mysharedlib", {"lib.cpp"}, LibraryType::Shared);
   EXPECT_EQ(lib2.name, "mysharedlib");
   EXPECT_EQ(lib2.sources.size(), 1U);
   EXPECT_EQ(lib2.type, LibraryType::Shared);
@@ -79,12 +79,12 @@ TEST(Library, LinkFlagsAndDependenciesRetained)
 
 TEST(TestOutput, ConstructionFromVectorAndInitializerList)
 {
-  std::vector<std::string>   test_sources = {"test_main.cpp", "test_utils.cpp"};
-  cppup::configuration::Test test1("unit_tests", test_sources);
+  std::vector<std::string> const   test_sources = {"test_main.cpp", "test_utils.cpp"};
+  cppup::configuration::Test const test1("unit_tests", test_sources);
   EXPECT_EQ(test1.name, "unit_tests");
   EXPECT_EQ(test1.sources.size(), 2U);
 
-  cppup::configuration::Test test2("integration_tests", {"test_integration.cpp"});
+  cppup::configuration::Test const test2("integration_tests", {"test_integration.cpp"});
   EXPECT_EQ(test2.name, "integration_tests");
   EXPECT_EQ(test2.sources.size(), 1U);
 }

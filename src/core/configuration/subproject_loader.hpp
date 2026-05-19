@@ -186,7 +186,7 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
 
   while (!worklist.empty())
   {
-    Entry entry = std::move(worklist.back());
+    Entry const entry = std::move(worklist.back());
     worklist.pop_back();
 
     const std::string sp_rel =

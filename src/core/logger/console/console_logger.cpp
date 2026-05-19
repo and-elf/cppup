@@ -25,7 +25,7 @@ void ConsoleLogger::setLogFile(std::string path)
 
 void ConsoleLogger::log(LogLevel level, std::string_view message) const
 {
-  std::scoped_lock lock(logMutex_);
+  std::scoped_lock const lock(logMutex_);
 
   LogLevel minLevel = globalConfig_.defaultLevel;
   if (auto it = globalConfig_.categoryOverrides.find(category_);

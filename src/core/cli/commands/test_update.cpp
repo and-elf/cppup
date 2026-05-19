@@ -46,8 +46,8 @@ fs::path make_tmp_root(std::string_view tag)
 
 std::string slurp(const fs::path& p)
 {
-  std::ifstream      in(p, std::ios::binary);
-  std::ostringstream os;
+  std::ifstream const in(p, std::ios::binary);
+  std::ostringstream  os;
   os << in.rdbuf();
   return os.str();
 }

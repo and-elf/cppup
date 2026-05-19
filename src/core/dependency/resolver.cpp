@@ -67,7 +67,7 @@ bool VersionConstraint::satisfies(const std::string& version) const noexcept
     return true;  // No constraint
   }
 
-  int comparison = DependencyResolver::compare_versions(version, this->version);
+  int const comparison = DependencyResolver::compare_versions(version, this->version);
 
   switch (type)
   {
@@ -162,7 +162,7 @@ std::expected<void, std::string> DependencyResolver::resolve_recursive(
       return std::unexpected("Cannot find suitable version for: " + requirement.name);
     }
 
-    std::string version                  = *version_result;
+    std::string const version            = *version_result;
     resolved_versions_[requirement.name] = version;
 
     // Get package info
@@ -302,8 +302,9 @@ bool DependencyResolver::is_prerelease(const std::string& version) noexcept
 std::expected<DependencyResolver::SemanticVersion, std::string>
 DependencyResolver::SemanticVersion::parse(const std::string& version)
 {
-  SemanticVersion sv;
-  std::regex  semver_regex(R"(^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9.-]+))?(?:\+([a-zA-Z0-9.-]+))?$)");
+  SemanticVersion  sv;
+  std::regex const semver_regex(
+      R"(^(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9.-]+))?(?:\+([a-zA-Z0-9.-]+))?$)");
   std::smatch match;
 
   if (!std::regex_match(version, match, semver_regex))
@@ -389,8 +390,8 @@ std::string normalize_version(const std::string& version) noexcept
     return "0.0.0";
   }
 
-  auto   parts = version;
-  size_t dots  = std::count(parts.begin(), parts.end(), '.');
+  auto         parts = version;
+  size_t const dots  = std::count(parts.begin(), parts.end(), '.');
 
   if (dots == 0)
   {

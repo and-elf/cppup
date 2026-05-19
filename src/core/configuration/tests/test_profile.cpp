@@ -6,7 +6,7 @@ using namespace cppup::configuration;
 
 TEST(Profile, DefaultConstructionLeavesFieldsEmpty)
 {
-  Profile profile("debug");
+  Profile const profile("debug");
   EXPECT_EQ(profile.name, "debug");
   EXPECT_TRUE(profile.packages.empty());
   EXPECT_TRUE(profile.compile_flags.empty());

@@ -17,6 +17,7 @@
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
 #include "build_options.hpp"
+#include "commands.hpp"
 #include "common.h"
 #include "embedded_configuration_header.hpp"
 #include "logger.hpp"
@@ -740,8 +741,8 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       bool needs_write = true;
       if (std::filesystem::exists(header_path))
       {
-        std::ifstream     in(header_path, std::ios::binary);
-        std::stringstream buf;
+        std::ifstream const in(header_path, std::ios::binary);
+        std::stringstream   buf;
         buf << in.rdbuf();
         if (buf.str() == kConfigurationHeader)
         {
@@ -889,8 +890,8 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
 
     if (!config.build_steps.empty())
     {
-      conf::BuildStepExecutor executor;
-      auto                    step_result = executor.execute_build_steps(config);
+      conf::BuildStepExecutor const executor;
+      auto                          step_result = executor.execute_build_steps(config);
       if (!step_result.success)
       {
         return std::unexpected("build step failed: " + step_result.error_message);

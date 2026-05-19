@@ -6,7 +6,7 @@ using namespace cppup::configuration;
 
 TEST(ValidationResult, DefaultIsValidWithNoErrorsOrWarnings)
 {
-  ValidationResult result;
+  ValidationResult const result;
   EXPECT_TRUE(result.is_valid);
   EXPECT_FALSE(result.has_errors());
   EXPECT_FALSE(result.has_warnings());
@@ -41,16 +41,16 @@ TEST(ValidationResult, AddWarningKeepsValidity)
 
 TEST(ConfigurationValidator, EmptyConfigurationIsValid)
 {
-  ConfigurationValidator validator;
-  BuildConfiguration     config;
-  auto                   result = validator.validate(config);
+  ConfigurationValidator const validator;
+  BuildConfiguration const     config;
+  auto                         result = validator.validate(config);
   EXPECT_TRUE(result.is_valid);
 }
 
 TEST(ConfigurationValidator, EmptyBuildStepNameIsInvalid)
 {
-  ConfigurationValidator validator;
-  BuildConfiguration     config;
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
   config.build_steps.emplace_back("", []() {});
 
   auto result = validator.validate(config);

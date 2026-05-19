@@ -40,8 +40,9 @@ bool download_file(const CommandExecutor& executor, const std::string& url,
       execute_command_with_output(executor, "curl --version", destination.parent_path());
   if (curl_result && curl_result.value().find("curl") != std::string::npos)
   {
-    std::string download_command = "curl -L -o \"" + destination.string() + "\" \"" + url + "\"";
-    auto        result = execute_command(executor, download_command, destination.parent_path());
+    std::string const download_command =
+        "curl -L -o \"" + destination.string() + "\" \"" + url + "\"";
+    auto result = execute_command(executor, download_command, destination.parent_path());
     return result.has_value() && std::filesystem::exists(destination);
   }
 
@@ -50,8 +51,8 @@ bool download_file(const CommandExecutor& executor, const std::string& url,
       execute_command_with_output(executor, "wget --version", destination.parent_path());
   if (wget_result && wget_result.value().find("wget") != std::string::npos)
   {
-    std::string download_command = "wget -O \"" + destination.string() + "\" \"" + url + "\"";
-    auto        result = execute_command(executor, download_command, destination.parent_path());
+    std::string const download_command = "wget -O \"" + destination.string() + "\" \"" + url + "\"";
+    auto result = execute_command(executor, download_command, destination.parent_path());
     return result.has_value() && std::filesystem::exists(destination);
   }
 
@@ -63,8 +64,8 @@ bool extract_archive(const CommandExecutor& executor, const std::filesystem::pat
 {
   std::filesystem::create_directories(destination);
 
-  std::string extension = archive_path.extension().string();
-  std::string extract_command;
+  std::string const extension = archive_path.extension().string();
+  std::string       extract_command;
 
   if (extension == ".tar" || extension == ".gz" || extension == ".tgz")
   {

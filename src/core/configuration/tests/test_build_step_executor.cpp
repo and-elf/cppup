@@ -24,7 +24,7 @@ TEST(BuildStepStatus, ResultStateTransitions)
 
 TEST(BuildStepStatus, ExecutionResultDefaults)
 {
-  BuildStepExecutionResult result;
+  BuildStepExecutionResult const result;
   EXPECT_FALSE(result.is_success());
   EXPECT_TRUE(result.is_failure());
   EXPECT_TRUE(result.step_results.empty());
@@ -32,16 +32,16 @@ TEST(BuildStepStatus, ExecutionResultDefaults)
 
 TEST(BuildStepExecutor, ExecuteEmptyConfiguration)
 {
-  BuildStepExecutor  executor;
-  BuildConfiguration config;
-  auto               result = executor.execute_build_steps(config);
+  BuildStepExecutor const  executor;
+  BuildConfiguration const config;
+  auto                     result = executor.execute_build_steps(config);
   EXPECT_TRUE(result.is_success());
   EXPECT_TRUE(result.step_results.empty());
 }
 
 TEST(BuildStepExecutor, ExecuteSequentialSteps)
 {
-  BuildStepExecutor executor;
+  BuildStepExecutor const executor;
 
   std::atomic<int>   counter{0};
   BuildConfiguration config;

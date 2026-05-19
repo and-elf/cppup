@@ -16,7 +16,7 @@ class SystemProcessRunner : public ProcessRunner
   {
     namespace fs = std::filesystem;
 
-    fs::path oldCwd = fs::current_path();
+    fs::path const oldCwd = fs::current_path();
     fs::current_path(workingDir);
 
     std::ostringstream oss;
@@ -26,7 +26,7 @@ class SystemProcessRunner : public ProcessRunner
       oss << " " << arg;
     }
 
-    int ret = std::system(oss.str().c_str());
+    int const ret = std::system(oss.str().c_str());
 
     fs::current_path(oldCwd);
 

@@ -79,8 +79,8 @@ std::expected<std::filesystem::path, std::string> GitPackage::clone_repository()
 std::expected<void, std::string> GitPackage::checkout_commit(
     const std::filesystem::path& repo_path) const
 {
-  std::string checkout_command = "git checkout " + info_.git_commit.value();
-  auto        result = utils::execute_command(*command_executor_, checkout_command, repo_path);
+  std::string const checkout_command = "git checkout " + info_.git_commit.value();
+  auto result = utils::execute_command(*command_executor_, checkout_command, repo_path);
   if (!result)
   {
     return std::unexpected("Git checkout failed: " + result.error());

@@ -53,8 +53,8 @@ std::optional<ResolvedPackage> PackageResolver::resolve_single_package(
     return std::nullopt;
   }
 
-  auto        resolved    = package_info.value();
-  std::string package_key = make_package_key(resolved.name, resolved.version);
+  auto              resolved    = package_info.value();
+  std::string const package_key = make_package_key(resolved.name, resolved.version);
 
   // Check if we've already resolved this package (prevent cycles)
   if (resolved_packages.contains(package_key))
