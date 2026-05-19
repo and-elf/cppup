@@ -33,8 +33,9 @@ fs::path find_include_dir()
   }
   // Search upwards for an `include/cppup/configuration.hpp` marker so the test
   // works whether invoked from project root, build/, or src/core/configuration/tests/.
-  for (auto candidate = fs::current_path(); !candidate.empty() && candidate != candidate.root_path();
-       candidate      = candidate.parent_path())
+  for (auto candidate = fs::current_path();
+       !candidate.empty() && candidate != candidate.root_path();
+       candidate = candidate.parent_path())
   {
     if (fs::exists(candidate / "include" / "cppup" / "configuration.hpp"))
     {

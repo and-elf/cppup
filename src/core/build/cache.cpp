@@ -80,7 +80,10 @@ std::string serialize_string_vector(const std::vector<std::string>& v)
   std::ostringstream oss;
   for (std::size_t i = 0; i < v.size(); ++i)
   {
-    if (i > 0) oss << '\x1f';
+    if (i > 0)
+    {
+      oss << '\x1f';
+    }
     oss << v[i];
   }
   return oss.str();
@@ -93,8 +96,14 @@ std::string target_signature(const BuildTarget& target)
       << serialize_string_vector(target.compile_flags) << '\x1e'
       << serialize_string_vector(target.link_flags) << '\x1e'
       << serialize_string_vector(target.definitions);
-  for (const auto& p : target.include_paths) oss << '\x1f' << p.string();
-  for (const auto& p : target.source_files) oss << '\x1f' << p.string();
+  for (const auto& p : target.include_paths)
+  {
+    oss << '\x1f' << p.string();
+  }
+  for (const auto& p : target.source_files)
+  {
+    oss << '\x1f' << p.string();
+  }
   return oss.str();
 }
 
@@ -108,7 +117,10 @@ class SqliteBuildCache final : public BuildCache
 
   ~SqliteBuildCache() override
   {
-    if (db_) sqlite3_close(db_);
+    if (db_)
+    {
+      sqlite3_close(db_);
+    }
   }
 
   std::expected<bool, std::string> needs_rebuild(const BuildTarget& target) override
@@ -218,8 +230,8 @@ class SqliteBuildCache final : public BuildCache
       return std::unexpected(std::string{"prepare file_dependencies failed: "} +
                              sqlite3_errmsg(db_));
     }
-    const auto bind_and_step = [&](const std::string& path, const std::string& checksum)
-        -> std::expected<void, std::string>
+    const auto bind_and_step = [&](const std::string& path,
+                                   const std::string& checksum) -> std::expected<void, std::string>
     {
       sqlite3_reset(dep_stmt);
       sqlite3_bind_text(dep_stmt, 1, target.name.c_str(), -1, SQLITE_TRANSIENT);
@@ -259,7 +271,9 @@ class SqliteBuildCache final : public BuildCache
         if (auto r = bind_and_step(include_path.string(), *include_checksum); !r)
         {
           sqlite3_finalize(dep_stmt);
-          if (auto rb = exec("ROLLBACK"); !rb) { /* best effort */ }
+          if (auto rb = exec("ROLLBACK"); !rb)
+          { /* best effort */
+          }
           return std::unexpected(r.error());
         }
       }
@@ -314,7 +328,10 @@ class SqliteBuildCache final : public BuildCache
   {
     const char*   sql  = "SELECT file_path, checksum FROM file_dependencies WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK) return std::nullopt;
+    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    {
+      return std::nullopt;
+    }
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::vector<FileDependency> deps;
     while (sqlite3_step(stmt) == SQLITE_ROW)
@@ -448,7 +465,10 @@ std::expected<std::unique_ptr<BuildCache>, std::string> create_build_cache(
   }
 
   auto db_handle = open_cache_db(cache_dir / "build_cache.db");
-  if (!db_handle) return std::unexpected(db_handle.error());
+  if (!db_handle)
+  {
+    return std::unexpected(db_handle.error());
+  }
 
   return std::unique_ptr<BuildCache>(new SqliteBuildCache(*db_handle, std::move(db)));
 }

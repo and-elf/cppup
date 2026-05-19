@@ -6,17 +6,9 @@
  */
 
 #include "build_configuration.hpp"
-#include "compiler.hpp"
-#include "loader.hpp"
 #include "outputs.hpp"
-#include "package_resolver.hpp"
-#include "platform.hpp"
 #include "profile.hpp"
-#include "profile_processor.hpp"
-#include "runtime.hpp"
-#include "toolchain_resolver.hpp"
 #include "types.hpp"
-#include "validation.hpp"
 
 namespace cppup::configuration
 {
@@ -34,6 +26,3 @@ using BuildStep          = BuildStep;
 using Profile            = Profile;
 using BuildConfiguration = BuildConfiguration;
 }  // namespace cppup::configuration
-
-// Convenience namespace alias
-namespace cppup_config = cppup::configuration;

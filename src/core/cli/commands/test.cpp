@@ -97,10 +97,10 @@ CoverageSummary parse_gcov_summary(const std::string& gcov_output)
     }
     try
     {
-      const double      pct       = std::stod(line.substr(pct_start, pct_end - pct_start));
-      const std::size_t total     = std::stoul(line.substr(of_pos + 4));
-      const auto        executed  = static_cast<std::size_t>(
-          (pct * static_cast<double>(total) / 100.0) + 0.5);
+      const double      pct   = std::stod(line.substr(pct_start, pct_end - pct_start));
+      const std::size_t total = std::stoul(line.substr(of_pos + 4));
+      const auto        executed =
+          static_cast<std::size_t>((pct * static_cast<double>(total) / 100.0) + 0.5);
       weighted_executed += executed;
       weighted_total += total;
       ++s.files_seen;

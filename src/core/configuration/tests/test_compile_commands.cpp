@@ -111,7 +111,7 @@ TEST(CompileCommands, ToolchainCompilerUsed)
   BuildConfiguration default_config;
   default_config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
   auto default_root = make_tmp_dir("toolchain_default");
-  auto r2 = emit_compile_commands(default_config, default_root, default_root / "build");
+  auto r2           = emit_compile_commands(default_config, default_root, default_root / "build");
   ASSERT_TRUE(r2.has_value());
   auto json2 = slurp(*r2);
   EXPECT_TRUE(contains(json2, "\"g++\""));

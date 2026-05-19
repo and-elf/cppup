@@ -29,20 +29,20 @@ class BuildStepStatusTracker
 
   void set_status(size_t index, BuildStepStatus status)
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     statuses_[index] = status;
     cv_.notify_all();
   }
 
   BuildStepStatus get_status(size_t index) const
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     return statuses_[index];
   }
 
   bool are_dependencies_complete(const std::vector<size_t>& dependency_indices) const
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     return std::all_of(dependency_indices.begin(), dependency_indices.end(),
                        [this](size_t idx) { return statuses_[idx] == BuildStepStatus::Completed; });
   }
@@ -179,7 +179,7 @@ void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatu
     tracker.set_status(step_index, BuildStepStatus::Completed);
 
     // Update result
-    std::lock_guard lock(results_mutex);
+    std::scoped_lock lock(results_mutex);
     results[step_index].status = BuildStepStatus::Completed;
   }
   catch (const std::exception& e)
@@ -188,7 +188,7 @@ void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatu
     tracker.set_status(step_index, BuildStepStatus::Failed);
 
     // Update result with error
-    std::lock_guard lock(results_mutex);
+    std::scoped_lock lock(results_mutex);
     results[step_index].status        = BuildStepStatus::Failed;
     results[step_index].error_message = e.what();
   }
@@ -257,7 +257,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
 
   // Start with steps that have no dependencies
   {
-    std::lock_guard lock(queue_mutex);
+    std::scoped_lock lock(queue_mutex);
     for (size_t i = 0; i < steps.size(); ++i)
     {
       if (remaining_deps[i] == 0)
@@ -308,7 +308,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
       {
         if (--remaining_deps[dependent] == 0)
         {
-          std::lock_guard lock(queue_mutex);
+          std::scoped_lock lock(queue_mutex);
           ready_queue.push(dependent);
           queue_cv.notify_one();
         }

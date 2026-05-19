@@ -131,8 +131,7 @@ bool path_env_contains_dir(std::string_view path_env_value, std::string_view dir
 // (excludes drafts and prereleases) and returns its tag_name.
 std::expected<std::string, std::string> default_fetch_latest_version()
 {
-  const std::string url =
-      "https://api.github.com/repos/" + release_repo() + "/releases/latest";
+  const std::string url  = "https://api.github.com/repos/" + release_repo() + "/releases/latest";
   const std::string cmd  = std::string{"curl -fsSL "} + "'" + url + "' 2>/dev/null";
   const auto        body = capture(cmd);
   if (body.empty())
@@ -372,8 +371,9 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
     // GitHub release assets live at /releases/download/<tag>/<asset_name>.
     // sha256 lives at the same path with a .sha256 suffix (matches the
     // workflow that publishes the release).
-    const std::string artifact_url = "https://github.com/" + release_repo() + "/releases/download/" +
-                                     target_version + "/" + artifact_name_for(*platform);
+    const std::string artifact_url = "https://github.com/" + release_repo() +
+                                     "/releases/download/" + target_version + "/" +
+                                     artifact_name_for(*platform);
 
     const auto staged = make_temp_download_path();
     auto       dl     = default_download(artifact_url, staged);

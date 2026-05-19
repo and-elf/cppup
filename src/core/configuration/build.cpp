@@ -1,6 +1,5 @@
-#include <string>
-
 #include <cppup/configuration.hpp>
+#include <string>
 
 using namespace cppup::configuration;
 

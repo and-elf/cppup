@@ -121,8 +121,8 @@ struct CleanOptions
   CleanScope scope = CleanScope::Build;
 };
 
-[[nodiscard]] std::expected<int, std::string> executeClean(
-    CleanOptions options, const CommandContext& context) noexcept;
+[[nodiscard]] std::expected<int, std::string> executeClean(CleanOptions          options,
+                                                           const CommandContext& context) noexcept;
 
 // Package commands
 [[nodiscard]] std::expected<int, std::string> executePackageList(

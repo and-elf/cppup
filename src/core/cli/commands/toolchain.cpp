@@ -84,21 +84,21 @@ std::expected<int, std::string> executeToolchainAdd(const ToolchainAddOptions& o
     // Create toolchain configuration
     std::ofstream config(toolchain_dir / "config.json");
     config << "{\n";
-    config << "  \"name\": \"" << options.name << "\",\n";
+    config << R"(  "name": ")" << options.name << "\",\n";
     if (options.version)
     {
-      config << "  \"version\": \"" << *options.version << "\",\n";
+      config << R"(  "version": ")" << *options.version << "\",\n";
     }
     if (options.url)
     {
-      config << "  \"url\": \"" << *options.url << "\",\n";
+      config << R"(  "url": ")" << *options.url << "\",\n";
     }
     if (options.dir)
     {
-      config << "  \"directory\": \"" << *options.dir << "\",\n";
+      config << R"(  "directory": ")" << *options.dir << "\",\n";
     }
-    config << "  \"compiler\": \"" << options.name << "\",\n";
-    config << "  \"linker\": \"" << options.name << "\"\n";
+    config << R"(  "compiler": ")" << options.name << "\",\n";
+    config << R"(  "linker": ")" << options.name << "\"\n";
     config << "}\n";
 
     context.logger->info("Toolchain added successfully");

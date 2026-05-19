@@ -178,7 +178,10 @@ void CMakePackage::setup_build_flags(const std::filesystem::path& source_path,
   link_flags_.clear();
   for (const auto& lib_path : library_paths_)
   {
-    if (!std::filesystem::exists(lib_path)) continue;
+    if (!std::filesystem::exists(lib_path))
+    {
+      continue;
+    }
 
     for (const auto& entry : std::filesystem::recursive_directory_iterator(lib_path))
     {

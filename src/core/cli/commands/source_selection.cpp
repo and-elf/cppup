@@ -15,7 +15,10 @@ namespace
 bool path_is_under(const std::filesystem::path& candidate, const std::filesystem::path& root)
 {
   auto rel = std::filesystem::relative(candidate, root);
-  if (rel.empty()) return false;
+  if (rel.empty())
+  {
+    return false;
+  }
   const auto first = rel.begin();
   return first != rel.end() && first->string() != "..";
 }
@@ -54,8 +57,14 @@ std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& r
 
   for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
   {
-    if (!entry.is_regular_file()) continue;
-    if (is_excluded_path(std::filesystem::relative(entry.path(), root))) continue;
+    if (!entry.is_regular_file())
+    {
+      continue;
+    }
+    if (is_excluded_path(std::filesystem::relative(entry.path(), root)))
+    {
+      continue;
+    }
     if (is_cpp_source_extension(entry.path().extension().string()))
     {
       files.push_back(entry.path());
@@ -80,19 +89,28 @@ std::vector<std::filesystem::path> select_cpp_files(
 
   if (args.empty())
   {
-    for (auto& f : find_cpp_files(project_root)) push(std::move(f));
+    for (auto& f : find_cpp_files(project_root))
+    {
+      push(std::move(f));
+    }
   }
   else
   {
     for (const auto& arg : args)
     {
       std::filesystem::path p = arg;
-      if (!p.is_absolute()) p = project_root / p;
+      if (!p.is_absolute())
+      {
+        p = project_root / p;
+      }
 
       std::error_code ec;
       if (!std::filesystem::exists(p, ec))
       {
-        if (skipped_missing != nullptr) skipped_missing->push_back(p);
+        if (skipped_missing != nullptr)
+        {
+          skipped_missing->push_back(p);
+        }
         continue;
       }
       if (std::filesystem::is_directory(p, ec))
@@ -102,10 +120,16 @@ std::vector<std::filesystem::path> select_cpp_files(
         // recurse only inside it.
         for (const auto& entry : std::filesystem::recursive_directory_iterator(p))
         {
-          if (!entry.is_regular_file()) continue;
+          if (!entry.is_regular_file())
+          {
+            continue;
+          }
           const auto rel = std::filesystem::relative(
               entry.path(), path_is_under(p, project_root) || p == project_root ? project_root : p);
-          if (is_excluded_path(rel)) continue;
+          if (is_excluded_path(rel))
+          {
+            continue;
+          }
           if (is_cpp_source_extension(entry.path().extension().string()))
           {
             push(entry.path());

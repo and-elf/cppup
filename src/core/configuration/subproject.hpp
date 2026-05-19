@@ -30,9 +30,9 @@ enum class BuildSystem : std::uint8_t
  */
 struct Subproject
 {
-  std::string                path;                      // relative to the parent build.cpp
-  std::optional<BuildSystem> build_system = {};         // nullopt = infer from `path`
-  std::vector<std::string>   build_args   = {};         // forwarded to CMake/Make invocations
+  std::string                path;                        // relative to the parent build.cpp
+  std::optional<BuildSystem> build_system = {};           // nullopt = infer from `path`
+  std::vector<std::string>   build_args   = {};           // forwarded to CMake/Make invocations
   std::string                build_file   = "build.cpp";  // Cppup config file name
 };
 

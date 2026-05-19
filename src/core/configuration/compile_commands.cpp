@@ -113,12 +113,15 @@ void emit_entry(std::ostringstream& os, bool& first, const std::string& compiler
                 const std::filesystem::path& project_root, const std::filesystem::path& source,
                 const std::vector<std::string>& flags)
 {
-  if (!first) os << ",\n";
+  if (!first)
+  {
+    os << ",\n";
+  }
   first = false;
 
   os << "  {\n";
-  os << "    \"directory\": \"" << json_escape(project_root.string()) << "\",\n";
-  os << "    \"file\": \"" << json_escape(source.string()) << "\",\n";
+  os << R"(    "directory": ")" << json_escape(project_root.string()) << "\",\n";
+  os << R"(    "file": ")" << json_escape(source.string()) << "\",\n";
   os << "    \"arguments\": [";
   os << "\"" << json_escape(compiler) << "\"";
   os << ", \"-c\"";
@@ -135,7 +138,7 @@ void emit_entry(std::ostringstream& os, bool& first, const std::string& compiler
 
 std::expected<std::filesystem::path, std::string> emit_compile_commands(
     const BuildConfiguration& config, const std::filesystem::path& project_root,
-    const std::filesystem::path& /*build_dir*/, BuildOptions options) noexcept
+    const std::filesystem::path& /*build_dir*/, BuildOptions       options) noexcept
 {
   try
   {
@@ -156,9 +159,18 @@ std::expected<std::filesystem::path, std::string> emit_compile_commands(
       }
     };
 
-    for (const auto& lib : config.libraries) emit_sources(lib.sources);
-    for (const auto& bin : config.binaries) emit_sources(bin.sources);
-    for (const auto& t : config.tests) emit_sources(t.sources);
+    for (const auto& lib : config.libraries)
+    {
+      emit_sources(lib.sources);
+    }
+    for (const auto& bin : config.binaries)
+    {
+      emit_sources(bin.sources);
+    }
+    for (const auto& t : config.tests)
+    {
+      emit_sources(t.sources);
+    }
 
     os << "\n]\n";
 

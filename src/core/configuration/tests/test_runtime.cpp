@@ -120,13 +120,13 @@ TEST(Runtime, HasAllAndAnyFeatures)
   config.features.insert("threading");
   config.features.insert("networking");
 
-  const std::vector<std::string> ot       = {"openssl", "threading"};
-  const std::vector<std::string> otn      = {"openssl", "threading", "networking"};
-  const std::vector<std::string> on       = {"openssl", "nonexistent"};
-  const std::vector<std::string> nn       = {"nonexistent1", "nonexistent2"};
-  const std::vector<std::string> empty    = {};
-  const std::vector<std::string> on2      = {"openssl", "nonexistent"};
-  const std::vector<std::string> nt       = {"nonexistent", "threading"};
+  const std::vector<std::string> ot    = {"openssl", "threading"};
+  const std::vector<std::string> otn   = {"openssl", "threading", "networking"};
+  const std::vector<std::string> on    = {"openssl", "nonexistent"};
+  const std::vector<std::string> nn    = {"nonexistent1", "nonexistent2"};
+  const std::vector<std::string> empty = {};
+  const std::vector<std::string> on2   = {"openssl", "nonexistent"};
+  const std::vector<std::string> nt    = {"nonexistent", "threading"};
 
   EXPECT_TRUE(has_all_features(config, ot));
   EXPECT_TRUE(has_all_features(config, otn));

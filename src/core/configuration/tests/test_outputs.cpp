@@ -79,8 +79,8 @@ TEST(Library, LinkFlagsAndDependenciesRetained)
 
 TEST(TestOutput, ConstructionFromVectorAndInitializerList)
 {
-  std::vector<std::string>     test_sources = {"test_main.cpp", "test_utils.cpp"};
-  cppup::configuration::Test   test1("unit_tests", test_sources);
+  std::vector<std::string>   test_sources = {"test_main.cpp", "test_utils.cpp"};
+  cppup::configuration::Test test1("unit_tests", test_sources);
   EXPECT_EQ(test1.name, "unit_tests");
   EXPECT_EQ(test1.sources.size(), 2U);
 

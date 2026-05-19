@@ -325,8 +325,8 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   }
 #endif
 
-  const auto opts_from = [](bool asan, bool coverage, bool verbose = false, bool with_tests = false,
-                            unsigned jobs = 0)
+  const auto opts_from =
+      [](bool asan, bool coverage, bool verbose = false, bool with_tests = false, unsigned jobs = 0)
   {
     return BuildOptions{.asan       = asan ? Asan::On : Asan::Off,
                         .coverage   = coverage ? Coverage::On : Coverage::Off,
@@ -341,11 +341,10 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     {
       context_.logger->set_verbose(true);
     }
-    return handleExpectedResult(
-        executeBuild(opts_from(build_asan, build_coverage, build_verbose, build_with_tests,
-                               build_jobs),
-                     context_),
-        "Build", ErrorHandler::ErrorCode::BuildFailure);
+    return handleExpectedResult(executeBuild(opts_from(build_asan, build_coverage, build_verbose,
+                                                       build_with_tests, build_jobs),
+                                             context_),
+                                "Build", ErrorHandler::ErrorCode::BuildFailure);
   }
 
 #ifndef CPPUP_SLIM

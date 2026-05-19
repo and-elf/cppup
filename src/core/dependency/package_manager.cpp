@@ -208,11 +208,14 @@ std::expected<void, std::string> PackageManager::save_sources() noexcept
     for (size_t i = 0; i < sources_.size(); ++i)
     {
       const auto& source = sources_[i];
-      if (i > 0) file << ",\n";
+      if (i > 0)
+      {
+        file << ",\n";
+      }
       file << "    {\n";
-      file << "      \"name\": \"" << source.name << "\",\n";
-      file << "      \"url\": \"" << source.url << "\",\n";
-      file << "      \"type\": \"" << source.type << "\",\n";
+      file << R"(      "name": ")" << source.name << "\",\n";
+      file << R"(      "url": ")" << source.url << "\",\n";
+      file << R"(      "type": ")" << source.type << "\",\n";
       file << "      \"enabled\": " << (source.enabled ? "true" : "false") << "\n";
       file << "    }";
     }
@@ -231,7 +234,10 @@ std::expected<void, std::string> PackageManager::save_sources() noexcept
 bool PackageManager::is_package_installed(const std::string& name,
                                           const std::string& version) const noexcept
 {
-  if (!database_) return false;
+  if (!database_)
+  {
+    return false;
+  }
 
   auto result = database_->is_package_installed(name, version.empty() ? "1.0.0" : version);
   return result.value_or(false);

@@ -12,16 +12,16 @@ std::expected<std::filesystem::path, std::string> MakePackage::resolve_source() 
 {
   switch (info().source_type)
   {
-    case SourceType::GIT:
-      return resolve_git_source();
-    case SourceType::DIRECTORY:
+    case configuration::SourceType::GIT:
+      return resolve_source();
+    case configuration::SourceType::DIRECTORY:
       return resolve_directory_source();
-    case SourceType::TAR:
-    case SourceType::ZIP:
+    case configuration::SourceType::TAR:
+    case configuration::SourceType::ZIP:
       return resolve_archive_source();
-    case SourceType::HTTP:
-      return resolve_http_source();
-    case SourceType::REGISTRY:
+    case configuration::SourceType::HTTP:
+      return resolve_source();
+    case configuration::SourceType::REGISTRY:
       return std::unexpected("Registry packages not supported by make build system");
     default:
       return std::unexpected("Unknown source type");
@@ -109,7 +109,10 @@ void MakePackage::setup_build_flags(const std::filesystem::path& source_path) co
   std::vector<std::string> libraries;
   for (const auto& lib_path : library_paths)
   {
-    if (!std::filesystem::exists(lib_path)) continue;
+    if (!std::filesystem::exists(lib_path))
+    {
+      continue;
+    }
 
     for (const auto& entry : std::filesystem::directory_iterator(lib_path))
     {

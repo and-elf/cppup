@@ -8,7 +8,7 @@
 #include "../dependency/database.hpp"
 #include "cache.hpp"
 
-namespace fs  = std::filesystem;
+namespace fs = std::filesystem;
 using namespace cppup::build;
 
 namespace
@@ -36,12 +36,12 @@ void write_text(const fs::path& p, std::string_view content)
 // DependencyScanner::scan_includes; we mirror that here for test setup.
 struct Layout
 {
-  fs::path                root;
-  fs::path                cache_dir;
-  fs::path                source;
-  fs::path                header;
-  fs::path                output;
-  BuildTarget             target;
+  fs::path                    root;
+  fs::path                    cache_dir;
+  fs::path                    source;
+  fs::path                    header;
+  fs::path                    output;
+  BuildTarget                 target;
   std::vector<FileDependency> deps;
 };
 
@@ -59,10 +59,10 @@ Layout make_layout(std::string_view tag)
   fs::create_directories(L.output.parent_path());
   write_text(L.output, "fake-binary");
 
-  L.target.name         = "app";
-  L.target.type         = "binary";
-  L.target.output_path  = L.output;
-  L.target.source_files = {L.source};
+  L.target.name          = "app";
+  L.target.type          = "binary";
+  L.target.output_path   = L.output;
+  L.target.source_files  = {L.source};
   L.target.include_paths = {L.root / "include"};
 
   FileDependency dep;
@@ -157,7 +157,7 @@ TEST(BuildCache, MissWhenHeaderDeleted)
 
 TEST(BuildCache, HitAfterRevertingHeaderContent)
 {
-  auto L                 = make_layout("hdr_revert");
+  auto       L            = make_layout("hdr_revert");
   const auto original_hpp = std::string{"#pragma once\nstatic constexpr int kAnswer = 42;\n"};
 
   auto cache = create_build_cache(L.cache_dir);

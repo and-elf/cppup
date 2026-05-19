@@ -35,13 +35,22 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
 {
   if (config.toolchain)
   {
-    for (auto& f : conf::dialect_flags(*config.toolchain)) out.emplace_back(std::move(f));
+    for (auto& f : conf::dialect_flags(*config.toolchain))
+    {
+      out.emplace_back(std::move(f));
+    }
   }
-  for (const auto& flag : config.compile_flags) out.emplace_back(flag.flag);
+  for (const auto& flag : config.compile_flags)
+  {
+    out.emplace_back(flag.flag);
+  }
   for (const auto& def : config.definitions)
   {
     std::string d = "-D" + std::string(def.name);
-    if (!def.value.empty()) d += "=" + std::string(def.value);
+    if (!def.value.empty())
+    {
+      d += "=" + std::string(def.value);
+    }
     out.push_back(std::move(d));
   }
   for (const auto& inc : config.include_paths)
@@ -64,16 +73,25 @@ std::vector<bld::FileDependency> collect_dependencies(
     const std::vector<std::filesystem::path>& include_paths)
 {
   std::vector<bld::FileDependency> deps;
-  if (!cache) return deps;
+  if (!cache)
+  {
+    return deps;
+  }
 
   for (const auto& source : sources)
   {
-    if (!std::filesystem::exists(source)) continue;
+    if (!std::filesystem::exists(source))
+    {
+      continue;
+    }
     bld::FileDependency dep;
     dep.file_path     = source;
     dep.last_modified = std::filesystem::last_write_time(source);
     auto checksum     = cache->calculate_file_checksum(source);
-    if (checksum) dep.checksum = *checksum;
+    if (checksum)
+    {
+      dep.checksum = *checksum;
+    }
 
     auto includes = bld::DependencyScanner::scan_includes(source);
     if (includes)
@@ -126,8 +144,8 @@ struct ProgressReporter
     {
       return;
     }
-    const auto                        n = done.fetch_add(1, std::memory_order_relaxed) + 1;
-    const std::lock_guard<std::mutex> lk(print_mu);
+    const auto             n = done.fetch_add(1, std::memory_order_relaxed) + 1;
+    const std::scoped_lock lk(print_mu);
     std::print("[{:>{}}/{}] {} {}\n", n, width, total, action, name);
   }
 };
@@ -140,7 +158,10 @@ template <typename Item, typename Work>
 std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items, unsigned jobs,
                                                  Work work)
 {
-  if (items.empty()) return {};
+  if (items.empty())
+  {
+    return {};
+  }
 
   unsigned worker_count = jobs != 0U ? jobs : std::max(1U, std::thread::hardware_concurrency());
   worker_count          = static_cast<unsigned>(std::min<std::size_t>(worker_count, items.size()));
@@ -162,7 +183,7 @@ std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items,
       auto r = work(items[i]);
       if (!r)
       {
-        const std::lock_guard<std::mutex> lk(err_mu);
+        const std::scoped_lock lk(err_mu);
         if (!aborted.exchange(true))
         {
           first_err = r.error();
@@ -178,7 +199,10 @@ std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items,
   {
     threads.emplace_back(worker);
   }
-  for (auto& th : threads) th.join();
+  for (auto& th : threads)
+  {
+    th.join();
+  }
 
   if (aborted.load())
   {
@@ -224,15 +248,18 @@ std::expected<void, std::string> compile_objects_parallel(const std::string&    
       const auto&        t = tasks[i];
       std::ostringstream cmd;
       cmd << compiler << " -c";
-      for (const auto& f : flags) cmd << ' ' << f;
+      for (const auto& f : flags)
+      {
+        cmd << ' ' << f;
+      }
       cmd << ' ' << t.source.string() << " -o " << t.object.string();
       {
-        const std::lock_guard<std::mutex> lk(log_mu);
+        const std::scoped_lock lk(log_mu);
         logger.debug("compile: " + cmd.str());
       }
       if (std::system(cmd.str().c_str()) != 0)
       {
-        const std::lock_guard<std::mutex> lk(err_mu);
+        const std::scoped_lock lk(err_mu);
         if (!aborted.exchange(true))
         {
           first_err = "compilation failed: " + t.source.string();
@@ -318,7 +345,10 @@ std::expected<std::filesystem::path, std::string> build_library(
 
   std::ostringstream ar_cmd;
   ar_cmd << "ar rcs " << target.output_path.string();
-  for (const auto& obj : objects) ar_cmd << ' ' << obj.string();
+  for (const auto& obj : objects)
+  {
+    ar_cmd << ' ' << obj.string();
+  }
   logger.debug("archive: " + ar_cmd.str());
   if (std::system(ar_cmd.str().c_str()) != 0)
   {
@@ -653,10 +683,9 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config,
       {
         test_link_flag_strings.emplace_back(f.flag);
       }
-      total +=
-          contribution(plan_executable_target("test", test.name, test.sources, config,
-                                              test.libraries, project_root, build_dir, options,
-                                              test_link_flag_strings, tests_dir));
+      total += contribution(plan_executable_target("test", test.name, test.sources, config,
+                                                   test.libraries, project_root, build_dir, options,
+                                                   test_link_flag_strings, tests_dir));
     }
   }
   return total;
@@ -828,28 +857,28 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       }
 
       std::atomic<std::size_t> test_cached{0};
-      if (auto r = run_in_parallel(
-              config.tests, options.jobs,
-              [&](const conf::Test& test) -> std::expected<void, std::string>
-              {
-                std::vector<std::string> test_link_flag_strings;
-                test_link_flag_strings.reserve(test.link_flags.size());
-                for (const auto& f : test.link_flags)
-                {
-                  test_link_flag_strings.emplace_back(f.flag);
-                }
-                std::size_t local_cached = 0;
-                auto        rr           = build_executable(
-                    "test", test.name, test.sources, config, test.libraries, context.projectRoot,
-                    build_dir, cache.get(), inner_opts, logger, local_cached, progress,
-                    test_link_flag_strings, tests_dir);
-                if (!rr)
-                {
-                  return std::unexpected(rr.error());
-                }
-                test_cached.fetch_add(local_cached, std::memory_order_relaxed);
-                return {};
-              });
+      if (auto r = run_in_parallel(config.tests, options.jobs,
+                                   [&](const conf::Test& test) -> std::expected<void, std::string>
+                                   {
+                                     std::vector<std::string> test_link_flag_strings;
+                                     test_link_flag_strings.reserve(test.link_flags.size());
+                                     for (const auto& f : test.link_flags)
+                                     {
+                                       test_link_flag_strings.emplace_back(f.flag);
+                                     }
+                                     std::size_t local_cached = 0;
+                                     auto        rr           = build_executable(
+                                         "test", test.name, test.sources, config, test.libraries,
+                                         context.projectRoot, build_dir, cache.get(), inner_opts,
+                                         logger, local_cached, progress, test_link_flag_strings,
+                                         tests_dir);
+                                     if (!rr)
+                                     {
+                                       return std::unexpected(rr.error());
+                                     }
+                                     test_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                                     return {};
+                                   });
           !r)
       {
         return std::unexpected(r.error());
@@ -885,9 +914,9 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       }
       return std::to_string(whole_sec / 60) + "m" + std::to_string(whole_sec % 60) + "s";
     };
-    const std::size_t steps    = progress.done.load(std::memory_order_relaxed);
-    const std::size_t rebuilt  = built - cached;
-    std::string       summary  = "build complete: ";
+    const std::size_t steps   = progress.done.load(std::memory_order_relaxed);
+    const std::size_t rebuilt = built - cached;
+    std::string       summary = "build complete: ";
     summary += std::to_string(rebuilt) + "/" + std::to_string(built) + " targets rebuilt";
     if (cached > 0)
     {

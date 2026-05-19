@@ -45,7 +45,7 @@ CommandContext make_ctx(const fs::path& root)
 
 std::string slurp(const fs::path& p)
 {
-  std::ifstream     in(p);
+  std::ifstream      in(p);
   std::ostringstream os;
   os << in.rdbuf();
   return os.str();

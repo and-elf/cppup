@@ -343,13 +343,28 @@ std::string DependencyResolver::SemanticVersion::to_string() const
 
 int DependencyResolver::SemanticVersion::compare(const SemanticVersion& other) const noexcept
 {
-  if (major != other.major) return major > other.major ? 1 : -1;
-  if (minor != other.minor) return minor > other.minor ? 1 : -1;
-  if (patch != other.patch) return patch > other.patch ? 1 : -1;
+  if (major != other.major)
+  {
+    return major > other.major ? 1 : -1;
+  }
+  if (minor != other.minor)
+  {
+    return minor > other.minor ? 1 : -1;
+  }
+  if (patch != other.patch)
+  {
+    return patch > other.patch ? 1 : -1;
+  }
 
   // Prerelease versions have lower precedence
-  if (!prerelease.empty() && other.prerelease.empty()) return -1;
-  if (prerelease.empty() && !other.prerelease.empty()) return 1;
+  if (!prerelease.empty() && other.prerelease.empty())
+  {
+    return -1;
+  }
+  if (prerelease.empty() && !other.prerelease.empty())
+  {
+    return 1;
+  }
   if (!prerelease.empty() && !other.prerelease.empty())
   {
     return prerelease.compare(other.prerelease);
@@ -369,20 +384,32 @@ bool is_valid_semver(const std::string& version) noexcept
 
 std::string normalize_version(const std::string& version) noexcept
 {
-  if (version.empty()) return "0.0.0";
+  if (version.empty())
+  {
+    return "0.0.0";
+  }
 
   auto   parts = version;
   size_t dots  = std::count(parts.begin(), parts.end(), '.');
 
-  if (dots == 0) return version + ".0.0";
-  if (dots == 1) return version + ".0";
+  if (dots == 0)
+  {
+    return version + ".0.0";
+  }
+  if (dots == 1)
+  {
+    return version + ".0";
+  }
 
   return version;
 }
 
 std::string get_latest_version(const std::vector<std::string>& versions) noexcept
 {
-  if (versions.empty()) return "";
+  if (versions.empty())
+  {
+    return "";
+  }
 
   std::string latest = versions[0];
   for (const auto& version : versions)

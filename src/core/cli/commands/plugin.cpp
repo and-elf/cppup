@@ -84,22 +84,22 @@ std::expected<int, std::string> executePluginAdd(const PluginAddOptions& options
     // Create plugin manifest
     std::ofstream manifest(plugin_dir / "manifest.json");
     manifest << "{\n";
-    manifest << "  \"name\": \"" << options.name << "\",\n";
+    manifest << R"(  "name": ")" << options.name << "\",\n";
     if (options.version)
     {
-      manifest << "  \"version\": \"" << *options.version << "\",\n";
+      manifest << R"(  "version": ")" << *options.version << "\",\n";
     }
     if (options.tag)
     {
-      manifest << "  \"tag\": \"" << *options.tag << "\",\n";
+      manifest << R"(  "tag": ")" << *options.tag << "\",\n";
     }
     if (options.url)
     {
-      manifest << "  \"url\": \"" << *options.url << "\",\n";
+      manifest << R"(  "url": ")" << *options.url << "\",\n";
     }
     if (options.dir)
     {
-      manifest << "  \"directory\": \"" << *options.dir << "\",\n";
+      manifest << R"(  "directory": ")" << *options.dir << "\",\n";
     }
     manifest << "  \"installed\": true,\n";
     manifest << "  \"type\": \"plugin\"\n";

@@ -15,8 +15,8 @@ namespace cppup::cli
 namespace
 {
 
-namespace fs   = std::filesystem;
-namespace tpl  = init_templates;
+namespace fs  = std::filesystem;
+namespace tpl = init_templates;
 
 constexpr std::string_view placeholder = "__PROJECT_NAME__";
 
@@ -78,17 +78,16 @@ void write_file(const fs::path& path, const std::string& content)
 std::expected<int, std::string> executeInit(const std::string&                project_name_arg,
                                             const std::optional<std::string>& venv_path,
                                             InitOptions                       options,
-                                            const CommandContext& context) noexcept
+                                            const CommandContext&             context) noexcept
 {
   try
   {
     // Cargo-init semantics: emit into the current directory; if no name was
     // given, derive it from the cwd basename. We resolve the projectRoot so a
     // bare "." picks up its real folder name and substitution doesn't see ".".
-    const fs::path resolved_root =
-        context.projectRoot.is_absolute()
-            ? context.projectRoot.lexically_normal()
-            : fs::weakly_canonical(context.projectRoot);
+    const fs::path resolved_root = context.projectRoot.is_absolute()
+                                       ? context.projectRoot.lexically_normal()
+                                       : fs::weakly_canonical(context.projectRoot);
 
     std::string project_name = project_name_arg;
     if (project_name.empty())

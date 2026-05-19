@@ -200,7 +200,7 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
     }
     if (*bs != BuildSystem::Cppup)
     {
-      Subproject external = entry.sp;
+      Subproject external   = entry.sp;
       external.path         = sp_rel;
       external.build_system = *bs;
       merged.subprojects.push_back(std::move(external));

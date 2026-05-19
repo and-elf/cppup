@@ -24,8 +24,8 @@ TEST(CompilerOptions, Defaults)
 TEST(ConfigurationCompiler, SharedLibraryPathDiffersByInput)
 {
   ConfigurationCompiler compiler;
-  auto path1 = compiler.get_shared_library_path("build.cpp");
-  auto path2 = compiler.get_shared_library_path("src/module/build.cpp");
+  auto                  path1 = compiler.get_shared_library_path("build.cpp");
+  auto                  path2 = compiler.get_shared_library_path("src/module/build.cpp");
   EXPECT_NE(path1, path2);
   EXPECT_EQ(path1.parent_path(), ".cppup/build/config");
   EXPECT_EQ(path2.parent_path(), ".cppup/build/config");

@@ -36,7 +36,10 @@ class ConsoleLogger : public Logger
   void error(const std::string& message) override;
   void debug(const std::string& message) override;
 
-  void set_verbose(bool on) noexcept override { verbose_ = on; }
+  void set_verbose(bool on) noexcept override
+  {
+    verbose_ = on;
+  }
 
  private:
   bool verbose_ = false;

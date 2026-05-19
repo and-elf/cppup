@@ -69,8 +69,14 @@ std::expected<int, std::string> executeTidy(bool                            appl
     // call and reuses the compile-commands db across them.
     std::ostringstream cmd;
     cmd << "clang-tidy -p " << shell_quote(context.projectRoot);
-    if (apply_fix) cmd << " --fix --fix-errors";
-    for (const auto& f : files) cmd << ' ' << shell_quote(f);
+    if (apply_fix)
+    {
+      cmd << " --fix --fix-errors";
+    }
+    for (const auto& f : files)
+    {
+      cmd << ' ' << shell_quote(f);
+    }
 
     const int rc = std::system(cmd.str().c_str());
     if (rc != 0)
