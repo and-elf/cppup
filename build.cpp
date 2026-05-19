@@ -1,9 +1,17 @@
+#include <cstdlib>
+
 #include <cppup/configuration.hpp>
 
 using namespace cppup::configuration;
 
 extern "C" BuildConfiguration configure()
 {
+  // Regenerate src/core/cli/commands/init_templates_data.hpp from
+  // templates/init/** before configuring the build. The header is gitignored;
+  // the cache will pick up any content change via header-dep tracking and
+  // invalidate cppup_cli automatically when templates are edited.
+  std::system("./scripts/embed_init_templates.sh >/dev/null");
+
   BuildConfiguration config;
 
   config.toolchain     = Toolchain{"g++"};

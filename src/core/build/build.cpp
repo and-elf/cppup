@@ -11,5 +11,11 @@ extern "C" BuildConfiguration configure()
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-lsqlite3"}, Flag{"-lcrypto"}},
   });
+
+  config.tests.push_back(Test{"test_cache", {"test_cache.cpp"}});
+  config.tests.back().libraries  = {"cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lcrypto"}, Flag{"-lgtest"},
+                                    Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+
   return config;
 }

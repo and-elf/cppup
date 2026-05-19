@@ -6,6 +6,9 @@
 /compile_commands.json
 .cache/
 
+# Generated from templates/init/** by scripts/embed_init_templates.sh
+/src/core/cli/commands/init_templates_data.hpp
+
 # Compiled artifacts (built test/probe binaries at repo root)
 /cppup_bootstrap
 /bootstrap_test

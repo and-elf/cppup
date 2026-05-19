@@ -50,6 +50,14 @@ check_prerequisites() {
     log_info "Prerequisites check passed"
 }
 
+# Embed templates/init/** into the generated init_templates_data.hpp
+# header that init.cpp #includes. The header is gitignored; this step
+# must run before any compile that pulls in init.cpp.
+embed_init_templates() {
+    log_info "Embedding init templates..."
+    "./scripts/embed_init_templates.sh"
+}
+
 # Build the bootstrap version
 build_bootstrap() {
     log_info "Building bootstrap cppup..."
@@ -217,6 +225,7 @@ main() {
             ;;
         "build")
             check_prerequisites
+            embed_init_templates
             build_bootstrap
             test_bootstrap
             build_full

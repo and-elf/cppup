@@ -218,18 +218,50 @@ class SqliteBuildCache final : public BuildCache
       return std::unexpected(std::string{"prepare file_dependencies failed: "} +
                              sqlite3_errmsg(db_));
     }
-    for (const auto& dep : dependencies)
+    const auto bind_and_step = [&](const std::string& path, const std::string& checksum)
+        -> std::expected<void, std::string>
     {
       sqlite3_reset(dep_stmt);
       sqlite3_bind_text(dep_stmt, 1, target.name.c_str(), -1, SQLITE_TRANSIENT);
-      sqlite3_bind_text(dep_stmt, 2, dep.file_path.string().c_str(), -1, SQLITE_TRANSIENT);
-      sqlite3_bind_text(dep_stmt, 3, dep.checksum.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(dep_stmt, 2, path.c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_bind_text(dep_stmt, 3, checksum.c_str(), -1, SQLITE_TRANSIENT);
       if (sqlite3_step(dep_stmt) != SQLITE_DONE)
       {
-        auto msg = std::string{"insert file_dependencies failed: "} + sqlite3_errmsg(db_);
+        return std::unexpected(std::string{"insert file_dependencies failed: "} +
+                               sqlite3_errmsg(db_));
+      }
+      return {};
+    };
+
+    // Persist the source file and every transitively-found header in the same
+    // table; needs_rebuild treats them uniformly via existence + checksum.
+    // Headers come in via FileDependency::includes (populated by the build
+    // driver from DependencyScanner::scan_includes) but have no precomputed
+    // checksum, so hash them here.
+    for (const auto& dep : dependencies)
+    {
+      if (auto r = bind_and_step(dep.file_path.string(), dep.checksum); !r)
+      {
         sqlite3_finalize(dep_stmt);
-        exec("ROLLBACK");
-        return std::unexpected(msg);
+        (void) exec("ROLLBACK");
+        return std::unexpected(r.error());
+      }
+      for (const auto& include_path : dep.includes)
+      {
+        auto include_checksum = sha256_file(include_path);
+        if (!include_checksum)
+        {
+          // Header vanished between scan and persist; skip rather than fail
+          // the whole cache write. needs_rebuild's existence check will
+          // catch the missing file on the next lookup if it stays gone.
+          continue;
+        }
+        if (auto r = bind_and_step(include_path.string(), *include_checksum); !r)
+        {
+          sqlite3_finalize(dep_stmt);
+          if (auto rb = exec("ROLLBACK"); !rb) { /* best effort */ }
+          return std::unexpected(r.error());
+        }
       }
     }
     sqlite3_finalize(dep_stmt);
