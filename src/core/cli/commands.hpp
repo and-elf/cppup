@@ -126,15 +126,13 @@ struct PackageAddOptions
   std::optional<std::string> branch;
   std::optional<std::string> commit;
 
-  // Build system options
-  bool header_only = false;
-  bool cmake       = false;
-  bool make        = false;
-  bool meson       = false;
-  bool autotools   = false;
+  // Override for `infer_build_system` when the package dir has more than one
+  // recognisable marker (e.g. both CMakeLists.txt and a Makefile). One of:
+  // "cppup", "cmake", "make", "header-only". Per-package build flags belong
+  // in `build.cpp`, not here.
+  std::optional<std::string> build_system;
 
-  // Additional options
-  std::optional<std::string> build_args;
+  // Path inside the fetched archive/repo to treat as the package root.
   std::optional<std::string> subdirectory;
 };
 

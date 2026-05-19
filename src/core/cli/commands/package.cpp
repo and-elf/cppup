@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "../../configuration/subproject.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
 
@@ -22,8 +23,28 @@ struct PackageRecord
   std::string name;
   std::string version;
   std::string source;
+  // "cppup" | "cmake" | "make" | "header-only". Empty for legacy entries
+  // written before this field existed.
+  std::string build_system;
   int64_t     installed_at = 0;
 };
+
+std::string build_system_name(cppup::configuration::BuildSystem bs) noexcept
+{
+  using cppup::configuration::BuildSystem;
+  switch (bs)
+  {
+    case BuildSystem::Cppup:
+      return "cppup";
+    case BuildSystem::CMake:
+      return "cmake";
+    case BuildSystem::Make:
+      return "make";
+    case BuildSystem::HeaderOnly:
+      return "header-only";
+  }
+  return "";
+}
 
 class PackageRegistry
 {
@@ -65,8 +86,11 @@ class PackageRegistry
       std::istringstream iss(line);
       PackageRecord      r;
       std::string        installed_at_str;
+      // Tab-separated: name <TAB> version <TAB> source <TAB> installed_at
+      // [<TAB> build_system]. The trailing build_system field is optional so
+      // we keep reading entries written before it existed.
       if (std::getline(iss, r.name, '\t') && std::getline(iss, r.version, '\t') &&
-          std::getline(iss, r.source, '\t') && std::getline(iss, installed_at_str))
+          std::getline(iss, r.source, '\t') && std::getline(iss, installed_at_str, '\t'))
       {
         try
         {
@@ -76,6 +100,7 @@ class PackageRegistry
         {
           r.installed_at = 0;
         }
+        std::getline(iss, r.build_system);
         records.push_back(std::move(r));
       }
     }
@@ -91,7 +116,8 @@ class PackageRegistry
     }
     for (const auto& r : records)
     {
-      f << r.name << '\t' << r.version << '\t' << r.source << '\t' << r.installed_at << '\n';
+      f << r.name << '\t' << r.version << '\t' << r.source << '\t' << r.installed_at << '\t'
+        << r.build_system << '\n';
     }
     return true;
   }
@@ -181,7 +207,12 @@ std::expected<int, std::string> executePackageList(const CommandContext& context
     context.logger->info("Installed packages (" + std::to_string(records.size()) + "):");
     for (const auto& r : records)
     {
-      context.logger->info("  " + r.name + " " + r.version + " [" + r.source + "]");
+      std::string line = "  " + r.name + " " + r.version + " [" + r.source + "]";
+      if (!r.build_system.empty())
+      {
+        line += " (" + r.build_system + ")";
+      }
+      context.logger->info(line);
     }
     return 0;
   }
@@ -254,10 +285,40 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
       return std::unexpected("Failed to fetch package: " + options.name);
     }
 
+    // Decide the build system. Explicit `--build-system` wins; otherwise probe
+    // the fetched directory (rooted at `--subdirectory` if given). Probing can
+    // fail if nothing was actually fetched (e.g. the --url stub or a registry
+    // placeholder), so we treat inference failure as a soft warning.
+    const auto package_root =
+        options.subdirectory ? install_path / *options.subdirectory : install_path;
+    std::string build_system_value;
+    if (options.build_system)
+    {
+      build_system_value = *options.build_system;
+    }
+    else
+    {
+      auto inferred = cppup::configuration::infer_build_system(package_root);
+      if (inferred)
+      {
+        build_system_value = build_system_name(*inferred);
+      }
+      else
+      {
+        context.logger->warning("Could not infer build system for " + options.name + ": " +
+                                inferred.error());
+      }
+    }
+    if (!build_system_value.empty())
+    {
+      context.logger->info("Build system: " + build_system_value);
+    }
+
     PackageRecord record;
     record.name         = options.name;
     record.version      = options.tag.value_or(options.version.value_or("latest"));
     record.source       = describePackageSource(options);
+    record.build_system = build_system_value;
     record.installed_at = now_epoch();
     records.push_back(std::move(record));
 

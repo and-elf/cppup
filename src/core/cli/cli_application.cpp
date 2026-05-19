@@ -214,13 +214,13 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   package_add_cmd->add_option("--git", package_opts.git, "Git repository URL");
   package_add_cmd->add_option("--branch", package_opts.branch, "Git branch");
   package_add_cmd->add_option("--commit", package_opts.commit, "Git commit");
-  package_add_cmd->add_flag("--header-only", package_opts.header_only, "Header-only package");
-  package_add_cmd->add_flag("--cmake", package_opts.cmake, "Build with CMake");
-  package_add_cmd->add_flag("--make", package_opts.make, "Build with Make");
-  package_add_cmd->add_flag("--meson", package_opts.meson, "Build with Meson");
-  package_add_cmd->add_flag("--autotools", package_opts.autotools, "Build with Autotools");
-  package_add_cmd->add_option("--build-args", package_opts.build_args, "Extra build args");
-  package_add_cmd->add_option("--subdirectory", package_opts.subdirectory, "Source subdirectory");
+  package_add_cmd
+      ->add_option("--build-system", package_opts.build_system,
+                   "Override the inferred build system (cppup|cmake|make|header-only). Only "
+                   "needed when the package dir has more than one marker.")
+      ->check(CLI::IsMember({"cppup", "cmake", "make", "header-only"}));
+  package_add_cmd->add_option("--subdirectory", package_opts.subdirectory,
+                              "Path inside the fetched repo/archive to treat as the package root");
 
   auto*       package_remove_cmd = package_cmd->add_subcommand("remove", "Remove a package");
   std::string package_remove_name;
