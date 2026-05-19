@@ -54,9 +54,9 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneOSBranch)
   if (macos_executed) os_executed++;
   EXPECT_EQ(os_executed, 1);
 
-  if (is_windows()) EXPECT_TRUE(windows_executed);
-  if (is_linux()) EXPECT_TRUE(linux_executed);
-  if (is_macos()) EXPECT_TRUE(macos_executed);
+  if (is_windows()) { EXPECT_TRUE(windows_executed); }
+  if (is_linux()) { EXPECT_TRUE(linux_executed); }
+  if (is_macos()) { EXPECT_TRUE(macos_executed); }
 }
 
 TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
@@ -74,8 +74,8 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
   if (arm64_executed) arch_executed++;
   EXPECT_EQ(arch_executed, 1);
 
-  if (is_x86_64()) EXPECT_TRUE(x86_64_executed);
-  if (is_arm64()) EXPECT_TRUE(arm64_executed);
+  if (is_x86_64()) { EXPECT_TRUE(x86_64_executed); }
+  if (is_arm64()) { EXPECT_TRUE(arm64_executed); }
 }
 
 TEST(Platform, PlatformSpecificConfigurationApplied)

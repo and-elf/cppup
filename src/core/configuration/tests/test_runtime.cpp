@@ -120,17 +120,25 @@ TEST(Runtime, HasAllAndAnyFeatures)
   config.features.insert("threading");
   config.features.insert("networking");
 
-  EXPECT_TRUE(has_all_features(config, {"openssl", "threading"}));
-  EXPECT_TRUE(has_all_features(config, {"openssl", "threading", "networking"}));
-  EXPECT_FALSE(has_all_features(config, {"openssl", "nonexistent"}));
-  EXPECT_FALSE(has_all_features(config, {"nonexistent1", "nonexistent2"}));
-  EXPECT_TRUE(has_all_features(config, {}));
+  const std::vector<std::string> ot       = {"openssl", "threading"};
+  const std::vector<std::string> otn      = {"openssl", "threading", "networking"};
+  const std::vector<std::string> on       = {"openssl", "nonexistent"};
+  const std::vector<std::string> nn       = {"nonexistent1", "nonexistent2"};
+  const std::vector<std::string> empty    = {};
+  const std::vector<std::string> on2      = {"openssl", "nonexistent"};
+  const std::vector<std::string> nt       = {"nonexistent", "threading"};
 
-  EXPECT_TRUE(has_any_feature(config, {"openssl", "nonexistent"}));
-  EXPECT_TRUE(has_any_feature(config, {"nonexistent", "threading"}));
-  EXPECT_TRUE(has_any_feature(config, {"openssl", "threading", "networking"}));
-  EXPECT_FALSE(has_any_feature(config, {"nonexistent1", "nonexistent2"}));
-  EXPECT_FALSE(has_any_feature(config, {}));
+  EXPECT_TRUE(has_all_features(config, ot));
+  EXPECT_TRUE(has_all_features(config, otn));
+  EXPECT_FALSE(has_all_features(config, on));
+  EXPECT_FALSE(has_all_features(config, nn));
+  EXPECT_TRUE(has_all_features(config, empty));
+
+  EXPECT_TRUE(has_any_feature(config, on2));
+  EXPECT_TRUE(has_any_feature(config, nt));
+  EXPECT_TRUE(has_any_feature(config, otn));
+  EXPECT_FALSE(has_any_feature(config, nn));
+  EXPECT_FALSE(has_any_feature(config, empty));
 }
 
 TEST(Runtime, RealisticConfiguration)

@@ -36,7 +36,7 @@ fs::path make_tmp_root(std::string_view tag)
   return path;
 }
 
-CommandContext make_ctx(const fs::path& root)
+[[maybe_unused]] CommandContext make_ctx(const fs::path& root)
 {
   CommandContext ctx;
   ctx.projectRoot = root;

@@ -26,7 +26,7 @@ struct Binary
 {
   std::string              name;
   std::vector<std::string> sources;
-  std::vector<std::string> libraries;
+  std::vector<std::string> libraries = {};
 };
 
 /**
@@ -36,9 +36,9 @@ struct Library
 {
   std::string              name;
   std::vector<std::string> sources;
-  LibraryType              type = LibraryType::Static;
-  std::vector<Flag>        link_flags;
-  std::vector<std::string> libraries;
+  LibraryType              type       = LibraryType::Static;
+  std::vector<Flag>        link_flags = {};
+  std::vector<std::string> libraries  = {};
 };
 
 /**

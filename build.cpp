@@ -1,6 +1,5 @@
-#include <cstdlib>
-
 #include <cppup/configuration.hpp>
+#include <cstdlib>
 
 using namespace cppup::configuration;
 
@@ -18,6 +17,7 @@ extern "C" BuildConfiguration configure()
   config.compile_flags = {Flag{"-Wall"},
                           Flag{"-Wextra"},
                           Flag{"-Wpedantic"},
+                          Flag{"-Werror"},
                           Flag{"-Wno-return-type-c-linkage"},
                           Flag{"-std=c++23"},
                           Flag{"-O2"},

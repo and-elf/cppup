@@ -810,15 +810,15 @@ std::expected<size_t, std::string> DependencyDatabase::get_package_count() const
 
 // Placeholder implementations for other methods
 std::expected<void, std::string> DependencyDatabase::remove_dependency(
-    const std::string& package_name, const std::string& package_version,
-    const std::string& dependency_name) noexcept
+    const std::string& /*package_name*/, const std::string& /*package_version*/,
+    const std::string& /*dependency_name*/) noexcept
 {
   // TODO: Implement
   return {};
 }
 
 std::expected<std::vector<DependencyRelation>, std::string> DependencyDatabase::get_dependents(
-    const std::string& package_name, const std::string& package_version) const noexcept
+    const std::string& /*package_name*/, const std::string& /*package_version*/) const noexcept
 {
   // TODO: Implement
   return std::vector<DependencyRelation>{};
@@ -1064,14 +1064,14 @@ std::expected<void, std::string> DependencyDatabase::vacuum() noexcept
 }
 
 std::expected<void, std::string> DependencyDatabase::backup(
-    const std::filesystem::path& backup_path) noexcept
+    const std::filesystem::path& /*backup_path*/) noexcept
 {
   // TODO: Implement
   return {};
 }
 
 std::expected<void, std::string> DependencyDatabase::restore(
-    const std::filesystem::path& backup_path) noexcept
+    const std::filesystem::path& /*backup_path*/) noexcept
 {
   // TODO: Implement
   return {};
