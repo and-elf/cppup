@@ -26,6 +26,31 @@ std::string shell_quote(const std::filesystem::path& p)
   return s;
 }
 
+// Escape Python regex metacharacters in `s`. run-clang-tidy treats positional
+// args as path regexes; we want literal matches so each requested file lines
+// up with its compile_commands.json entry.
+std::string regex_escape(std::string_view s)
+{
+  static constexpr std::string_view kMeta = R"(.^$*+?()[]{}\|)";
+  std::string                       out;
+  out.reserve(s.size() + 8);
+  for (const char c : s)
+  {
+    if (kMeta.find(c) != std::string_view::npos)
+    {
+      out.push_back('\\');
+    }
+    out.push_back(c);
+  }
+  return out;
+}
+
+bool tool_on_path(std::string_view name)
+{
+  const std::string cmd = "command -v " + std::string(name) + " >/dev/null 2>&1";
+  return std::system(cmd.c_str()) == 0;
+}
+
 }  // namespace
 
 std::expected<int, std::string> executeTidy(bool                            apply_fix,
@@ -65,17 +90,37 @@ std::expected<int, std::string> executeTidy(bool                            appl
 
     context.logger->info("Processing " + std::to_string(files.size()) + " files");
 
-    // Build a single invocation. clang-tidy accepts multiple TUs in one
-    // call and reuses the compile-commands db across them.
+    // Prefer `run-clang-tidy` when available — it shards across cores and is
+    // dramatically faster on multi-file invocations than running `clang-tidy`
+    // serially. File arguments to run-clang-tidy are path regexes; we escape
+    // each file so the match is literal.
+    const bool         have_runner = tool_on_path("run-clang-tidy");
     std::ostringstream cmd;
-    cmd << "clang-tidy -p " << shell_quote(context.projectRoot);
-    if (apply_fix)
+    if (have_runner)
     {
-      cmd << " --fix --fix-errors";
+      cmd << "run-clang-tidy -quiet -p " << shell_quote(context.projectRoot);
+      if (apply_fix)
+      {
+        cmd << " -fix";
+      }
+      for (const auto& f : files)
+      {
+        cmd << ' ' << shell_quote(regex_escape(f.string()));
+      }
     }
-    for (const auto& f : files)
+    else
     {
-      cmd << ' ' << shell_quote(f);
+      // Fallback: single clang-tidy invocation with all TUs. Slower but works
+      // when run-clang-tidy isn't shipped with the local clang install.
+      cmd << "clang-tidy -p " << shell_quote(context.projectRoot);
+      if (apply_fix)
+      {
+        cmd << " --fix --fix-errors";
+      }
+      for (const auto& f : files)
+      {
+        cmd << ' ' << shell_quote(f);
+      }
     }
 
     const int rc = std::system(cmd.str().c_str());
