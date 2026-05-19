@@ -39,7 +39,11 @@ build_slim() {
     log_info "Building slim cppup_bootstrap (build + update only)..."
     mkdir -p "$BUILD_DIR"
 
-    local CXXFLAGS="-std=c++23 -O2 -DCPPUP_SLIM -DCPPUP_VERSION=0.1.0"
+    # Materialize build/generated/cppup/configuration.hpp before compiling —
+    # embedded_configuration_header.hpp pulls it in via #embed.
+    scripts/amalgamate_configuration_header.sh >/dev/null
+
+    local CXXFLAGS="-std=c++26 -O2 -DCPPUP_SLIM -DCPPUP_VERSION=0.1.0"
     local INCLUDES=(
         -Isrc/core/configuration
         -Isrc/core/cli

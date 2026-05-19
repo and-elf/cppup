@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <print>
 #include <sstream>
@@ -17,6 +18,7 @@
 #include "../../configuration/toolchain_flags.hpp"
 #include "build_options.hpp"
 #include "common.h"
+#include "embedded_configuration_header.hpp"
 #include "logger.hpp"
 
 namespace cppup::cli
@@ -695,7 +697,38 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       logger.warning("build cache unavailable: " + c.error());
     }
 
+    // Materialize the cppup-shipped `<cppup/configuration.hpp>` so the user's
+    // build.cpp can include it without their repo having to vendor it or our
+    // installer having to ship it separately. The bytes come from the binary
+    // (`#embed`-ed at compile time), so the header version always matches the
+    // running cppup. Idempotent: skip the write when the on-disk contents
+    // already match — keeps `cppup build` from churning the file's mtime on
+    // every invocation.
+    {
+      const auto header_dir  = cppup_dir / "include" / "cppup";
+      const auto header_path = header_dir / "configuration.hpp";
+      std::filesystem::create_directories(header_dir);
+      bool needs_write = true;
+      if (std::filesystem::exists(header_path))
+      {
+        std::ifstream     in(header_path, std::ios::binary);
+        std::stringstream buf;
+        buf << in.rdbuf();
+        if (buf.str() == kConfigurationHeader)
+        {
+          needs_write = false;
+        }
+      }
+      if (needs_write)
+      {
+        std::ofstream out(header_path, std::ios::binary | std::ios::trunc);
+        out.write(kConfigurationHeader.data(),
+                  static_cast<std::streamsize>(kConfigurationHeader.size()));
+      }
+    }
+
     conf::CompilerOptions compiler_opts;
+    compiler_opts.include_paths.push_back((cppup_dir / "include").string());
     compiler_opts.include_paths.push_back((context.projectRoot / "include").string());
     compiler_opts.include_paths.push_back((context.projectRoot / "src").string());
     compiler_opts.output_directory = (cppup_dir / "build" / "config").string();

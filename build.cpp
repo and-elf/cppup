@@ -10,11 +10,16 @@ extern "C" BuildConfiguration configure()
   // the cache will pick up any content change via header-dep tracking and
   // invalidate cppup_cli automatically when templates are edited.
   std::system("./scripts/embed_init_templates.sh >/dev/null");
+  // Materialize build/generated/cppup/configuration.hpp before configuring;
+  // src/core/cli/commands/embedded_configuration_header.hpp pulls it in via
+  // #embed so user projects can `#include <cppup/configuration.hpp>` after
+  // `cppup build` writes the bytes into their .cppup/include/cppup/.
+  std::system("./scripts/amalgamate_configuration_header.sh >/dev/null");
 
   BuildConfiguration config;
 
   config.toolchain                    = Toolchain{"g++"};
-  config.toolchain->cxx_standard      = CxxStandard::Cxx23;
+  config.toolchain->cxx_standard      = CxxStandard::Cxx26;
   config.toolchain->warnings          = WarningLevel::Werror;
   config.toolchain->extra_flags       = {"-Wno-return-type-c-linkage"};
   config.compile_flags                = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
