@@ -153,9 +153,12 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto*    build_cmd      = app.add_subcommand("build", "Build the project");
   bool     build_asan     = false;
   bool     build_coverage = false;
+  bool     build_verbose  = false;
   unsigned build_jobs     = 0;
   build_cmd->add_flag("--asan", build_asan, "Enable AddressSanitizer");
   build_cmd->add_flag("--coverage", build_coverage, "Instrument with gcov coverage flags");
+  build_cmd->add_flag("--verbose,-V", build_verbose,
+                      "Print the exact compile/link commands as they run");
   build_cmd->add_option("-j,--jobs", build_jobs,
                         "Parallel compile jobs (0 = auto / hardware_concurrency)");
 
@@ -312,18 +315,23 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   }
 #endif
 
-  const auto opts_from = [](bool asan, bool coverage, unsigned jobs = 0)
+  const auto opts_from = [](bool asan, bool coverage, bool verbose = false, unsigned jobs = 0)
   {
     return BuildOptions{.asan     = asan ? Asan::On : Asan::Off,
                         .coverage = coverage ? Coverage::On : Coverage::Off,
+                        .verbose  = verbose ? Verbose::On : Verbose::Off,
                         .jobs     = jobs};
   };
 
   if (*build_cmd)
   {
+    if (build_verbose && context_.logger)
+    {
+      context_.logger->set_verbose(true);
+    }
     return handleExpectedResult(
-        executeBuild(opts_from(build_asan, build_coverage, build_jobs), context_), "Build",
-        ErrorHandler::ErrorCode::BuildFailure);
+        executeBuild(opts_from(build_asan, build_coverage, build_verbose, build_jobs), context_),
+        "Build", ErrorHandler::ErrorCode::BuildFailure);
   }
 
 #ifndef CPPUP_SLIM

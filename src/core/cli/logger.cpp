@@ -22,6 +22,10 @@ void ConsoleLogger::error(const std::string& message)
 
 void ConsoleLogger::debug(const std::string& message)
 {
+  if (!verbose_)
+  {
+    return;
+  }
   std::print("[DEBUG] {}\n", message);
 }
 

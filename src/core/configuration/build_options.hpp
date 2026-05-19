@@ -15,6 +15,12 @@ enum class Coverage : unsigned char
   On
 };
 
+enum class Verbose : unsigned char
+{
+  Off,
+  On
+};
+
 /**
  * Runtime build toggles that affect compile + link flags.
  *
@@ -26,6 +32,7 @@ struct BuildOptions
 {
   Asan     asan     = Asan::Off;
   Coverage coverage = Coverage::Off;
+  Verbose  verbose  = Verbose::Off;
   // 0 = auto (std::thread::hardware_concurrency()); 1 = serial.
   unsigned jobs = 0;
 };
@@ -37,6 +44,10 @@ struct BuildOptions
 [[nodiscard]] constexpr bool enabled(Coverage c) noexcept
 {
   return c == Coverage::On;
+}
+[[nodiscard]] constexpr bool enabled(Verbose v) noexcept
+{
+  return v == Verbose::On;
 }
 
 }  // namespace cppup::configuration

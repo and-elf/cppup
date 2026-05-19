@@ -148,8 +148,13 @@ inline void merge_rebased_into(BuildConfiguration& merged, const BuildConfigurat
  * iteratively, compiling and merging each Cppup subproject into the
  * resulting config. Source and include paths from subprojects are rebased
  * relative to the root project (paths from nested subprojects accumulate
- * through their parents). Non-Cppup subprojects are not yet supported and
- * return an error.
+ * through their parents).
+ *
+ * Non-Cppup subprojects (CMake/Make/header-only) are not compiled or merged
+ * into the config; they are returned in `BuildConfiguration::subprojects`
+ * with their inferred `build_system` and `path` rewritten to the path
+ * relative to `root_dir`. The build driver is responsible for delegating to
+ * the external build system.
  */
 inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
     const std::filesystem::path& root_dir, ConfigurationCompiler& compiler,
@@ -195,8 +200,11 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
     }
     if (*bs != BuildSystem::Cppup)
     {
-      return std::unexpected("subproject " + sp_rel +
-                             ": non-Cppup build systems not yet supported");
+      Subproject external = entry.sp;
+      external.path         = sp_rel;
+      external.build_system = *bs;
+      merged.subprojects.push_back(std::move(external));
+      continue;
     }
 
     auto child = detail::compile_and_load(sp_dir / entry.sp.build_file, compiler);
