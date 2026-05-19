@@ -121,6 +121,20 @@ build_slim() {
     log_info "Slim binary built: $BOOTSTRAP_BINARY"
 }
 
+install_githooks() {
+    # Wire up the tracked .githooks/ as core.hooksPath so the pre-commit
+    # checks (gitleaks + cppup format/tidy) run on every commit in this
+    # clone. No-op outside a git repo (e.g. tarball builds).
+    if ! git -C . rev-parse --git-dir >/dev/null 2>&1; then
+        return 0
+    fi
+    if [[ -x scripts/setup-hooks.sh ]]; then
+        scripts/setup-hooks.sh
+    else
+        log_warn "scripts/setup-hooks.sh missing — skipping git hook setup."
+    fi
+}
+
 main() {
     if [[ $# -gt 0 ]]; then
         log_error "bootstrap.sh takes no arguments (got: $*)"
@@ -131,6 +145,7 @@ main() {
     fi
     check_prerequisites
     build_slim
+    install_githooks
     log_info "Next: '$BOOTSTRAP_BINARY update' (prebuilt) or '$BOOTSTRAP_BINARY build' (from source)"
 }
 
