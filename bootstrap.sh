@@ -124,6 +124,7 @@ build_bootstrap() {
         "src/core/cli/commands/module.cpp"
         "src/core/cli/commands/toolchain.cpp"
         "src/core/cli/commands/plugin.cpp"
+        "src/core/cli/commands/update.cpp"
         "src/core/dependency/database.cpp"
         "src/core/build/cache.cpp"
     )
@@ -134,6 +135,7 @@ build_bootstrap() {
             obj="$BUILD_DIR/$(basename $src .cpp)_$(dirname $src | tr / _).o"
             log_info "Compiling $src..."
             $CXX -std=c++23 -O2 -c "$src" -o "$obj" \
+                -DCPPUP_VERSION='"0.1.0"' \
                 -Isrc/core/configuration \
                 -Isrc/core/cli \
                 -Isrc/core/cli/commands \
@@ -188,24 +190,33 @@ build_full() {
     fi
 }
 
-# Install the built binary
+# Install the built binary. Default target is ~/.cppup/bin so the on-disk
+# layout matches what `cppup update` writes; override with PREFIX=... for a
+# different install root (e.g. PREFIX=/usr/local for system-wide install).
 install_binary() {
-    local prefix=${PREFIX:-/usr/local}
+    local default_prefix="$HOME/.cppup"
+    local prefix=${PREFIX:-$default_prefix}
     local install_dir="$prefix/bin"
-    
+
     if [ "$EUID" -ne 0 ] && [ "$prefix" = "/usr/local" ]; then
         log_warn "Installing to $install_dir requires root privileges"
         log_info "Run with sudo or set PREFIX to install elsewhere"
-        log_info "Example: PREFIX=~/.local ./bootstrap.sh"
+        log_info "Example: PREFIX=~/.local ./bootstrap.sh install"
         return
     fi
-    
+
     log_info "Installing cppup to $install_dir..."
     mkdir -p "$install_dir"
     cp "$BUILD_DIR/cppup" "$install_dir/cppup"
     chmod +x "$install_dir/cppup"
-    
+
     log_info "cppup installed to $install_dir/cppup"
+
+    # Friendly hint if the chosen install dir isn't on PATH yet.
+    case ":$PATH:" in
+        *":$install_dir:"*) ;;
+        *) log_info "Hint: add $install_dir to your PATH (e.g. export PATH=\"$install_dir:\$PATH\")" ;;
+    esac
 }
 
 # Clean up build artifacts
@@ -257,7 +268,7 @@ main() {
             echo ""
             echo "Environment variables:"
             echo "  CXX     - C++ compiler to use (default: g++)"
-            echo "  PREFIX  - Install prefix (default: /usr/local)"
+            echo "  PREFIX  - Install prefix (default: \$HOME/.cppup)"
             exit 1
             ;;
     esac

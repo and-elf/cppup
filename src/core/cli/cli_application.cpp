@@ -72,8 +72,7 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   }
 
   InitOptions opts;
-  const bool  any_with_flag =
-      with_vscode || with_devcontainer || with_docker || with_gitlab_ci;
+  const bool  any_with_flag = with_vscode || with_devcontainer || with_docker || with_gitlab_ci;
   if (any_with_flag)
   {
     opts.vscode       = with_vscode ? Vscode::On : Vscode::Off;
@@ -121,12 +120,12 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   auto*       init_cmd = app.add_subcommand("init", "Initialize a new project");
   std::string init_name;
   std::string init_path;
-  bool        init_full             = false;
-  bool        init_minimal          = false;
-  bool        init_with_vscode      = false;
+  bool        init_full              = false;
+  bool        init_minimal           = false;
+  bool        init_with_vscode       = false;
   bool        init_with_devcontainer = false;
-  bool        init_with_docker      = false;
-  bool        init_with_gitlab_ci   = false;
+  bool        init_with_docker       = false;
+  bool        init_with_gitlab_ci    = false;
   init_cmd->add_option("name", init_name, "Project name")->required();
   init_cmd->add_option("--path", init_path, "Virtual environment path");
   init_cmd->add_flag("--full", init_full,
@@ -134,7 +133,8 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
                      ".gitlab-ci.yml)");
   init_cmd->add_flag("--minimal", init_minimal,
                      "Scaffold only the base layout; skip the TTY prompt");
-  init_cmd->add_flag("--with-vscode", init_with_vscode, "Scaffold .vscode/ (tasks/launch/settings)");
+  init_cmd->add_flag("--with-vscode", init_with_vscode,
+                     "Scaffold .vscode/ (tasks/launch/settings)");
   init_cmd->add_flag("--with-devcontainer", init_with_devcontainer,
                      "Scaffold .devcontainer/devcontainer.json");
   init_cmd->add_flag("--with-docker", init_with_docker,
@@ -257,6 +257,18 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   std::string module_add_name;
   module_add_cmd->add_option("name", module_add_name, "Module name")->required();
 
+  // update
+  auto*       update_cmd = app.add_subcommand("update", "Install the latest released cppup binary");
+  bool        update_check_only = false;
+  std::string update_version;
+  std::string update_install_dir;
+  update_cmd->add_flag("--check", update_check_only,
+                       "Print running and latest version without installing");
+  update_cmd->add_option("--version", update_version,
+                         "Install this specific tag instead of the latest");
+  update_cmd->add_option("--install-dir", update_install_dir,
+                         "Override install directory (default: $HOME/.cppup/bin)");
+
   try
   {
     app.parse(argc, argv);
@@ -279,9 +291,9 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
     {
       path_opt = init_path;
     }
-    const auto init_opts = resolve_init_options(init_full, init_minimal, init_with_vscode,
-                                                init_with_devcontainer, init_with_docker,
-                                                init_with_gitlab_ci);
+    const auto init_opts =
+        resolve_init_options(init_full, init_minimal, init_with_vscode, init_with_devcontainer,
+                             init_with_docker, init_with_gitlab_ci);
     return handleExpectedResult(executeInit(init_name, path_opt, init_opts, context_), "Init",
                                 ErrorHandler::ErrorCode::FileNotFound);
   }
@@ -385,6 +397,22 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   if (*module_add_cmd)
   {
     return handleExpectedResult(executeModuleAdd(module_add_name, context_), "Module add",
+                                ErrorHandler::ErrorCode::UnknownError);
+  }
+
+  if (*update_cmd)
+  {
+    UpdateOptions update_opts = defaultUpdateOptions();
+    update_opts.check_only    = update_check_only ? CheckOnly::On : CheckOnly::Off;
+    if (!update_version.empty())
+    {
+      update_opts.version = update_version;
+    }
+    if (!update_install_dir.empty())
+    {
+      update_opts.install_dir = update_install_dir;
+    }
+    return handleExpectedResult(executeUpdate(std::move(update_opts), context_), "Update",
                                 ErrorHandler::ErrorCode::UnknownError);
   }
 

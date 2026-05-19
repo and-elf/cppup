@@ -1,6 +1,7 @@
 #pragma once
 
 #include <expected>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -37,6 +38,13 @@ enum class GitlabCi : unsigned char
   On
 };
 
+// `cppup update --check` mode: compare running vs latest, do not install.
+enum class CheckOnly : unsigned char
+{
+  Off,
+  On
+};
+
 struct InitOptions
 {
   Vscode       vscode       = Vscode::Off;
@@ -61,6 +69,17 @@ struct InitOptions
 {
   return g == GitlabCi::On;
 }
+[[nodiscard]] constexpr bool enabled(CheckOnly c) noexcept
+{
+  return c == CheckOnly::On;
+}
+
+struct UpdateOptions
+{
+  CheckOnly                  check_only = CheckOnly::Off;
+  std::optional<std::string> version;
+  std::filesystem::path      install_dir;
+};
 
 // Command implementation functions
 
@@ -164,5 +183,37 @@ struct PluginAddOptions
 // Module commands
 [[nodiscard]] std::expected<int, std::string> executeModuleAdd(
     const std::string& module_name, const CommandContext& context) noexcept;
+
+// Update command — download the latest released cppup binary and install it.
+[[nodiscard]] std::expected<int, std::string> executeUpdate(UpdateOptions         options,
+                                                            const CommandContext& context) noexcept;
+
+// Build a default UpdateOptions with install_dir set to $HOME/.cppup/bin.
+[[nodiscard]] UpdateOptions defaultUpdateOptions() noexcept;
+
+namespace update_internal
+{
+
+// Returns the artifact platform tag, or std::unexpected if no prebuilt is
+// shipped for the current host.
+[[nodiscard]] std::expected<std::string, std::string> detect_platform() noexcept;
+
+// Compute the lowercase hex sha256 of a file. Returns the empty string and an
+// error message on failure.
+[[nodiscard]] std::expected<std::string, std::string> sha256_file(
+    const std::filesystem::path& path) noexcept;
+
+// Install `staged_binary` to `install_dir/cppup`, moving any pre-existing
+// binary aside to `cppup.prev`. The staged file is chmodded 0755 and renamed
+// atomically when on the same filesystem as install_dir.
+[[nodiscard]] std::expected<int, std::string> install_atomic(
+    const std::filesystem::path& staged_binary, const std::filesystem::path& install_dir) noexcept;
+
+// Parse the first "tag_name":"…" out of GitLab's /releases JSON. Returns
+// std::unexpected when no releases are present.
+[[nodiscard]] std::expected<std::string, std::string> parse_latest_tag(
+    std::string_view releases_json) noexcept;
+
+}  // namespace update_internal
 
 }  // namespace cppup::cli
