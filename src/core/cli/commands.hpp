@@ -106,6 +106,24 @@ struct UpdateOptions
                                                           const std::vector<std::string>& file_args,
                                                           const CommandContext& context) noexcept;
 
+// `cppup clean` scope. Build wipes only generated artifacts (build dir,
+// build cache, config-compiler outputs, compile_commands.json). All also
+// wipes the user-managed pieces of `.cppup/` — packages, toolchains,
+// plugins, bin — i.e. everything `cppup init` and friends produce.
+enum class CleanScope : unsigned char
+{
+  Build,
+  All
+};
+
+struct CleanOptions
+{
+  CleanScope scope = CleanScope::Build;
+};
+
+[[nodiscard]] std::expected<int, std::string> executeClean(
+    CleanOptions options, const CommandContext& context) noexcept;
+
 // Package commands
 [[nodiscard]] std::expected<int, std::string> executePackageList(
     const CommandContext& context) noexcept;

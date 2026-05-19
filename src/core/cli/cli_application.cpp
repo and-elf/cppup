@@ -175,6 +175,12 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   cc_cmd->add_flag("--asan", cc_asan, "Mirror --asan flags in emitted commands");
   cc_cmd->add_flag("--coverage", cc_coverage, "Mirror --coverage flags in emitted commands");
 
+  // clean
+  auto* clean_cmd = app.add_subcommand("clean", "Remove build artifacts");
+  bool  clean_all = false;
+  clean_cmd->add_flag("--all", clean_all,
+                      "Also remove .cppup/packages, toolchains, plugins, and bin");
+
   // test
   auto* test_cmd      = app.add_subcommand("test", "Run tests");
   bool  test_asan     = false;
@@ -347,6 +353,13 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   {
     return handleExpectedResult(executeCompileCommands(opts_from(cc_asan, cc_coverage), context_),
                                 "compile-commands", ErrorHandler::ErrorCode::BuildFailure);
+  }
+
+  if (*clean_cmd)
+  {
+    CleanOptions clean_opts{.scope = clean_all ? CleanScope::All : CleanScope::Build};
+    return handleExpectedResult(executeClean(clean_opts, context_), "Clean",
+                                ErrorHandler::ErrorCode::UnknownError);
   }
 
   if (*test_cmd)
