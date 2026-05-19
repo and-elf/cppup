@@ -28,15 +28,15 @@ TEST(Runtime, GetEnvAndGetEnvOr)
 
   auto debug_val = get_env(config, "DEBUG");
   ASSERT_TRUE(debug_val.has_value());
-  EXPECT_EQ(debug_val.value(), "true");
+  EXPECT_EQ(debug_val, "true");
 
   auto path_val = get_env(config, "PATH");
   ASSERT_TRUE(path_val.has_value());
-  EXPECT_EQ(path_val.value(), "/usr/bin:/bin");
+  EXPECT_EQ(path_val, "/usr/bin:/bin");
 
   auto empty_val = get_env(config, "EMPTY_VAR");
   ASSERT_TRUE(empty_val.has_value());
-  EXPECT_EQ(empty_val.value(), "");
+  EXPECT_EQ(empty_val, "");
 
   auto nonexistent_val = get_env(config, "NONEXISTENT");
   EXPECT_FALSE(nonexistent_val.has_value());

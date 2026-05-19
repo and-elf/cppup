@@ -18,17 +18,17 @@ extern "C" BuildConfiguration configure()
 
   BuildConfiguration config;
 
-  config.toolchain                    = Toolchain{"g++"};
-  config.toolchain->cxx_standard      = CxxStandard::Cxx26;
-  config.toolchain->warnings          = WarningLevel::Werror;
-  config.toolchain->extra_flags       = {"-Wno-return-type-c-linkage"};
-  config.compile_flags                = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
-  config.include_paths = {"include",
-                          "src",
-                          "src/cli",
-                          "src/core/cli",
-                          "src/core/cli/commands",
-                          "src/core/configuration"};
+  config.toolchain               = Toolchain{"g++"};
+  config.toolchain->cxx_standard = CxxStandard::Cxx26;
+  config.toolchain->warnings     = WarningLevel::Werror;
+  config.toolchain->extra_flags  = {"-Wno-return-type-c-linkage"};
+  config.compile_flags           = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
+  config.include_paths           = {"include",
+                                    "src",
+                                    "src/cli",
+                                    "src/core/cli",
+                                    "src/core/cli/commands",
+                                    "src/core/configuration"};
 
   config.subprojects = {
       Subproject{.path = "src/core/configuration", .build_system = {}, .build_args = {}},
@@ -38,6 +38,7 @@ extern "C" BuildConfiguration configure()
           .build_system = {},
           .build_args   = {},
       },
+      Subproject{.path = "src/core/logger/console", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/cli", .build_system = {}, .build_args = {}},
   };
 

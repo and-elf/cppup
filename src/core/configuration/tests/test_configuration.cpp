@@ -9,13 +9,15 @@ using namespace cppup::configuration;
 TEST(Configuration, ComprehensiveStructPopulation)
 {
   BuildConfiguration config;
-  config.toolchain     = Toolchain{"gcc-13"};
-  config.modules       = {Module{"Logger"}, Module{"Database"}, Module{"Network"}};
+  config.toolchain     = Toolchain{.name = "gcc-13"};
+  config.modules       = {Module{.name = "Logger"}, Module{.name = "Database"},
+                          Module{.name = "Network"}};
   config.sources       = {"src/*.cpp", "src/utils/*.cpp"};
   config.compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}, Flag{"-std=c++23"}};
   config.link_flags    = {Flag{"-pthread"}};
   config.include_paths = {"include/", "third_party/"};
-  config.definitions   = {Definition{"VERSION", "\"1.0.0\""}, Definition{"FEATURE_LOGGING"}};
+  config.definitions   = {Definition{.name = "VERSION", .value = "\"1.0.0\""},
+                          Definition{.name = "FEATURE_LOGGING", .value = ""}};
   config.binaries      = {Binary{.name = "myapp", .sources = {"src/main.cpp"}, .libraries = {}},
                           Binary{.name = "cli_tool", .sources = {"src/cli.cpp"}, .libraries = {}}};
   config.libraries     = {Library{.name       = "core",
@@ -28,8 +30,9 @@ TEST(Configuration, ComprehensiveStructPopulation)
                                   .type       = LibraryType::Shared,
                                   .link_flags = {},
                                   .libraries  = {}}};
-  config.tests         = {cppup::configuration::Test{"unit_tests", {"tests/unit/*.cpp"}},
-                          cppup::configuration::Test{"integration_tests", {"tests/integration/*.cpp"}}};
+  config.tests = {cppup::configuration::Test{.name = "unit_tests", .sources = {"tests/unit/*.cpp"}},
+                  cppup::configuration::Test{.name    = "integration_tests",
+                                             .sources = {"tests/integration/*.cpp"}}};
 
   ASSERT_TRUE(config.toolchain.has_value());
   EXPECT_EQ(config.toolchain->name, "gcc-13");

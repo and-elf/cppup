@@ -13,4 +13,3 @@
 #include "../../configuration/loader.hpp"
 #include "../../dependency/database.hpp"
 #include "command_context.hpp"
-#include "logger.hpp"

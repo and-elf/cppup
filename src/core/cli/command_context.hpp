@@ -5,10 +5,12 @@
 
 class ProcessRunner;
 
-#include "logger.hpp"
+#include "../logger/logger.hpp"
 
 namespace cppup::cli
 {
+
+using Logger = cppup::logger::Logger;
 
 /**
  * Command context containing all dependencies needed by commands
@@ -19,14 +21,10 @@ struct CommandContext
   std::unique_ptr<Logger>        logger;
   std::unique_ptr<ProcessRunner> processRunner;
 
-  // Default constructor
-  CommandContext() = default;
-
-  // Move constructor and assignment
-  CommandContext(CommandContext&&)            = default;
-  CommandContext& operator=(CommandContext&&) = default;
-
-  // Delete copy operations
+  CommandContext()                                 = default;
+  ~CommandContext()                                = default;
+  CommandContext(CommandContext&&)                 = default;
+  CommandContext& operator=(CommandContext&&)      = default;
   CommandContext(const CommandContext&)            = delete;
   CommandContext& operator=(const CommandContext&) = delete;
 };

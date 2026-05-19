@@ -26,11 +26,6 @@ struct ResolvedPackage
   std::vector<std::string>           link_flags;
   std::map<std::string, std::string> definitions;
   std::vector<ResolvedPackage>       dependencies;  // Resolved dependencies
-
-  ResolvedPackage(std::string name, std::string version) :
-      name(std::move(name)), version(std::move(version))
-  {
-  }
 };
 
 /**
@@ -118,8 +113,8 @@ class PackageResolver
   /**
    * Merge information from multiple resolved packages
    */
-  [[nodiscard]] PackageResolutionResult merge_package_information(
-      const std::vector<ResolvedPackage>& packages) const;
+  static PackageResolutionResult merge_package_information(
+      const std::vector<ResolvedPackage>& packages);
 };
 
 }  // namespace cppup::configuration

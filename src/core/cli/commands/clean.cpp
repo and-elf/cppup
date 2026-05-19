@@ -5,7 +5,6 @@
 
 #include "../command_context.hpp"
 #include "../commands.hpp"
-#include "../logger.hpp"
 
 namespace cppup::cli
 {

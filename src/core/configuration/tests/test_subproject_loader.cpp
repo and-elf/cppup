@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <string>
-
 #include "../build_configuration.hpp"
 #include "../subproject_loader.hpp"
 
@@ -17,11 +15,12 @@ BuildConfiguration make_child_config()
   child.libraries.push_back(Library{.name       = "cppup_build",
                                     .sources    = {"cache.cpp"},
                                     .type       = LibraryType::Static,
-                                    .link_flags = {Flag{"-lsqlite3"}},
+                                    .link_flags = {Flag{.flag = "-lsqlite3"}},
                                     .libraries  = {"cppup_configuration"}});
   child.binaries.push_back(
       Binary{.name = "child_tool", .sources = {"tool.cpp"}, .libraries = {"cppup_build"}});
-  child.tests.push_back(cppup::configuration::Test{"child_test", {"test_cache.cpp"}});
+  child.tests.push_back(
+      cppup::configuration::Test{.name = "child_test", .sources = {"test_cache.cpp"}});
   return child;
 }
 

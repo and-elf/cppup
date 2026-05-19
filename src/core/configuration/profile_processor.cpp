@@ -97,15 +97,14 @@ class ProfileProcessor
    * @param config Configuration containing profiles
    * @return List of profile names
    */
-  [[nodiscard]] std::vector<std::string> get_available_profiles(
-      const BuildConfiguration& config) const;
+  static std::vector<std::string> get_available_profiles(const BuildConfiguration& config);
 
   /**
    * Validate profile configuration
    * @param config Configuration containing profiles
    * @return Error message if invalid, empty string if valid
    */
-  [[nodiscard]] std::string validate_profiles(const BuildConfiguration& config) const;
+  static std::string validate_profiles(const BuildConfiguration& config);
 
  private:
   /**
@@ -221,7 +220,7 @@ ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfigurat
 
   // Find the requested profile
   const Profile* profile = find_profile(config, effective_profile);
-  if (!profile)
+  if (profile == nullptr)
   {
     // If the requested profile doesn't exist, check if it's the default
     if (effective_profile == get_default_profile_name())
@@ -230,11 +229,8 @@ ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfigurat
       result.success = true;
       return result;
     }
-    else
-    {
-      result.error_message = "Profile '" + effective_profile + "' not found";
-      return result;
-    }
+    result.error_message = "Profile '" + effective_profile + "' not found";
+    return result;
   }
 
   // Merge the profile with the base configuration
@@ -298,10 +294,10 @@ bool ProfileProcessor::has_profile(const BuildConfiguration& config,
   return find_profile(config, profile_name) != nullptr;
 }
 
-std::vector<std::string> ProfileProcessor::get_available_profiles(
-    const BuildConfiguration& config) const
+std::vector<std::string> ProfileProcessor::get_available_profiles(const BuildConfiguration& config)
 {
   std::vector<std::string> profiles;
+  profiles.reserve(config.profiles.size());
   for (const auto& profile : config.profiles)
   {
     profiles.push_back(profile.name);
@@ -309,7 +305,7 @@ std::vector<std::string> ProfileProcessor::get_available_profiles(
   return profiles;
 }
 
-std::string ProfileProcessor::validate_profiles(const BuildConfiguration& config) const
+std::string ProfileProcessor::validate_profiles(const BuildConfiguration& config)
 {
   std::set<std::string> profile_names;
 

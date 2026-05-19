@@ -17,7 +17,7 @@ void ConsoleLogger::setGlobalConfig(LogConfig config)
   globalConfig_ = std::move(config);
 }
 
-void ConsoleLogger::setLogFile(std::string path)
+void ConsoleLogger::setLogFile(const std::string& path)
 {
   static std::ofstream file(path, std::ios::app);
   fileStream_ = &file;
@@ -39,13 +39,27 @@ void ConsoleLogger::log(LogLevel level, std::string_view message) const
     return;
   }
 
-  auto& out = (level >= LogLevel::Warning) ? std::cerr : std::cout;
-  out << levelToColor(level) << "[" << category_ << "] " << levelToString(level)
-      << "\033[0m: " << message << "\n";
+  if (category_.empty())
+  {
+    std::cout << "[" << levelToString(level) << "] " << message << "\n";
+  }
+  else
+  {
+    auto& out = (level >= LogLevel::Warning) ? std::cerr : std::cout;
+    out << levelToColor(level) << "[" << category_ << "] " << levelToString(level)
+        << "\033[0m: " << message << "\n";
+  }
 
   if (fileStream_)
   {
-    (*fileStream_) << "[" << category_ << "] " << levelToString(level) << ": " << message << "\n";
+    if (category_.empty())
+    {
+      (*fileStream_) << "[" << levelToString(level) << "] " << message << "\n";
+    }
+    else
+    {
+      (*fileStream_) << "[" << category_ << "] " << levelToString(level) << ": " << message << "\n";
+    }
   }
 }
 

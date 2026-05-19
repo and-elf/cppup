@@ -92,10 +92,9 @@ build_slim() {
     # registration + dispatch with #ifdef CPPUP_SLIM.
     local MAIN_SOURCES=(
         src/main.cpp
-        src/core/cli/logger.cpp
+        src/core/logger/console/console_logger.cpp
         src/core/cli/cli_application.cpp
         src/core/cli/commands.cpp
-        src/core/cli/commands/common.cpp
         src/core/cli/commands/build.cpp
         src/core/cli/commands/update.cpp
         src/core/dependency/database.cpp

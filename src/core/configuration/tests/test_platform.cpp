@@ -20,21 +20,34 @@ TEST(Platform, ExactlyOneOSDetected)
   static_assert(is_windows() || is_linux() || is_macos());
 
   int os_count = 0;
-  if (is_windows()) os_count++;
-  if (is_linux()) os_count++;
-  if (is_macos()) os_count++;
+  if (is_windows())
+  {
+    os_count++;
+  }
+  if (is_linux())
+  {
+    os_count++;
+  }
+  if (is_macos())
+  {
+    os_count++;
+  }
   EXPECT_EQ(os_count, 1);
 }
 
 TEST(Platform, ExactlyOneArchDetectedWhenKnown)
 {
-  if (TARGET_ARCH == "unknown") GTEST_SKIP();
-
   static_assert(is_x86_64() || is_arm64());
 
   int arch_count = 0;
-  if (is_x86_64()) arch_count++;
-  if (is_arm64()) arch_count++;
+  if (is_x86_64())
+  {
+    arch_count++;
+  }
+  if (is_arm64())
+  {
+    arch_count++;
+  }
   EXPECT_EQ(arch_count, 1);
 }
 
@@ -49,9 +62,18 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneOSBranch)
   when_macos([&]() { macos_executed = true; });
 
   int os_executed = 0;
-  if (windows_executed) os_executed++;
-  if (linux_executed) os_executed++;
-  if (macos_executed) os_executed++;
+  if (windows_executed)
+  {
+    os_executed++;
+  }
+  if (linux_executed)
+  {
+    os_executed++;
+  }
+  if (macos_executed)
+  {
+    os_executed++;
+  }
   EXPECT_EQ(os_executed, 1);
 
   if (is_windows())
@@ -148,9 +170,12 @@ TEST(Platform, PlatformSpecificConfigurationApplied)
 
   if (is_linux())
   {
-    EXPECT_NE(std::find(compile_flags.begin(), compile_flags.end(), "-Wall"), compile_flags.end());
-    EXPECT_NE(std::find(link_flags.begin(), link_flags.end(), "-pthread"), link_flags.end());
-    EXPECT_NE(std::find(packages.begin(), packages.end(), "linux-headers"), packages.end());
-    EXPECT_NE(std::find(definitions.begin(), definitions.end(), "LINUX_BUILD"), definitions.end());
+    EXPECT_NE(std::ranges::find(compile_flags.begin(), compile_flags.end(), "-Wall"),
+              compile_flags.end());
+    EXPECT_NE(std::ranges::find(link_flags.begin(), link_flags.end(), "-pthread"),
+              link_flags.end());
+    EXPECT_NE(std::ranges::find(packages.begin(), packages.end(), "linux-headers"), packages.end());
+    EXPECT_NE(std::ranges::find(definitions.begin(), definitions.end(), "LINUX_BUILD"),
+              definitions.end());
   }
 }

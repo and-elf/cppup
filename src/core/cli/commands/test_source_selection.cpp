@@ -31,8 +31,8 @@ void touch(const fs::path& p)
 
 bool contains_path(const std::vector<fs::path>& v, const fs::path& needle)
 {
-  return std::any_of(v.begin(), v.end(),
-                     [&](const fs::path& p) { return fs::equivalent(p, needle); });
+  return std::ranges::any_of(v.begin(), v.end(),
+                             [&](const fs::path& p) { return fs::equivalent(p, needle); });
 }
 
 }  // namespace

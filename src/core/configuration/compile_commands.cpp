@@ -41,9 +41,9 @@ std::string json_escape(std::string_view s)
       default:
         if (static_cast<unsigned char>(c) < 0x20)
         {
-          char buf[8];
-          std::snprintf(buf, sizeof(buf), "\\u%04x", c);
-          out += buf;
+          std::array<char, 8> buf{};
+          std::snprintf(buf.data(), buf.size(), "\\u%04x", c);
+          out += buf.data();
         }
         else
         {

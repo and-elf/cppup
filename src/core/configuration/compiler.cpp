@@ -163,7 +163,7 @@ CompilationResult ConfigurationCompiler::execute_command(const std::string& comm
 
   // Execute the command and capture output
   FILE* pipe = popen(command.c_str(), "r");
-  if (!pipe)
+  if (pipe == nullptr)
   {
     result.error_message = "Failed to execute compiler command";
     result.exit_code     = -1;
@@ -171,11 +171,11 @@ CompilationResult ConfigurationCompiler::execute_command(const std::string& comm
   }
 
   // Read the output
-  char        buffer[256];
-  std::string output;
-  while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+  std::array<char, 256> buffer{};
+  std::string           output;
+  while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
   {
-    output += buffer;
+    output += buffer.data();
   }
 
   // Get the exit code

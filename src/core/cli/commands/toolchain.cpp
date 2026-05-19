@@ -20,6 +20,7 @@ std::expected<int, std::string> executeToolchainList(const CommandContext& conte
     // Check for common toolchains in PATH
     std::vector<std::string> const toolchains = {"gcc", "g++", "clang", "clang++", "msvc"};
     std::vector<std::string>       available;
+    available.reserve(toolchains.size());
 
     for (const auto& toolchain : toolchains)
     {

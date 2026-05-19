@@ -16,11 +16,11 @@
 #include "../../configuration/link_resolution.hpp"
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
+#include "../../logger/console/console_logger.hpp"
 #include "build_options.hpp"
 #include "commands.hpp"
 #include "common.h"
 #include "embedded_configuration_header.hpp"
-#include "logger.hpp"
 
 namespace cppup::cli
 {
@@ -703,7 +703,8 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     const auto wall_start = std::chrono::steady_clock::now();
     if (conf::enabled(options.verbose))
     {
-      logger.set_verbose(true);
+      cppup::logger::console::ConsoleLogger::setGlobalConfig(
+          {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
     }
 
     const auto build_file = context.projectRoot / "build.cpp";

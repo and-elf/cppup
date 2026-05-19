@@ -14,6 +14,7 @@ Checks: >
   clang-analyzer-*,
   -modernize-use-trailing-return-type,
   -modernize-use-default-member-init,
+  -readability-redundant-member-init,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -cppcoreguidelines-owning-memory,
@@ -32,11 +33,12 @@ Checks: >
 WarningsAsErrors: ''
 
 # Restrict header diagnostics to our own headers under src/ and include/.
-# Without this, default behaviour suppresses non-main-file headers entirely,
-# but being explicit guards against the default flipping and lets us pick
-# off third-party headers that happen to live under src/ (CLI11 in
-# src/cli/CLI/) plus generated headers we don't hand-edit.
-HeaderFilterRegex:        '^.*/(src|include)/.*\.(hpp|h)$'
+# Anchored to the project directory (`cppup/`) so that system headers like
+# `/usr/include/gtest/...` don't get analysed — they happen to end in
+# `/include/` and would otherwise match a path-segment regex like
+# `.*/(src|include)/`. Without this anchor, gtest macro contexts surface in
+# every test file's tidy output.
+HeaderFilterRegex:        '^.*/cppup/(src|include)/.*\.(hpp|h)$'
 ExcludeHeaderFilterRegex: '.*/CLI/CLI11\.hpp$|.*/init_templates_data\.hpp$|.*/embedded_configuration_header\.hpp$'
 
 CheckOptions:
@@ -64,11 +66,17 @@ CheckOptions:
   - key:   readability-identifier-naming.ParameterCase
     value: lower_case
 
-  # Private class members: snake_case with trailing underscore (context_,
-  # packages_dir_, db_path_). Uniform across the tree — enforce it.
+  # Class members (instance or static): trailing underscore is mandatory
+  # (context_, globalConfig_), but case may be snake_case_ or camelBack_ —
+  # the tree mixes both (db_path_ in cli/, globalConfig_ in logger/) so we
+  # accept either rather than churning existing code.
   - key:   readability-identifier-naming.PrivateMemberCase
-    value: lower_case
+    value: aNy_CasE
   - key:   readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key:   readability-identifier-naming.ClassMemberCase
+    value: aNy_CasE
+  - key:   readability-identifier-naming.ClassMemberSuffix
     value: _
 
   # Public struct members are mostly snake_case (header_only, build_args) but

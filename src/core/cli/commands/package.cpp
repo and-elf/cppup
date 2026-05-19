@@ -55,7 +55,7 @@ class PackageRegistry
   {
   }
 
-  bool ensure_directories() noexcept
+  [[nodiscard]] bool ensure_directories() noexcept
   {
     try
     {
@@ -68,7 +68,7 @@ class PackageRegistry
     }
   }
 
-  std::vector<PackageRecord> load() const
+  [[nodiscard]] std::vector<PackageRecord> load() const
   {
     std::vector<PackageRecord> records;
     if (!std::filesystem::exists(registry_file_))
@@ -107,7 +107,7 @@ class PackageRegistry
     return records;
   }
 
-  bool save(const std::vector<PackageRecord>& records) const
+  [[nodiscard]] bool save(const std::vector<PackageRecord>& records) const
   {
     std::ofstream f(registry_file_);
     if (!f)
@@ -122,7 +122,7 @@ class PackageRegistry
     return true;
   }
 
-  const std::filesystem::path& packages_dir() const noexcept
+  [[nodiscard]] const std::filesystem::path& packages_dir() const noexcept
   {
     return packages_dir_;
   }
@@ -247,8 +247,8 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
     }
 
     auto records = registry.load();
-    if (std::any_of(records.begin(), records.end(),
-                    [&](const PackageRecord& r) { return r.name == options.name; }))
+    if (std::ranges::any_of(records,
+                            [&](const PackageRecord& r) { return r.name == options.name; }))
     {
       return std::unexpected("Package already installed: " + options.name);
     }
@@ -353,8 +353,8 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
     }
 
     auto       records = registry.load();
-    const auto it      = std::find_if(records.begin(), records.end(),
-                                      [&](const PackageRecord& r) { return r.name == package_name; });
+    const auto it      = std::ranges::find_if(
+        records, [&](const PackageRecord& r) { return r.name == package_name; });
     if (it == records.end())
     {
       return std::unexpected("Package not found: " + package_name);

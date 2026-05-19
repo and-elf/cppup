@@ -28,7 +28,9 @@ class TempDir
     fs::remove_all(path_, ec);
   }
   TempDir(const TempDir&)            = delete;
+  TempDir(TempDir&&)                 = delete;
   TempDir& operator=(const TempDir&) = delete;
+  TempDir& operator=(TempDir&&)      = delete;
 
   void touch(const std::string& rel) const
   {

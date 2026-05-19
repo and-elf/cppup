@@ -107,9 +107,8 @@ std::vector<std::string> json_to_vector(const std::string& json)
   std::string        item;
   while (std::getline(iss, item, ','))
   {
-    // Remove quotes and whitespace
-    item.erase(std::remove(item.begin(), item.end(), '"'), item.end());
-    item.erase(std::remove(item.begin(), item.end(), ' '), item.end());
+    auto trash = std::ranges::remove_if(item, [](char c) { return c == '"' || c == ' '; });
+    item.erase(trash.begin(), trash.end());
     if (!item.empty())
     {
       result.push_back(item);
@@ -1139,14 +1138,17 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
     std::string const dep_key = std::format("{}@{}", dep_name, latest_version);
 
     // If dependency is in recursion stack, we found a cycle
-    if (recursion_stack.find(dep_key) != recursion_stack.end())
+    if (recursion_stack.contains(dep_key))
     {
       recursion_stack.erase(package_key);
       return true;
     }
 
     // If not visited, recursively check
-    if (visited.find(dep_key) == visited.end())
+    if (visited.contains(dep_key))
+    {
+      continue;  // Already visited, skip
+    }
     {
       if (has_cycle_dfs(dep_key, visited, recursion_stack))
       {

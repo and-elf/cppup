@@ -4,7 +4,7 @@
 
 #include "SystemProcessRunner.hpp"
 #include "core/cli/cli_application.hpp"
-#include "core/cli/logger.hpp"
+#include "core/logger/console/console_logger.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -17,7 +17,7 @@ int main(int argc, char* argv[])
     context.projectRoot = std::string(".");
 
     // Create logger
-    context.logger = std::make_unique<cppup::cli::ConsoleLogger>();
+    context.logger = std::make_unique<cppup::logger::console::ConsoleLogger>();
 
     // Create process runner
     context.processRunner = std::make_unique<SystemProcessRunner>();

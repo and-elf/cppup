@@ -20,7 +20,7 @@ namespace cppup::cli
 class ErrorHandler
 {
  public:
-  enum class ErrorCode : int
+  enum class ErrorCode : uint8_t
   {
     Success          = 0,
     InvalidArguments = 1,

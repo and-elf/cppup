@@ -11,12 +11,26 @@
 
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
+#include "core/logger/console/console_logger.hpp"
 
 namespace cppup::cli
 {
 
 void ErrorHandler::reportError(const std::string& message, ErrorCode /*code*/) noexcept
 {
+  try
+  {
+    std::print(stderr, "Error: {}\n", message);
+  }
+  catch (...)
+  {
+    // If printing fails, there's not much we can do. Swallow the exception.
+  }
+  // std::print can throw if stderr is not writable, but we don't want to let that propagate since
+  // we're already in an error state. In that case, we just silently fail to report the error, since
+  // there's no good fallback. Note: In a more robust implementation, we might want to log this to a
+  // file or take some other action if printing to stderr fails, but for simplicity we'll just
+  // ignore it here.
   std::print(stderr, "Error: {}\n", message);
 }
 
@@ -337,9 +351,10 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
 
   if (*build_cmd)
   {
-    if (build_verbose && context_.logger)
+    if (build_verbose)
     {
-      context_.logger->set_verbose(true);
+      cppup::logger::console::ConsoleLogger::setGlobalConfig(
+          {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
     }
     return handleExpectedResult(executeBuild(opts_from(build_asan, build_coverage, build_verbose,
                                                        build_with_tests, build_jobs),

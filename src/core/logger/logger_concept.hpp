@@ -1,6 +1,7 @@
 #pragma once
 
 #include <concepts>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <string_view>
@@ -8,7 +9,7 @@
 namespace cppup::logger
 {
 
-enum class LogLevel
+enum class LogLevel : std::uint8_t
 {
   Debug,
   Info,

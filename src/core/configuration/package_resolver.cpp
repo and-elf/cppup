@@ -81,7 +81,7 @@ std::optional<ResolvedPackage> PackageResolver::resolve_single_package(
 }
 
 PackageResolutionResult PackageResolver::merge_package_information(
-    const std::vector<ResolvedPackage>& resolved_packages) const
+    const std::vector<ResolvedPackage>& resolved_packages)
 {
   PackageResolutionResult result;
   result.resolved_packages = resolved_packages;

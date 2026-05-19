@@ -14,13 +14,11 @@ namespace cppup::configuration
 struct Profile
 {
   std::string              name;
-  std::vector<Package>     packages;
-  std::vector<Flag>        compile_flags;
-  std::vector<Flag>        link_flags;
-  std::vector<std::string> include_paths;
-  std::vector<Definition>  definitions;
-
-  explicit Profile(std::string name) noexcept : name(std::move(name)) {}
+  std::vector<Package>     packages      = {};
+  std::vector<Flag>        compile_flags = {};
+  std::vector<Flag>        link_flags    = {};
+  std::vector<std::string> include_paths = {};
+  std::vector<Definition>  definitions   = {};
 };
 
 }  // namespace cppup::configuration

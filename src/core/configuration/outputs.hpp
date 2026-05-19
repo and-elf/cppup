@@ -13,7 +13,7 @@ namespace cppup::configuration
 /**
  * Library type enumeration
  */
-enum class LibraryType
+enum class LibraryType : uint8_t
 {
   Static,
   Shared
@@ -53,18 +53,8 @@ struct Test
 {
   std::string              name;
   std::vector<std::string> sources;
-  std::vector<std::string> libraries;
-  std::vector<Flag>        link_flags;
-
-  Test(std::string name, std::vector<std::string> sources) noexcept :
-      name(std::move(name)), sources(std::move(sources))
-  {
-  }
-
-  Test(std::string name, std::initializer_list<std::string> sources) noexcept :
-      name(std::move(name)), sources(sources)
-  {
-  }
+  std::vector<std::string> libraries  = {};
+  std::vector<Flag>        link_flags = {};
 };
 
 /**

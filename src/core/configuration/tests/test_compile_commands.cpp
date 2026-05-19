@@ -78,7 +78,7 @@ TEST(CompileCommands, IncludesDefinesAndFlags)
   auto               root = make_tmp_dir("flags");
   BuildConfiguration config;
   config.compile_flags = {Flag{"-Wall"}, Flag{"-std=c++23"}};
-  config.definitions   = {Definition{"FOO", "bar"}, Definition{"NDEBUG"}};
+  config.definitions   = {Definition{.name = "FOO", .value = "bar"}, Definition{.name = "NDEBUG"}};
   config.include_paths = {"include", "src"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
@@ -100,7 +100,7 @@ TEST(CompileCommands, ToolchainCompilerUsed)
 {
   auto               root = make_tmp_dir("toolchain");
   BuildConfiguration config;
-  config.toolchain = Toolchain{"clang++"};
+  config.toolchain = Toolchain{.name = "clang++"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build");
@@ -126,7 +126,7 @@ TEST(CompileCommands, AllTargetKindsEmitted)
   BuildConfiguration config;
   config.libraries.push_back(Library{.name = "lib", .sources = {"lib/a.cpp", "lib/b.cpp"}});
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
-  config.tests.push_back(cppup::configuration::Test{"unit", {"tests/t.cpp"}});
+  config.tests.push_back(cppup::configuration::Test{.name = "unit", .sources = {"tests/t.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build");
   ASSERT_TRUE(result.has_value());
@@ -197,7 +197,7 @@ TEST(CompileCommands, QuotesInDefinitionValueAreEscaped)
 {
   auto               root = make_tmp_dir("escape");
   BuildConfiguration config;
-  config.definitions = {Definition{"VERSION", "\"1.2\""}};
+  config.definitions = {Definition{.name = "VERSION", .value = "\"1.2\""}};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
   auto result = emit_compile_commands(config, root, root / "build");

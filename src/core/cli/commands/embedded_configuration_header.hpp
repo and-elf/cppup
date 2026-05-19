@@ -28,7 +28,6 @@ inline constexpr unsigned char kConfigurationHeaderBytes[] = {
 };
 
 inline const std::string_view kConfigurationHeader{
-    reinterpret_cast<const char*>(kConfigurationHeaderBytes),
-    sizeof(kConfigurationHeaderBytes)};
+    reinterpret_cast<const char*>(kConfigurationHeaderBytes), sizeof(kConfigurationHeaderBytes)};
 
 }  // namespace cppup::cli

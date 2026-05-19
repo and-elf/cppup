@@ -10,22 +10,12 @@
 #include "../../../ProcessRunner.h"
 #include "../command_context.hpp"
 #include "../commands.hpp"
-#include "../logger.hpp"
 
 namespace fs = std::filesystem;
 using namespace cppup::cli;
 
 namespace
 {
-
-class SilentLogger final : public Logger
-{
- public:
-  void info(const std::string& /*message*/) override {}
-  void warning(const std::string& /*message*/) override {}
-  void error(const std::string& /*message*/) override {}
-  void debug(const std::string& /*message*/) override {}
-};
 
 fs::path make_tmp_root(std::string_view tag)
 {
@@ -40,7 +30,7 @@ fs::path make_tmp_root(std::string_view tag)
 {
   CommandContext ctx;
   ctx.projectRoot = root;
-  ctx.logger      = std::make_unique<SilentLogger>();
+  ctx.logger      = std::make_unique<cppup::logger::SilentLogger>();
   return ctx;
 }
 

@@ -16,7 +16,7 @@ namespace cppup::configuration
 /**
  * Source type for package resolution
  */
-enum class SourceType
+enum class SourceType : uint8_t
 {
   DIRECTORY,  // Local directory
   GIT,        // Git repository
@@ -44,15 +44,8 @@ struct PackageInfo
   std::optional<std::string> git_commit = std::nullopt;
 
   // Build options
-  std::vector<std::string>   build_args;
+  std::vector<std::string>   build_args   = {};
   std::optional<std::string> subdirectory = std::nullopt;
-
-  explicit constexpr PackageInfo(std::string name) noexcept : name(std::move(name)) {}
-
-  constexpr PackageInfo(std::string name, std::string version) noexcept :
-      name(std::move(name)), version(std::move(version))
-  {
-  }
 };
 
 /**
@@ -97,6 +90,7 @@ class Package
     return *this;
   }
   Package& operator=(Package&&) = default;
+  ~Package()                    = default;
 
   // Core package interface
   [[nodiscard]] const PackageInfo& info() const
@@ -108,7 +102,7 @@ class Package
     return impl_->info();
   }
 
-  std::expected<std::filesystem::path, std::string> resolve_source() const
+  [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const
   {
     if (!impl_)
     {
@@ -163,9 +157,14 @@ class Package
  private:
   struct PackageInterface
   {
+    PackageInterface()                                                                    = default;
     virtual ~PackageInterface()                                                           = default;
-    [[nodiscard]] virtual std::unique_ptr<PackageInterface>                 clone() const = 0;
-    [[nodiscard]] virtual const PackageInfo&                                info() const  = 0;
+    PackageInterface(const PackageInterface&)                                             = delete;
+    PackageInterface& operator=(const PackageInterface&)                                  = delete;
+    PackageInterface(PackageInterface&&)                                                  = delete;
+    PackageInterface&                                       operator=(PackageInterface&&) = delete;
+    [[nodiscard]] virtual std::unique_ptr<PackageInterface> clone() const                 = 0;
+    [[nodiscard]] virtual const PackageInfo&                info() const                  = 0;
     [[nodiscard]] virtual std::expected<std::filesystem::path, std::string> resolve_source()
         const                                                         = 0;
     virtual void set_command_executor(std::shared_ptr<void> executor) = 0;
@@ -173,18 +172,19 @@ class Package
   };
 
   template <PackageType T>
-  struct PackageImpl : PackageInterface
+  class PackageImpl : public PackageInterface
   {
     T package_;
 
+   public:
     explicit PackageImpl(T package) : package_(std::move(package)) {}
 
-    std::unique_ptr<PackageInterface> clone() const override
+    [[nodiscard]] std::unique_ptr<PackageInterface> clone() const override
     {
       return std::make_unique<PackageImpl<T>>(package_);
     }
 
-    const PackageInfo& info() const override
+    [[nodiscard]] const PackageInfo& info() const override
     {
       return package_.info();
     }
@@ -214,8 +214,6 @@ class Package
 struct Module
 {
   std::string name;
-
-  explicit Module(std::string name) noexcept : name(std::move(name)) {}
 };
 
 /**
@@ -269,8 +267,6 @@ struct Toolchain
   CxxStandard              cxx_standard = CxxStandard::Unspecified;
   WarningLevel             warnings     = WarningLevel::None;
   std::vector<std::string> extra_flags  = {};
-
-  explicit Toolchain(std::string name) noexcept : name(std::move(name)) {}
 };
 
 /**
@@ -279,9 +275,6 @@ struct Toolchain
 struct Flag
 {
   std::string_view flag;
-
-  constexpr Flag(std::string_view flag) noexcept : flag(flag) {}
-  constexpr Flag(const char* flag) noexcept : flag(flag) {}
 };
 
 /**
@@ -290,13 +283,7 @@ struct Flag
 struct Definition
 {
   std::string_view name;
-  std::string_view value;
-
-  constexpr Definition(std::string_view name) noexcept : name(name) {}
-  constexpr Definition(std::string_view name, std::string_view value) noexcept :
-      name(name), value(value)
-  {
-  }
+  std::string_view value = {};
 };
 
 }  // namespace cppup::configuration

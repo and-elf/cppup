@@ -2,11 +2,10 @@
 
 using namespace cppup::configuration;
 
-extern "C" BuildConfiguration configure()
-{
+extern "C" BuildConfiguration configure() {
   BuildConfiguration config;
 
-  config.toolchain     = Toolchain{"g++"};
+  config.toolchain = Toolchain{"g++"};
   config.compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}, Flag{"-Wpedantic"}, Flag{"-std=c++23"}};
   config.include_paths = {"include", "src"};
 

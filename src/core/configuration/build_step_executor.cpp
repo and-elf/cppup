@@ -4,18 +4,18 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <iostream>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "build_configuration.hpp"
 
 namespace cppup::configuration
+{
+namespace
 {
 
 // Thread-safe build step status tracker
@@ -43,8 +43,9 @@ class BuildStepStatusTracker
   bool are_dependencies_complete(const std::vector<size_t>& dependency_indices) const
   {
     std::scoped_lock const lock(mutex_);
-    return std::all_of(dependency_indices.begin(), dependency_indices.end(),
-                       [this](size_t idx) { return statuses_[idx] == BuildStepStatus::Completed; });
+    return std::ranges::all_of(dependency_indices.begin(), dependency_indices.end(),
+                               [this](size_t idx)
+                               { return statuses_[idx] == BuildStepStatus::Completed; });
   }
 
   void wait_for_dependencies(size_t /*step_index*/, const std::vector<size_t>& dependency_indices)
@@ -58,12 +59,12 @@ class BuildStepStatusTracker
     cv_.wait(lock,
              [this, &dependency_indices]()
              {
-               return std::all_of(dependency_indices.begin(), dependency_indices.end(),
-                                  [this](size_t idx)
-                                  {
-                                    return statuses_[idx] == BuildStepStatus::Completed ||
-                                           statuses_[idx] == BuildStepStatus::Failed;
-                                  });
+               return std::ranges::all_of(dependency_indices.begin(), dependency_indices.end(),
+                                          [this](size_t idx)
+                                          {
+                                            return statuses_[idx] == BuildStepStatus::Completed ||
+                                                   statuses_[idx] == BuildStepStatus::Failed;
+                                          });
              });
   }
 
@@ -84,7 +85,7 @@ struct DependencyNode
 };
 
 // Build dependency graph from build steps
-static std::vector<DependencyNode> build_dependency_graph(const std::vector<BuildStep>& steps)
+std::vector<DependencyNode> build_dependency_graph(const std::vector<BuildStep>& steps)
 {
   std::vector<DependencyNode>             graph;
   std::unordered_map<std::string, size_t> name_to_index;
@@ -116,7 +117,7 @@ static std::vector<DependencyNode> build_dependency_graph(const std::vector<Buil
 }
 
 // Topological sort using Kahn's algorithm
-static std::vector<size_t> topological_sort(const std::vector<DependencyNode>& graph)
+std::vector<size_t> topological_sort(const std::vector<DependencyNode>& graph)
 {
   std::vector<size_t> result;
   std::queue<size_t>  queue;
@@ -164,9 +165,8 @@ static std::vector<size_t> topological_sort(const std::vector<DependencyNode>& g
 }
 
 // Execute a single build step with status tracking
-static void execute_build_step(const BuildStep& step, size_t step_index,
-                               BuildStepStatusTracker&       tracker,
-                               std::vector<BuildStepResult>& results, std::mutex& results_mutex)
+void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatusTracker& tracker,
+                        std::vector<BuildStepResult>& results, std::mutex& results_mutex)
 {
   try
   {
@@ -194,6 +194,8 @@ static void execute_build_step(const BuildStep& step, size_t step_index,
     results[step_index].error_message = e.what();
   }
 }
+
+}  // namespace
 
 // Simplified bootstrap implementation
 BuildStepExecutionResult BuildStepExecutor::execute_build_steps(
@@ -274,7 +276,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
   {
     while (true)
     {
-      size_t step_idx;
+      size_t step_idx{};
       bool   has_work = false;
       {
         std::unique_lock lock(queue_mutex);
@@ -325,7 +327,8 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
 
   // Start worker threads
   std::vector<std::thread> workers;
-  unsigned int const       num_threads = std::max(1u, std::thread::hardware_concurrency());
+  unsigned int const       num_threads = std::max(1U, std::thread::hardware_concurrency());
+  workers.reserve(num_threads);
   for (unsigned int i = 0; i < num_threads; ++i)
   {
     workers.emplace_back(worker);

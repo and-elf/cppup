@@ -5,20 +5,29 @@
 #include <string>
 #include <string_view>
 
+#include "../logger.hpp"
 #include "../logger_concept.hpp"
 
 namespace cppup::logger::console
 {
 
-class ConsoleLogger
+/**
+ * Console logger.
+ *
+ * With an empty `category`, output uses the simple `[LEVEL] message` format
+ * (uncolored, all on stdout) — this matches what the cli historically emitted.
+ * With a non-empty category, output uses the richer `[category] LEVEL: message`
+ * form (colored, warnings/errors on stderr).
+ */
+class ConsoleLogger : public cppup::logger::Logger
 {
  public:
-  explicit ConsoleLogger(std::string category);
+  explicit ConsoleLogger(std::string category = {});
 
   static void setGlobalConfig(LogConfig config);
-  static void setLogFile(std::string path);
+  static void setLogFile(const std::string& path);
 
-  void log(LogLevel level, std::string_view message) const;
+  void log(LogLevel level, std::string_view message) const override;
 
  private:
   static std::string_view levelToString(LogLevel lvl);

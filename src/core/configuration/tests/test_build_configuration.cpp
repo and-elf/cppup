@@ -30,11 +30,13 @@ TEST(BuildConfiguration, DefaultConstructionLeavesContainersEmpty)
 TEST(BuildConfiguration, ParameterizedConstruction)
 {
   BuildConfiguration config(
-      Toolchain{"gcc-13"}, {}, {Module{"Logger"}}, {"src/main.cpp", "src/utils.cpp"},
-      {Flag{"-Wall"}, Flag{"-Wextra"}}, {Flag{"-pthread"}}, {"include/", "third_party/"},
-      {Definition{"DEBUG", "1"}, Definition{"VERSION", "1.0.0"}},
-      {Binary{"myapp", {"src/main.cpp"}}}, {Library{"mylib", {"src/lib.cpp"}, LibraryType::Static}},
-      {cppup::configuration::Test{"unit_tests", {"tests/test_main.cpp"}}});
+      Toolchain{.name = "gcc-13"}, {}, {Module{.name = "Logger"}},
+      {"src/main.cpp", "src/utils.cpp"}, {Flag{.flag = "-Wall"}, Flag{.flag = "-Wextra"}},
+      {Flag{.flag = "-pthread"}}, {"include/", "third_party/"},
+      {Definition{.name = "DEBUG", .value = "1"}, Definition{.name = "VERSION", .value = "1.0.0"}},
+      {Binary{.name = "myapp", .sources = {"src/main.cpp"}}},
+      {Library{.name = "mylib", .sources = {"src/lib.cpp"}, .type = LibraryType::Static}},
+      {cppup::configuration::Test{.name = "unit_tests", .sources = {"tests/test_main.cpp"}}});
 
   ASSERT_TRUE(config.toolchain.has_value());
   EXPECT_EQ(config.toolchain->name, "gcc-13");
@@ -80,16 +82,16 @@ TEST(BuildConfiguration, ParameterizedConstruction)
 TEST(BuildConfiguration, FieldAssignmentPopulatesContainers)
 {
   BuildConfiguration config;
-  config.toolchain     = Toolchain{"clang-17"};
-  config.modules       = {Module{"Logger"}, Module{"Network"}};
+  config.toolchain     = Toolchain{.name = "clang-17"};
+  config.modules       = {Module{.name = "Logger"}, Module{.name = "Network"}};
   config.sources       = {"src/*.cpp", "main.cpp"};
-  config.compile_flags = {Flag{"-Wall"}, Flag{"-std=c++23"}};
-  config.link_flags    = {Flag{"-pthread"}};
+  config.compile_flags = {Flag{.flag = "-Wall"}, Flag{.flag = "-std=c++23"}};
+  config.link_flags    = {Flag{.flag = "-pthread"}};
   config.include_paths = {"include/"};
-  config.definitions   = {Definition{"DEBUG", "1"}};
-  config.binaries      = {Binary{"myapp", {"src/main.cpp"}}};
-  config.libraries     = {Library{"core", {"src/core.cpp"}}};
-  config.tests         = {cppup::configuration::Test{"unit_tests", {"tests/*.cpp"}}};
+  config.definitions   = {Definition{.name = "DEBUG", .value = "1"}};
+  config.binaries      = {Binary{.name = "myapp", .sources = {"src/main.cpp"}}};
+  config.libraries     = {Library{.name = "core", .sources = {"src/core.cpp"}}};
+  config.tests = {cppup::configuration::Test{.name = "unit_tests", .sources = {"tests/*.cpp"}}};
 
   ASSERT_TRUE(config.toolchain.has_value());
   EXPECT_EQ(config.toolchain->name, "clang-17");

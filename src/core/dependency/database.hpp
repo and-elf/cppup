@@ -165,7 +165,7 @@ class DependencyDatabase
 
   // Helper methods
   [[nodiscard]] std::expected<void, std::string> create_tables() noexcept;
-  [[nodiscard]] std::expected<void, std::string> prepare_statements() noexcept;
+  static std::expected<void, std::string>        prepare_statements() noexcept;
   void                                           cleanup() noexcept;
 
   // SQL execution helpers
