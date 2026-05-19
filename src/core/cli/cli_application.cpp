@@ -132,7 +132,8 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   bool        init_with_devcontainer = false;
   bool        init_with_docker       = false;
   bool        init_with_gitlab_ci    = false;
-  init_cmd->add_option("name", init_name, "Project name")->required();
+  init_cmd->add_option("name", init_name,
+                       "Project name (default: current directory name, like cargo init)");
   init_cmd->add_option("--path", init_path, "Virtual environment path");
   init_cmd->add_flag("--full", init_full,
                      "Scaffold all optional templates (.vscode, .devcontainer, Dockerfile, "

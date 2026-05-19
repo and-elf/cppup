@@ -75,23 +75,37 @@ void write_file(const fs::path& path, const std::string& content)
 
 }  // namespace
 
-std::expected<int, std::string> executeInit(const std::string&                project_name,
+std::expected<int, std::string> executeInit(const std::string&                project_name_arg,
                                             const std::optional<std::string>& venv_path,
                                             InitOptions                       options,
                                             const CommandContext& context) noexcept
 {
   try
   {
+    // Cargo-init semantics: emit into the current directory; if no name was
+    // given, derive it from the cwd basename. We resolve the projectRoot so a
+    // bare "." picks up its real folder name and substitution doesn't see ".".
+    const fs::path resolved_root =
+        context.projectRoot.is_absolute()
+            ? context.projectRoot.lexically_normal()
+            : fs::weakly_canonical(context.projectRoot);
+
+    std::string project_name = project_name_arg;
     if (project_name.empty())
     {
-      return std::unexpected("Project name is required");
+      project_name = resolved_root.filename().string();
+    }
+    if (project_name.empty())
+    {
+      return std::unexpected(
+          "Could not determine project name (cwd has no basename); pass `cppup init <name>`");
     }
 
-    const fs::path project_dir = context.projectRoot / project_name;
-
-    if (fs::exists(project_dir))
+    const fs::path project_dir = context.projectRoot;
+    if (fs::exists(project_dir / "build.cpp"))
     {
-      return std::unexpected("Project directory already exists: " + project_dir.string());
+      return std::unexpected("build.cpp already exists in " + project_dir.string() +
+                             "; refusing to overwrite an existing project");
     }
 
     context.logger->info("Initializing project: " + project_name);
@@ -121,7 +135,6 @@ std::expected<int, std::string> executeInit(const std::string&                pr
     context.logger->info("Project created at: " + project_dir.string() + " (" +
                          std::to_string(emitted) + " files)");
     context.logger->info("Next steps:");
-    context.logger->info("  cd " + project_name);
     context.logger->info("  cppup build");
     context.logger->info("  cppup test");
 
