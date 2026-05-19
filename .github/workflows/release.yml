@@ -1,0 +1,50 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+    permissions:
+      contents: write   # needed to attach release assets
+    env:
+      ARTIFACT: cppup-linux-x86_64
+    steps:
+      - name: Install build deps
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential g++ clang \
+            libsqlite3-dev libssl-dev libgtest-dev libgmock-dev \
+            ca-certificates curl tar git
+
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap slim cppup
+        run: ./bootstrap.sh
+
+      - name: Build full cppup
+        run: ./bootstrap_build/cppup_bootstrap build
+
+      - name: Smoke-test
+        run: ./build/cppup test
+
+      - name: Stage release artifacts
+        run: |
+          cp build/cppup "${ARTIFACT}"
+          sha256sum "${ARTIFACT}" | awk '{print $1}' > "${ARTIFACT}.sha256"
+          ls -la "${ARTIFACT}" "${ARTIFACT}.sha256"
+          cat "${ARTIFACT}.sha256"
+
+      - name: Upload to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ARTIFACT }}
+            ${{ env.ARTIFACT }}.sha256
+          fail_on_unmatched_files: true

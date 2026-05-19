@@ -23,8 +23,27 @@ namespace
 
 namespace fs = std::filesystem;
 
-constexpr std::string_view k_project_path  = "ViktorToreRudolf%2Fcppup";
-constexpr std::string_view k_artifact_name = "cppup-linux-x86_64";
+// Default GitHub repo we fetch releases from. Override at runtime via the
+// CPPUP_RELEASE_REPO env var (e.g. for forks: `CPPUP_RELEASE_REPO=alice/cppup`).
+constexpr std::string_view k_default_release_repo = "and-elf/cppup";
+
+std::string release_repo()
+{
+  const char* override_repo = std::getenv("CPPUP_RELEASE_REPO");
+  if (override_repo != nullptr && *override_repo != '\0')
+  {
+    return std::string{override_repo};
+  }
+  return std::string{k_default_release_repo};
+}
+
+// The asset name for a given platform tag. The release workflow MUST upload
+// assets matching this scheme (`cppup-<platform>`); both ends derive it from
+// the same convention so they cannot drift apart silently.
+std::string artifact_name_for(std::string_view platform)
+{
+  return std::string{"cppup-"} + std::string{platform};
+}
 
 // Stringify-the-token trick so we accept both `CPPUP_VERSION=0.1.0` and
 // `CPPUP_VERSION="1.0.0"` from upstream definition sources. clang-tidy's
@@ -108,12 +127,12 @@ bool path_env_contains_dir(std::string_view path_env_value, std::string_view dir
   return false;
 }
 
-// Default fetch_latest implementation: shells out to curl against GitLab
-// releases API and returns the most recent tag_name.
+// Default fetch_latest implementation: hits GitHub's /releases/latest
+// (excludes drafts and prereleases) and returns its tag_name.
 std::expected<std::string, std::string> default_fetch_latest_version()
 {
-  const std::string url = std::string{"https://gitlab.com/api/v4/projects/"} +
-                          std::string{k_project_path} + "/releases";
+  const std::string url =
+      "https://api.github.com/repos/" + release_repo() + "/releases/latest";
   const std::string cmd  = std::string{"curl -fsSL "} + "'" + url + "' 2>/dev/null";
   const auto        body = capture(cmd);
   if (body.empty())
@@ -350,9 +369,11 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
 
     logger.info("Updating cppup to " + target_version + " (" + *platform + ")");
 
-    const std::string artifact_url = std::string{"https://gitlab.com/api/v4/projects/"} +
-                                     std::string{k_project_path} + "/packages/generic/cppup/" +
-                                     target_version + "/" + std::string{k_artifact_name};
+    // GitHub release assets live at /releases/download/<tag>/<asset_name>.
+    // sha256 lives at the same path with a .sha256 suffix (matches the
+    // workflow that publishes the release).
+    const std::string artifact_url = "https://github.com/" + release_repo() + "/releases/download/" +
+                                     target_version + "/" + artifact_name_for(*platform);
 
     const auto staged = make_temp_download_path();
     auto       dl     = default_download(artifact_url, staged);

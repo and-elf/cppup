@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+    steps:
+      - name: Install build deps
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential g++ clang clang-tidy clang-format \
+            libsqlite3-dev libssl-dev libgtest-dev libgmock-dev \
+            ca-certificates curl tar git
+
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap slim cppup
+        run: ./bootstrap.sh
+
+      - name: Build full cppup
+        run: ./bootstrap_build/cppup_bootstrap build
+
+      - name: Run tests
+        run: ./build/cppup test
