@@ -179,16 +179,15 @@ TEST(Runtime, RealisticConfiguration)
   when_env(config, "TARGET", "development", [&]() { definitions.emplace_back("DEV_BUILD=1"); });
   when_env(config, "TARGET", "production", [&]() { definitions.emplace_back("PROD_BUILD=1"); });
 
-  EXPECT_NE(std::find(packages.begin(), packages.end(), "openssl"), packages.end());
-  EXPECT_EQ(std::find(packages.begin(), packages.end(), "should_not_be_added"), packages.end());
-  EXPECT_NE(std::find(link_flags.begin(), link_flags.end(), "-pthread"), link_flags.end());
-  EXPECT_NE(std::find(compile_flags.begin(), compile_flags.end(), "-g"), compile_flags.end());
-  EXPECT_NE(std::find(compile_flags.begin(), compile_flags.end(), "-O0"), compile_flags.end());
-  EXPECT_NE(std::find(compile_flags.begin(), compile_flags.end(), "-O2"), compile_flags.end());
-  EXPECT_NE(std::find(definitions.begin(), definitions.end(), "HAVE_OPENSSL=1"), definitions.end());
-  EXPECT_NE(std::find(definitions.begin(), definitions.end(), "HAVE_THREADING=1"),
-            definitions.end());
-  EXPECT_NE(std::find(definitions.begin(), definitions.end(), "DEBUG_MODE=1"), definitions.end());
-  EXPECT_NE(std::find(definitions.begin(), definitions.end(), "PROD_BUILD=1"), definitions.end());
-  EXPECT_EQ(std::find(definitions.begin(), definitions.end(), "DEV_BUILD=1"), definitions.end());
+  EXPECT_TRUE(std::ranges::find(packages, std::string{"openssl"}) != packages.end());
+  EXPECT_FALSE(std::ranges::find(packages, std::string{"should_not_be_added"}) != packages.end());
+  EXPECT_TRUE(std::ranges::find(link_flags, std::string{"-pthread"}) != link_flags.end());
+  EXPECT_TRUE(std::ranges::find(compile_flags, std::string{"-g"}) != compile_flags.end());
+  EXPECT_TRUE(std::ranges::find(compile_flags, std::string{"-O0"}) != compile_flags.end());
+  EXPECT_TRUE(std::ranges::find(compile_flags, std::string{"-O2"}) != compile_flags.end());
+  EXPECT_TRUE(std::ranges::find(definitions, std::string{"HAVE_OPENSSL=1"}) != definitions.end());
+  EXPECT_TRUE(std::ranges::find(definitions, std::string{"HAVE_THREADING=1"}) != definitions.end());
+  EXPECT_TRUE(std::ranges::find(definitions, std::string{"DEBUG_MODE=1"}) != definitions.end());
+  EXPECT_TRUE(std::ranges::find(definitions, std::string{"PROD_BUILD=1"}) != definitions.end());
+  EXPECT_FALSE(std::ranges::find(definitions, std::string{"DEV_BUILD=1"}) != definitions.end());
 }

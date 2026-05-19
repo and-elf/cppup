@@ -31,6 +31,14 @@ Checks: >
 
 WarningsAsErrors: ''
 
+# Restrict header diagnostics to our own headers under src/ and include/.
+# Without this, default behaviour suppresses non-main-file headers entirely,
+# but being explicit guards against the default flipping and lets us pick
+# off third-party headers that happen to live under src/ (CLI11 in
+# src/cli/CLI/) plus generated headers we don't hand-edit.
+HeaderFilterRegex:        '^.*/(src|include)/.*\.(hpp|h)$'
+ExcludeHeaderFilterRegex: '.*/CLI/CLI11\.hpp$|.*/init_templates_data\.hpp$|.*/embedded_configuration_header\.hpp$'
+
 CheckOptions:
   # Types: uniformly CamelCase.
   - key:   readability-identifier-naming.ClassCase
