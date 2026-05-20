@@ -170,12 +170,9 @@ TEST(Platform, PlatformSpecificConfigurationApplied)
 
   if (is_linux())
   {
-    EXPECT_NE(std::ranges::find(compile_flags.begin(), compile_flags.end(), "-Wall"),
-              compile_flags.end());
-    EXPECT_NE(std::ranges::find(link_flags.begin(), link_flags.end(), "-pthread"),
-              link_flags.end());
-    EXPECT_NE(std::ranges::find(packages.begin(), packages.end(), "linux-headers"), packages.end());
-    EXPECT_NE(std::ranges::find(definitions.begin(), definitions.end(), "LINUX_BUILD"),
-              definitions.end());
+    EXPECT_TRUE(std::ranges::contains(compile_flags, std::string{"-Wall"}));
+    EXPECT_TRUE(std::ranges::contains(link_flags, std::string{"-pthread"}));
+    EXPECT_TRUE(std::ranges::contains(packages, std::string{"linux-headers"}));
+    EXPECT_TRUE(std::ranges::contains(definitions, std::string{"LINUX_BUILD"}));
   }
 }
