@@ -9,7 +9,7 @@ jobs:
   linux-x86_64:
     runs-on: ubuntu-latest
     container:
-      image: debian:trixie-slim
+      image: fedora:43
     permissions:
       contents: write   # needed to attach release assets
     env:
@@ -17,10 +17,9 @@ jobs:
     steps:
       - name: Install build deps
         run: |
-          apt-get update -qq
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential g++ clang \
-            libsqlite3-dev libssl-dev libgtest-dev libgmock-dev \
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc gcc-c++ clang make \
+            sqlite-devel openssl-devel gtest-devel gmock-devel \
             ca-certificates curl tar git
 
       - uses: actions/checkout@v4
