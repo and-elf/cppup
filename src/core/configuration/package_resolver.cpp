@@ -1,7 +1,8 @@
 #include "package_resolver.hpp"
 
 #include <algorithm>
-#include <iostream>
+#include <iterator>
+#include <utility>
 
 namespace cppup::configuration
 {
@@ -16,14 +17,13 @@ PackageResolutionResult PackageResolver::resolve_packages(const BuildConfigurati
     return result;
   }
 
-  std::vector<ResolvedPackage> resolved_packages;
-  std::set<std::string>        resolved_package_keys;  // To prevent cycles and duplicates
+  std::vector<ResolvedPackage> resolved;
+  std::set<std::string>        seen_keys;
 
-  // Resolve each package in the configuration
   for (const auto& package : config.packages)
   {
-    auto resolved = resolve_single_package(package, resolved_package_keys);
-    if (!resolved.has_value())
+    auto subset = resolve_transitive(package, seen_keys);
+    if (!subset)
     {
       result.error_message = "Failed to resolve package: " + package.name();
       if (package.version().has_value())
@@ -32,52 +32,43 @@ PackageResolutionResult PackageResolver::resolve_packages(const BuildConfigurati
       }
       return result;
     }
-
-    resolved_packages.push_back(std::move(resolved.value()));
+    std::ranges::move(*subset, std::back_inserter(resolved));
   }
 
-  // Merge all package information
-  result         = merge_package_information(resolved_packages);
+  result         = merge_package_information(resolved);
   result.success = true;
-
   return result;
 }
 
-std::optional<ResolvedPackage> PackageResolver::resolve_single_package(
-    const Package& package, std::set<std::string>& resolved_packages) const
+std::optional<std::vector<ResolvedPackage>> PackageResolver::resolve_transitive(
+    const Package& root, std::set<std::string>& resolved_keys) const
 {
-  // Get package information
-  auto package_info = provider_->get_package_info(package.name(), package.version());
-  if (!package_info.has_value())
+  std::vector<ResolvedPackage> out;
+  std::vector<Package>         work;
+  work.push_back(root);
+
+  while (!work.empty())
   {
-    return std::nullopt;
-  }
+    Package pkg = std::move(work.back());
+    work.pop_back();
 
-  auto              resolved    = package_info.value();
-  std::string const package_key = make_package_key(resolved.name, resolved.version);
-
-  // Check if we've already resolved this package (prevent cycles)
-  if (resolved_packages.contains(package_key))
-  {
-    return resolved;  // Return already resolved package
-  }
-
-  resolved_packages.insert(package_key);
-
-  // Resolve dependencies
-  auto dependencies = provider_->get_dependencies(resolved.name, resolved.version);
-  for (const auto& dep : dependencies)
-  {
-    auto resolved_dep = resolve_single_package(dep, resolved_packages);
-    if (!resolved_dep.has_value())
+    auto info = provider_->get_package_info(pkg.name(), pkg.version());
+    if (!info.has_value())
     {
-      return std::nullopt;  // Failed to resolve dependency
+      return std::nullopt;
     }
 
-    resolved.dependencies.push_back(std::move(resolved_dep.value()));
-  }
+    auto key = make_package_key(info->name, info->version);
+    if (!resolved_keys.insert(std::move(key)).second)
+    {
+      continue;  // already in the closure
+    }
 
-  return resolved;
+    auto deps = provider_->get_dependencies(info->name, info->version);
+    std::ranges::move(deps, std::back_inserter(work));
+    out.push_back(std::move(*info));
+  }
+  return out;
 }
 
 PackageResolutionResult PackageResolver::merge_package_information(
@@ -93,55 +84,25 @@ PackageResolutionResult PackageResolver::merge_package_information(
   std::set<std::string>                         seen_libraries;
   std::set<std::pair<std::string, std::string>> seen_definitions;
 
-  // Helper function to merge package information recursively
-  std::function<void(const ResolvedPackage&)> merge_package = [&](const ResolvedPackage& pkg)
+  const auto append_unique = [](std::vector<std::string>& out, std::set<std::string>& seen,
+                                const std::vector<std::string>& in)
   {
-    // Merge compile flags
-    for (const auto& flag : pkg.compile_flags)
+    for (const auto& v : in)
     {
-      if (seen_compile_flags.insert(flag).second)
+      if (seen.insert(v).second)
       {
-        result.all_compile_flags.push_back(flag);
+        out.push_back(v);
       }
     }
+  };
 
-    // Merge link flags
-    for (const auto& flag : pkg.link_flags)
-    {
-      if (seen_link_flags.insert(flag).second)
-      {
-        result.all_link_flags.push_back(flag);
-      }
-    }
-
-    // Merge include paths
-    for (const auto& path : pkg.include_paths)
-    {
-      if (seen_include_paths.insert(path).second)
-      {
-        result.all_include_paths.push_back(path);
-      }
-    }
-
-    // Merge library paths
-    for (const auto& path : pkg.library_paths)
-    {
-      if (seen_library_paths.insert(path).second)
-      {
-        result.all_library_paths.push_back(path);
-      }
-    }
-
-    // Merge libraries
-    for (const auto& lib : pkg.libraries)
-    {
-      if (seen_libraries.insert(lib).second)
-      {
-        result.all_libraries.push_back(lib);
-      }
-    }
-
-    // Merge definitions
+  for (const auto& pkg : resolved_packages)
+  {
+    append_unique(result.all_compile_flags, seen_compile_flags, pkg.compile_flags);
+    append_unique(result.all_link_flags, seen_link_flags, pkg.link_flags);
+    append_unique(result.all_include_paths, seen_include_paths, pkg.include_paths);
+    append_unique(result.all_library_paths, seen_library_paths, pkg.library_paths);
+    append_unique(result.all_libraries, seen_libraries, pkg.libraries);
     for (const auto& def : pkg.definitions)
     {
       if (seen_definitions.insert(def).second)
@@ -149,18 +110,6 @@ PackageResolutionResult PackageResolver::merge_package_information(
         result.all_definitions.insert(def);
       }
     }
-
-    // Recursively merge dependencies
-    for (const auto& dep : pkg.dependencies)
-    {
-      merge_package(dep);
-    }
-  };
-
-  // Merge all packages
-  for (const auto& pkg : resolved_packages)
-  {
-    merge_package(pkg);
   }
 
   result.success = true;

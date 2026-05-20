@@ -19,13 +19,12 @@ struct ResolvedPackage
   std::string                        name;
   std::string                        version;
   std::string                        install_path;
-  std::vector<std::string>           include_paths;
-  std::vector<std::string>           library_paths;
-  std::vector<std::string>           libraries;
-  std::vector<std::string>           compile_flags;
-  std::vector<std::string>           link_flags;
-  std::map<std::string, std::string> definitions;
-  std::vector<ResolvedPackage>       dependencies;  // Resolved dependencies
+  std::vector<std::string>           include_paths{};
+  std::vector<std::string>           library_paths{};
+  std::vector<std::string>           libraries{};
+  std::vector<std::string>           compile_flags{};
+  std::vector<std::string>           link_flags{};
+  std::map<std::string, std::string> definitions{};
 };
 
 /**
@@ -34,16 +33,16 @@ struct ResolvedPackage
 struct PackageResolutionResult
 {
   bool                               success = false;
-  std::vector<ResolvedPackage>       resolved_packages;
-  std::vector<std::string>           include_paths;
-  std::vector<std::string>           library_paths;
-  std::vector<std::string>           libraries;
-  std::vector<std::string>           all_compile_flags;
-  std::vector<std::string>           all_link_flags;
-  std::vector<std::string>           all_include_paths;
-  std::vector<std::string>           all_library_paths;
-  std::vector<std::string>           all_libraries;
-  std::map<std::string, std::string> all_definitions;
+  std::vector<ResolvedPackage>       resolved_packages{};
+  std::vector<std::string>           include_paths{};
+  std::vector<std::string>           library_paths{};
+  std::vector<std::string>           libraries{};
+  std::vector<std::string>           all_compile_flags{};
+  std::vector<std::string>           all_link_flags{};
+  std::vector<std::string>           all_include_paths{};
+  std::vector<std::string>           all_library_paths{};
+  std::vector<std::string>           all_libraries{};
+  std::map<std::string, std::string> all_definitions{};
   std::string                        error_message;
 
   [[nodiscard]] bool is_success() const noexcept
@@ -63,6 +62,11 @@ class PackageInfoProvider
 {
  public:
   virtual ~PackageInfoProvider() = default;
+
+  PackageInfoProvider(const PackageInfoProvider&)            = default;
+  PackageInfoProvider& operator=(const PackageInfoProvider&) = default;
+  PackageInfoProvider(PackageInfoProvider&&)                 = default;
+  PackageInfoProvider& operator=(PackageInfoProvider&&)      = default;
 
   /**
    * Get information about a package
@@ -105,10 +109,13 @@ class PackageResolver
   std::shared_ptr<PackageInfoProvider> provider_;
 
   /**
-   * Resolve a single package and its dependencies
+   * Resolve a root package and all its transitive dependencies into a
+   * flat, deduped list (iterative, no recursion). Returns nullopt if any
+   * lookup fails; `resolved_keys` is threaded across calls so a package
+   * resolved by an earlier root is not added again.
    */
-  [[nodiscard]] std::optional<ResolvedPackage> resolve_single_package(
-      const Package& package, std::set<std::string>& resolved_packages) const;
+  [[nodiscard]] std::optional<std::vector<ResolvedPackage>> resolve_transitive(
+      const Package& root, std::set<std::string>& resolved_keys) const;
 
   /**
    * Merge information from multiple resolved packages
