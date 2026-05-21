@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "../panic.hpp"
 #include "toolchain_flags.hpp"
 
 namespace cppup::configuration
@@ -136,61 +137,49 @@ void emit_entry(std::ostringstream& os, bool& first, const std::string& compiler
 
 }  // namespace
 
-std::expected<std::filesystem::path, std::string> emit_compile_commands(
-    const BuildConfiguration& config, const std::filesystem::path& project_root,
-    const std::filesystem::path& /*build_dir*/, BuildOptions       options) noexcept
+std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
+                                            const std::filesystem::path& project_root,
+                                            const std::filesystem::path& /*build_dir*/,
+                                            BuildOptions options)
 {
-  try
+  const std::string compiler = config.toolchain ? config.toolchain->name : std::string{"g++"};
+  const auto        root     = normalize(project_root);
+  const auto        flags    = compile_flags_for(config, root, options);
+
+  std::ostringstream os;
+  os << "[\n";
+  bool first = true;
+
+  auto emit_sources = [&](const std::vector<std::string>& srcs)
   {
-    const std::string compiler = config.toolchain ? config.toolchain->name : std::string{"g++"};
-    const auto        root     = normalize(project_root);
-    const auto        flags    = compile_flags_for(config, root, options);
-
-    std::ostringstream os;
-    os << "[\n";
-    bool first = true;
-
-    auto emit_sources = [&](const std::vector<std::string>& srcs)
+    for (const auto& s : srcs)
     {
-      for (const auto& s : srcs)
-      {
-        auto abs = normalize(root / s);
-        emit_entry(os, first, compiler, root, abs, flags);
-      }
-    };
-
-    for (const auto& lib : config.libraries)
-    {
-      emit_sources(lib.sources);
+      auto abs = normalize(root / s);
+      emit_entry(os, first, compiler, root, abs, flags);
     }
-    for (const auto& bin : config.binaries)
-    {
-      emit_sources(bin.sources);
-    }
-    for (const auto& t : config.tests)
-    {
-      emit_sources(t.sources);
-    }
+  };
 
-    os << "\n]\n";
-
-    const auto    out = root / "compile_commands.json";
-    std::ofstream f(out, std::ios::trunc);
-    if (!f)
-    {
-      return std::unexpected("cannot open " + out.string());
-    }
-    f << os.str();
-    if (!f)
-    {
-      return std::unexpected("write failed: " + out.string());
-    }
-    return out;
-  }
-  catch (const std::exception& e)
+  for (const auto& lib : config.libraries)
   {
-    return std::unexpected(std::string{"emit_compile_commands: "} + e.what());
+    emit_sources(lib.sources);
   }
+  for (const auto& bin : config.binaries)
+  {
+    emit_sources(bin.sources);
+  }
+  for (const auto& t : config.tests)
+  {
+    emit_sources(t.sources);
+  }
+
+  os << "\n]\n";
+
+  const auto    out = root / "compile_commands.json";
+  std::ofstream f(out, std::ios::trunc);
+  CPPUP_CHECK(static_cast<bool>(f), "cannot open " + out.string());
+  f << os.str();
+  CPPUP_CHECK(static_cast<bool>(f), "write failed: " + out.string());
+  return out;
 }
 
 }  // namespace cppup::configuration

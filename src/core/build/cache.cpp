@@ -14,6 +14,7 @@
 #include <sstream>
 
 #include "../dependency/database.hpp"
+#include "../panic.hpp"
 
 namespace cppup::build
 {
@@ -32,47 +33,40 @@ std::string to_hex(const unsigned char* data, std::size_t len)
   return oss.str();
 }
 
-std::expected<std::string, std::string> sha256_file(const std::filesystem::path& file)
+// nullopt if the file can't be opened (e.g. doesn't exist yet). OpenSSL
+// failures panic — they indicate a broken crypto library, not an expected
+// runtime condition.
+std::optional<std::string> sha256_file(const std::filesystem::path& file)
 {
   std::ifstream in(file, std::ios::binary);
   if (!in)
   {
-    return std::unexpected("cannot open file: " + file.string());
+    return std::nullopt;
   }
 
   EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-  if (!ctx)
-  {
-    return std::unexpected("EVP_MD_CTX_new failed");
-  }
-  if (EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) != 1)
-  {
-    EVP_MD_CTX_free(ctx);
-    return std::unexpected("EVP_DigestInit_ex failed");
-  }
+  CPPUP_CHECK(ctx != nullptr, "EVP_MD_CTX_new failed");
+  CPPUP_CHECK(EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) == 1, "EVP_DigestInit_ex failed");
 
   std::array<char, 8192> buffer{};
   while (in)
   {
     in.read(buffer.data(), buffer.size());
     auto n = in.gcount();
-    if (n > 0 && EVP_DigestUpdate(ctx, buffer.data(), static_cast<std::size_t>(n)) != 1)
+    if (n > 0)
     {
-      EVP_MD_CTX_free(ctx);
-      return std::unexpected("EVP_DigestUpdate failed");
+      CPPUP_CHECK(EVP_DigestUpdate(ctx, buffer.data(), static_cast<std::size_t>(n)) == 1,
+                  "EVP_DigestUpdate failed");
     }
   }
 
-  unsigned char digest[EVP_MAX_MD_SIZE];
-  unsigned int  digest_len = 0;
-  if (EVP_DigestFinal_ex(ctx, digest, &digest_len) != 1)
-  {
-    EVP_MD_CTX_free(ctx);
-    return std::unexpected("EVP_DigestFinal_ex failed");
-  }
+  std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+  unsigned int                               digest_len = 0;
+  CPPUP_CHECK(EVP_DigestFinal_ex(ctx, digest.data(), &digest_len) == 1,
+              "EVP_DigestFinal_ex failed");
   EVP_MD_CTX_free(ctx);
 
-  return to_hex(digest, digest_len);
+  return to_hex(digest.data(), digest_len);
 }
 
 std::string serialize_string_vector(const std::vector<std::string>& v)
@@ -123,7 +117,7 @@ class SqliteBuildCache final : public BuildCache
     }
   }
 
-  std::expected<bool, std::string> needs_rebuild(const BuildTarget& target) override
+  bool needs_rebuild(const BuildTarget& target) override
   {
     if (!std::filesystem::exists(target.output_path))
     {
@@ -132,24 +126,13 @@ class SqliteBuildCache final : public BuildCache
     }
 
     auto stored = load_entry(target.name);
-    if (!stored)
-    {
-      record_miss();
-      return true;
-    }
-    if (stored->signature != target_signature(target))
+    if (!stored || stored->signature != target_signature(target))
     {
       record_miss();
       return true;
     }
 
-    auto deps = load_dependencies(target.name);
-    if (!deps)
-    {
-      record_miss();
-      return true;
-    }
-    for (const auto& dep : *deps)
+    for (const auto& dep : load_dependencies(target.name))
     {
       if (!std::filesystem::exists(dep.file_path))
       {
@@ -168,19 +151,15 @@ class SqliteBuildCache final : public BuildCache
     return false;
   }
 
-  std::expected<std::string, std::string> calculate_file_checksum(
-      const std::filesystem::path& file) override
+  std::optional<std::string> calculate_file_checksum(const std::filesystem::path& file) override
   {
     return sha256_file(file);
   }
 
-  std::expected<void, std::string> cache_build_result(
-      const BuildTarget& target, const std::vector<FileDependency>& dependencies) override
+  void cache_build_result(const BuildTarget&                 target,
+                          const std::vector<FileDependency>& dependencies) override
   {
-    if (auto r = exec("BEGIN IMMEDIATE"); !r)
-    {
-      return r;
-    }
+    exec("BEGIN IMMEDIATE");
 
     const char*   sql  = R"(
       INSERT OR REPLACE INTO cache_entries
@@ -188,11 +167,8 @@ class SqliteBuildCache final : public BuildCache
       VALUES (?, ?, ?, ?)
     )";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
-    {
-      exec("ROLLBACK");
-      return std::unexpected(std::string{"prepare cache_entries failed: "} + sqlite3_errmsg(db_));
-    }
+    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare cache_entries failed: "} + sqlite3_errmsg(db_));
 
     const auto signature  = target_signature(target);
     const auto build_time = std::chrono::duration_cast<std::chrono::seconds>(
@@ -204,86 +180,51 @@ class SqliteBuildCache final : public BuildCache
     sqlite3_bind_text(stmt, 3, signature.c_str(), -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(stmt, 4, build_time);
 
-    if (sqlite3_step(stmt) != SQLITE_DONE)
-    {
-      auto msg = std::string{"insert cache_entries failed: "} + sqlite3_errmsg(db_);
-      sqlite3_finalize(stmt);
-      exec("ROLLBACK");
-      return std::unexpected(msg);
-    }
+    const auto step_rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+    CPPUP_CHECK(step_rc == SQLITE_DONE,
+                std::string{"insert cache_entries failed: "} + sqlite3_errmsg(db_));
 
-    if (auto r = exec_bound("DELETE FROM file_dependencies WHERE target_name = ?", target.name); !r)
-    {
-      exec("ROLLBACK");
-      return r;
-    }
+    exec_bound("DELETE FROM file_dependencies WHERE target_name = ?", target.name);
 
     const char*   dep_sql  = R"(
       INSERT INTO file_dependencies (target_name, file_path, checksum)
       VALUES (?, ?, ?)
     )";
     sqlite3_stmt* dep_stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, dep_sql, -1, &dep_stmt, nullptr) != SQLITE_OK)
-    {
-      exec("ROLLBACK");
-      return std::unexpected(std::string{"prepare file_dependencies failed: "} +
-                             sqlite3_errmsg(db_));
-    }
-    const auto bind_and_step = [&](const std::string& path,
-                                   const std::string& checksum) -> std::expected<void, std::string>
+    CPPUP_CHECK(sqlite3_prepare_v2(db_, dep_sql, -1, &dep_stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare file_dependencies failed: "} + sqlite3_errmsg(db_));
+
+    const auto bind_and_step = [&](const std::string& path, const std::string& checksum)
     {
       sqlite3_reset(dep_stmt);
       sqlite3_bind_text(dep_stmt, 1, target.name.c_str(), -1, SQLITE_TRANSIENT);
       sqlite3_bind_text(dep_stmt, 2, path.c_str(), -1, SQLITE_TRANSIENT);
       sqlite3_bind_text(dep_stmt, 3, checksum.c_str(), -1, SQLITE_TRANSIENT);
-      if (sqlite3_step(dep_stmt) != SQLITE_DONE)
-      {
-        return std::unexpected(std::string{"insert file_dependencies failed: "} +
-                               sqlite3_errmsg(db_));
-      }
-      return {};
+      CPPUP_CHECK(sqlite3_step(dep_stmt) == SQLITE_DONE,
+                  std::string{"insert file_dependencies failed: "} + sqlite3_errmsg(db_));
     };
 
-    // Persist the source file and every transitively-found header in the same
-    // table; needs_rebuild treats them uniformly via existence + checksum.
-    // Headers come in via FileDependency::includes (populated by the build
-    // driver from DependencyScanner::scan_includes) but have no precomputed
-    // checksum, so hash them here.
     for (const auto& dep : dependencies)
     {
-      if (auto r = bind_and_step(dep.file_path.string(), dep.checksum); !r)
-      {
-        sqlite3_finalize(dep_stmt);
-        (void) exec("ROLLBACK");
-        return std::unexpected(r.error());
-      }
+      bind_and_step(dep.file_path.string(), dep.checksum);
       for (const auto& include_path : dep.includes)
       {
-        auto include_checksum = sha256_file(include_path);
-        if (!include_checksum)
+        // Header vanished between scan and persist; skip rather than fail the
+        // whole cache write. needs_rebuild's existence check will catch a
+        // still-missing file on the next lookup.
+        if (auto include_checksum = sha256_file(include_path))
         {
-          // Header vanished between scan and persist; skip rather than fail
-          // the whole cache write. needs_rebuild's existence check will
-          // catch the missing file on the next lookup if it stays gone.
-          continue;
-        }
-        if (auto r = bind_and_step(include_path.string(), *include_checksum); !r)
-        {
-          sqlite3_finalize(dep_stmt);
-          if (auto rb = exec("ROLLBACK"); !rb)
-          { /* best effort */
-          }
-          return std::unexpected(r.error());
+          bind_and_step(include_path.string(), *include_checksum);
         }
       }
     }
     sqlite3_finalize(dep_stmt);
 
-    return exec("COMMIT");
+    exec("COMMIT");
   }
 
-  std::expected<CacheStats, std::string> get_stats() override
+  CacheStats get_stats() override
   {
     CacheStats stats;
     stats.hits       = hits_;
@@ -306,10 +247,8 @@ class SqliteBuildCache final : public BuildCache
     const char* sql =
         "SELECT output_path, signature, build_time FROM cache_entries WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
-    {
-      return std::nullopt;
-    }
+    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare load_entry failed: "} + sqlite3_errmsg(db_));
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::optional<StoredEntry> result;
     if (sqlite3_step(stmt) == SQLITE_ROW)
@@ -324,14 +263,12 @@ class SqliteBuildCache final : public BuildCache
     return result;
   }
 
-  std::optional<std::vector<FileDependency>> load_dependencies(const std::string& name)
+  std::vector<FileDependency> load_dependencies(const std::string& name)
   {
     const char*   sql  = "SELECT file_path, checksum FROM file_dependencies WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
-    {
-      return std::nullopt;
-    }
+    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare load_dependencies failed: "} + sqlite3_errmsg(db_));
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::vector<FileDependency> deps;
     while (sqlite3_step(stmt) == SQLITE_ROW)
@@ -345,33 +282,26 @@ class SqliteBuildCache final : public BuildCache
     return deps;
   }
 
-  std::expected<void, std::string> exec(const char* sql)
+  void exec(const char* sql)
   {
     char* err = nullptr;
     if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK)
     {
       std::string const msg = err ? err : "unknown sqlite error";
       sqlite3_free(err);
-      return std::unexpected(msg);
+      ::cppup::panic("sqlite exec failed: " + msg);
     }
-    return {};
   }
 
-  std::expected<void, std::string> exec_bound(const char* sql, const std::string& arg)
+  void exec_bound(const char* sql, const std::string& arg)
   {
     sqlite3_stmt* stmt = nullptr;
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) != SQLITE_OK)
-    {
-      return std::unexpected(std::string{"prepare failed: "} + sqlite3_errmsg(db_));
-    }
+    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare failed: "} + sqlite3_errmsg(db_));
     sqlite3_bind_text(stmt, 1, arg.c_str(), -1, SQLITE_TRANSIENT);
-    auto rc = sqlite3_step(stmt);
+    const auto rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    if (rc != SQLITE_DONE)
-    {
-      return std::unexpected(std::string{"step failed: "} + sqlite3_errmsg(db_));
-    }
-    return {};
+    CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step failed: "} + sqlite3_errmsg(db_));
   }
 
   void record_hit()
@@ -389,14 +319,17 @@ class SqliteBuildCache final : public BuildCache
   std::size_t                                            misses_ = 0;
 };
 
-std::expected<sqlite3*, std::string> open_cache_db(const std::filesystem::path& db_path)
+// nullptr if sqlite_open fails or schema init fails — caller proceeds without
+// caching. Inside SqliteBuildCache, subsequent sqlite failures on this open
+// DB are panics (we got past schema init, so further failures indicate
+// corruption or disk-full).
+sqlite3* open_cache_db(const std::filesystem::path& db_path)
 {
   sqlite3* db = nullptr;
   if (sqlite3_open(db_path.string().c_str(), &db) != SQLITE_OK)
   {
-    std::string const msg = sqlite3_errmsg(db);
     sqlite3_close(db);
-    return std::unexpected("sqlite3_open failed: " + msg);
+    return nullptr;
   }
 
   const char* schema = R"(
@@ -419,10 +352,9 @@ std::expected<sqlite3*, std::string> open_cache_db(const std::filesystem::path& 
   char* err = nullptr;
   if (sqlite3_exec(db, schema, nullptr, nullptr, &err) != SQLITE_OK)
   {
-    std::string const msg = err ? err : "unknown sqlite error";
     sqlite3_free(err);
     sqlite3_close(db);
-    return std::unexpected("schema init failed: " + msg);
+    return nullptr;
   }
 
   return db;
@@ -430,13 +362,12 @@ std::expected<sqlite3*, std::string> open_cache_db(const std::filesystem::path& 
 
 }  // namespace
 
-std::expected<std::vector<std::string>, std::string> DependencyScanner::scan_includes(
-    const std::filesystem::path& source_file)
+std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem::path& source_file)
 {
   std::ifstream in(source_file);
   if (!in)
   {
-    return std::unexpected("cannot open file: " + source_file.string());
+    return {};
   }
 
   static const std::regex  include_re(R"(^\s*#\s*include\s*[<"]([^>"]+)[>"])");
@@ -453,7 +384,7 @@ std::expected<std::vector<std::string>, std::string> DependencyScanner::scan_inc
   return includes;
 }
 
-std::expected<std::unique_ptr<BuildCache>, std::string> create_build_cache(
+std::unique_ptr<BuildCache> create_build_cache(
     const std::filesystem::path&                           cache_dir,
     std::unique_ptr<cppup::dependency::DependencyDatabase> db)
 {
@@ -461,16 +392,16 @@ std::expected<std::unique_ptr<BuildCache>, std::string> create_build_cache(
   std::filesystem::create_directories(cache_dir, ec);
   if (ec)
   {
-    return std::unexpected("cannot create cache dir: " + ec.message());
+    return nullptr;
   }
 
-  auto db_handle = open_cache_db(cache_dir / "build_cache.db");
-  if (!db_handle)
+  sqlite3* handle = open_cache_db(cache_dir / "build_cache.db");
+  if (handle == nullptr)
   {
-    return std::unexpected(db_handle.error());
+    return nullptr;
   }
 
-  return std::unique_ptr<BuildCache>(new SqliteBuildCache(*db_handle, std::move(db)));
+  return std::unique_ptr<BuildCache>(new SqliteBuildCache(handle, std::move(db)));
 }
 
 }  // namespace cppup::build

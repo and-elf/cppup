@@ -3,8 +3,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <mutex>
-#include <print>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -97,25 +98,20 @@ std::vector<bld::FileDependency> collect_dependencies(
     bld::FileDependency dep;
     dep.file_path     = source;
     dep.last_modified = std::filesystem::last_write_time(source);
-    auto checksum     = cache->calculate_file_checksum(source);
-    if (checksum)
+    if (auto checksum = cache->calculate_file_checksum(source))
     {
       dep.checksum = *checksum;
     }
 
-    auto includes = bld::DependencyScanner::scan_includes(source);
-    if (includes)
+    for (const auto& inc : bld::DependencyScanner::scan_includes(source))
     {
-      for (const auto& inc : *includes)
+      for (const auto& dir : include_paths)
       {
-        for (const auto& dir : include_paths)
+        auto resolved = dir / inc;
+        if (std::filesystem::exists(resolved))
         {
-          auto resolved = dir / inc;
-          if (std::filesystem::exists(resolved))
-          {
-            dep.includes.push_back(resolved);
-            break;
-          }
+          dep.includes.push_back(resolved);
+          break;
         }
       }
     }
@@ -156,21 +152,23 @@ struct ProgressReporter
     }
     const auto             n = done.fetch_add(1, std::memory_order_relaxed) + 1;
     const std::scoped_lock lk(print_mu);
-    std::print("[{:>{}}/{}] {} {}\n", n, width, total, action, name);
+    std::cout << '[' << std::setw(width) << n << '/' << total << "] " << action << ' ' << name
+              << '\n';
   }
 };
 
 // Run `work` over each item in `items` across up to `jobs` worker threads.
-// `jobs == 0` means auto. Returns the first error encountered; in-flight work
-// completes naturally (we don't try to cancel). Used to parallelize the outer
-// per-target build loops (tests, binaries).
+// `jobs == 0` means auto. On the first exception from `work`, the abort flag
+// short-circuits remaining workers; in-flight items complete naturally (we
+// don't try to cancel). After join, the orchestrator rethrows the first
+// failure as runtime_error. Used to parallelize the outer per-target build
+// loops (tests, binaries).
 template <typename Item, typename Work>
-std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items, unsigned jobs,
-                                                 Work work)
+void run_in_parallel(const std::vector<Item>& items, unsigned jobs, Work work)
 {
   if (items.empty())
   {
-    return {};
+    return;
   }
 
   unsigned worker_count = jobs != 0U ? jobs : std::max(1U, std::thread::hardware_concurrency());
@@ -190,13 +188,16 @@ std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items,
       {
         return;
       }
-      auto r = work(items[i]);
-      if (!r)
+      try
+      {
+        work(items[i]);
+      }
+      catch (const std::exception& e)
       {
         const std::scoped_lock lk(err_mu);
         if (!aborted.exchange(true))
         {
-          first_err = r.error();
+          first_err = e.what();
         }
         return;
       }
@@ -216,25 +217,22 @@ std::expected<void, std::string> run_in_parallel(const std::vector<Item>& items,
 
   if (aborted.load())
   {
-    return std::unexpected(first_err);
+    throw std::runtime_error(first_err);
   }
-  return {};
 }
 
 // Compile a batch of sources concurrently. `jobs == 0` means auto (hardware
-// concurrency). On the first failure, the abort flag short-circuits remaining
-// work and the first error is returned; in-flight compilations finish naturally
-// (we don't try to kill child processes). The logger is serialized so debug
-// lines don't interleave.
-std::expected<void, std::string> compile_objects_parallel(const std::string&              compiler,
-                                                          const std::vector<CompileTask>& tasks,
-                                                          const std::vector<std::string>& flags,
-                                                          unsigned jobs, Logger& logger,
-                                                          ProgressReporter* progress)
+// concurrency). On the first compilation failure the abort flag short-circuits
+// remaining work; in-flight compilations finish naturally (we don't try to
+// kill child processes). The logger is serialized so debug lines don't
+// interleave. Throws runtime_error with the first failure message after join.
+void compile_objects_parallel(const std::string& compiler, const std::vector<CompileTask>& tasks,
+                              const std::vector<std::string>& flags, unsigned jobs, Logger& logger,
+                              ProgressReporter* progress)
 {
   if (tasks.empty())
   {
-    return {};
+    return;
   }
 
   unsigned worker_count = jobs != 0U ? jobs : std::max(1U, std::thread::hardware_concurrency());
@@ -296,31 +294,27 @@ std::expected<void, std::string> compile_objects_parallel(const std::string&    
 
   if (aborted.load())
   {
-    return std::unexpected(first_err);
+    throw std::runtime_error(first_err);
   }
-  return {};
 }
 
 bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
                                      const conf::Library& library, const BuildPaths& paths,
                                      conf::BuildOptions options);
 
-std::expected<std::filesystem::path, std::string> build_library(
-    const conf::BuildConfiguration& config, const conf::Library& library, const BuildPaths& paths,
-    bld::BuildCache* cache, conf::BuildOptions options, Logger& logger, std::size_t& cached_counter,
-    ProgressReporter& progress)
+std::filesystem::path build_library(const conf::BuildConfiguration& config,
+                                    const conf::Library& library, const BuildPaths& paths,
+                                    bld::BuildCache* cache, conf::BuildOptions options,
+                                    Logger& logger, std::size_t& cached_counter,
+                                    ProgressReporter& progress)
 {
   auto target = make_library_target(config, library, paths, options);
 
-  if (cache != nullptr)
+  if (cache != nullptr && !cache->needs_rebuild(target))
   {
-    auto need = cache->needs_rebuild(target);
-    if (need && !*need)
-    {
-      logger.info("cached library: " + library.name);
-      ++cached_counter;
-      return target.output_path;
-    }
+    logger.info("cached library: " + library.name);
+    ++cached_counter;
+    return target.output_path;
   }
 
   std::vector<CompileTask>           lib_tasks;
@@ -333,12 +327,7 @@ std::expected<std::filesystem::path, std::string> build_library(
     lib_tasks.push_back({src, obj});
     objects.push_back(obj);
   }
-  if (auto rc = compile_objects_parallel("g++", lib_tasks, target.compile_flags, options.jobs,
-                                         logger, &progress);
-      !rc)
-  {
-    return std::unexpected(rc.error());
-  }
+  compile_objects_parallel("g++", lib_tasks, target.compile_flags, options.jobs, logger, &progress);
 
   std::ostringstream ar_cmd;
   ar_cmd << "ar rcs " << target.output_path.string();
@@ -349,7 +338,7 @@ std::expected<std::filesystem::path, std::string> build_library(
   logger.debug("archive: " + ar_cmd.str());
   if (std::system(ar_cmd.str().c_str()) != 0)
   {
-    return std::unexpected("archive failed: " + library.name);
+    throw std::runtime_error("archive failed: " + library.name);
   }
   progress.step("archiving", target.output_path.filename().string());
 
@@ -437,14 +426,17 @@ bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
   return target;
 }
 
-// Factory: build the BuildTarget for a binary or test. Returns `unexpected`
-// if linked_library_names can't be resolved — the planner ignores that error
-// (treats the target as one to-be-rebuilt), the real builder propagates it.
-std::expected<bld::BuildTarget, std::string> make_executable_target(
-    const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
-    const conf::BuildConfiguration& config, const std::vector<std::string>& linked_library_names,
-    const BuildPaths& paths, conf::BuildOptions options,
-    const std::vector<std::string>& extra_link_flags, const std::filesystem::path& output_dir)
+// Factory: build the BuildTarget for a binary or test. Throws runtime_error
+// if linked_library_names can't be resolved. The planner catches and treats
+// the target as needing a full rebuild's worth of steps; the real builder
+// lets the throw propagate to the executeBuild boundary.
+bld::BuildTarget make_executable_target(const std::string& kind, const std::string& name,
+                                        const std::vector<std::string>& sources,
+                                        const conf::BuildConfiguration& config,
+                                        const std::vector<std::string>& linked_library_names,
+                                        const BuildPaths& paths, conf::BuildOptions options,
+                                        const std::vector<std::string>& extra_link_flags,
+                                        const std::filesystem::path&    output_dir)
 {
   const auto& target_dir = output_dir.empty() ? paths.build_dir : output_dir;
 
@@ -465,7 +457,7 @@ std::expected<bld::BuildTarget, std::string> make_executable_target(
   auto resolved = conf::resolve_link_set(linked_library_names, config.libraries);
   if (!resolved)
   {
-    return std::unexpected(std::move(resolved).error());
+    throw std::runtime_error(kind + " " + name + ": " + std::move(resolved).error());
   }
   ResolvedLinks links{.libs          = *resolved,
                       .library_flags = conf::aggregate_link_flags(*resolved, config.libraries)};
@@ -473,30 +465,23 @@ std::expected<bld::BuildTarget, std::string> make_executable_target(
   return target;
 }
 
-std::expected<void, std::string> build_executable(
-    const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
-    const conf::BuildConfiguration& config, const std::vector<std::string>& linked_library_names,
-    const BuildPaths& paths, bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
-    std::size_t& cached_counter, ProgressReporter& progress,
-    const std::vector<std::string>& extra_link_flags = {},
-    const std::filesystem::path&    output_dir       = {})
+void build_executable(const std::string& kind, const std::string& name,
+                      const std::vector<std::string>& sources,
+                      const conf::BuildConfiguration& config,
+                      const std::vector<std::string>& linked_library_names, const BuildPaths& paths,
+                      bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
+                      std::size_t& cached_counter, ProgressReporter& progress,
+                      const std::vector<std::string>& extra_link_flags = {},
+                      const std::filesystem::path&    output_dir       = {})
 {
   auto target = make_executable_target(kind, name, sources, config, linked_library_names, paths,
                                        options, extra_link_flags, output_dir);
-  if (!target)
-  {
-    return std::unexpected(kind + " " + name + ": " + target.error());
-  }
 
-  if (cache != nullptr)
+  if (cache != nullptr && !cache->needs_rebuild(target))
   {
-    auto need = cache->needs_rebuild(*target);
-    if (need && !*need)
-    {
-      logger.info("cached " + kind + ": " + name);
-      ++cached_counter;
-      return {};
-    }
+    logger.info("cached " + kind + ": " + name);
+    ++cached_counter;
+    return;
   }
 
   const std::string compiler = config.toolchain ? std::string(config.toolchain->name) : "g++";
@@ -506,20 +491,16 @@ std::expected<void, std::string> build_executable(
   // objects or other binaries that share a source basename.
   std::vector<CompileTask>           bin_tasks;
   std::vector<std::filesystem::path> bin_objects;
-  bin_tasks.reserve(target->source_files.size());
-  bin_objects.reserve(target->source_files.size());
-  for (const auto& src : target->source_files)
+  bin_tasks.reserve(target.source_files.size());
+  bin_objects.reserve(target.source_files.size());
+  for (const auto& src : target.source_files)
   {
     auto obj = paths.build_dir / (src.stem().string() + "_" + name + "_" + kind + ".o");
     bin_tasks.push_back({src, obj});
     bin_objects.push_back(obj);
   }
-  if (auto rc = compile_objects_parallel(compiler, bin_tasks, target->compile_flags, options.jobs,
-                                         logger, &progress);
-      !rc)
-  {
-    return std::unexpected(rc.error());
-  }
+  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, options.jobs, logger,
+                           &progress);
 
   std::ostringstream cmd;
   cmd << compiler;
@@ -527,37 +508,35 @@ std::expected<void, std::string> build_executable(
   {
     cmd << ' ' << obj.string();
   }
-  for (const auto& f : target->link_flags)
+  for (const auto& f : target.link_flags)
   {
     cmd << ' ' << f;
   }
-  cmd << " -o " << target->output_path.string();
+  cmd << " -o " << target.output_path.string();
 
   logger.debug("link: " + cmd.str());
   if (std::system(cmd.str().c_str()) != 0)
   {
-    return std::unexpected(kind + " link failed: " + name);
+    throw std::runtime_error(kind + " link failed: " + name);
   }
-  progress.step("linking", target->output_path.filename().string());
+  progress.step("linking", target.output_path.filename().string());
 
   if (cache != nullptr)
   {
-    auto deps = collect_dependencies(cache, target->source_files, target->include_paths);
-    return cache->cache_build_result(*target, deps);
+    auto deps = collect_dependencies(cache, target.source_files, target.include_paths);
+    cache->cache_build_result(target, deps);
   }
-  return {};
 }
 
 // Hand off a non-Cppup subproject to its native build system. The external
 // build's stdout/stderr flows through directly — we don't wrap it in
-// progress reporting.
-std::expected<void, std::string> run_external_subproject(const conf::Subproject&      sp,
-                                                         const std::filesystem::path& sp_dir,
-                                                         Logger&                      logger)
+// progress reporting. Throws runtime_error on external-tool failure.
+void run_external_subproject(const conf::Subproject& sp, const std::filesystem::path& sp_dir,
+                             Logger& logger)
 {
   if (!sp.build_system)
   {
-    return {};
+    return;
   }
   switch (*sp.build_system)
   {
@@ -572,15 +551,15 @@ std::expected<void, std::string> run_external_subproject(const conf::Subproject&
       }
       if (std::system(cfg.str().c_str()) != 0)
       {
-        return std::unexpected("subproject " + sp.path + ": cmake configure failed");
+        throw std::runtime_error("subproject " + sp.path + ": cmake configure failed");
       }
       std::ostringstream bld_cmd;
       bld_cmd << "cmake --build " << (sp_dir / "build").string();
       if (std::system(bld_cmd.str().c_str()) != 0)
       {
-        return std::unexpected("subproject " + sp.path + ": cmake build failed");
+        throw std::runtime_error("subproject " + sp.path + ": cmake build failed");
       }
-      return {};
+      return;
     }
     case conf::BuildSystem::Make:
     {
@@ -593,19 +572,18 @@ std::expected<void, std::string> run_external_subproject(const conf::Subproject&
       }
       if (std::system(make_cmd.str().c_str()) != 0)
       {
-        return std::unexpected("subproject " + sp.path + ": make failed");
+        throw std::runtime_error("subproject " + sp.path + ": make failed");
       }
-      return {};
+      return;
     }
     case conf::BuildSystem::HeaderOnly:
       logger.info("Using header-only subproject " + sp.path);
-      return {};
+      return;
     case conf::BuildSystem::Cppup:
       // Cppup subprojects were already merged in load_with_subprojects;
       // they should not appear here.
-      return {};
+      return;
   }
-  return {};
 }
 
 // Walk libraries/binaries/tests, query the cache, and return the number of
@@ -617,17 +595,13 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config, const Bu
 {
   const auto contribution = [&](const bld::BuildTarget& target) -> std::size_t
   {
-    if (cache != nullptr)
+    if (cache != nullptr && !cache->needs_rebuild(target))
     {
-      auto need = cache->needs_rebuild(target);
-      if (need && !*need)
-      {
-        return 0;
-      }
+      return 0;
     }
     return target.source_files.size() + 1;
   };
-  // If the executable factory fails (unresolved link set), assume it'll
+  // If the executable factory throws (unresolved link set), assume it'll
   // need a full rebuild's worth of steps — the real builder will surface
   // the error later.
   const auto exec_contribution =
@@ -635,9 +609,15 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config, const Bu
           const std::vector<std::string>& libraries, const std::vector<std::string>& extra,
           const std::filesystem::path& output_dir) -> std::size_t
   {
-    auto t = make_executable_target(kind, name, sources, config, libraries, paths, options, extra,
-                                    output_dir);
-    return t ? contribution(*t) : sources.size() + 1;
+    try
+    {
+      return contribution(make_executable_target(kind, name, sources, config, libraries, paths,
+                                                 options, extra, output_dir));
+    }
+    catch (const std::exception&)
+    {
+      return sources.size() + 1;
+    }
   };
 
   std::size_t total = 0;
@@ -691,8 +671,8 @@ void materialize_configuration_header(const std::filesystem::path& cppup_dir)
   out.write(kConfigurationHeader.data(), static_cast<std::streamsize>(kConfigurationHeader.size()));
 }
 
-std::expected<conf::BuildConfiguration, std::string> load_build_configuration(
-    const std::filesystem::path& project_root, const std::filesystem::path& cppup_dir)
+conf::BuildConfiguration load_build_configuration(const std::filesystem::path& project_root,
+                                                  const std::filesystem::path& cppup_dir)
 {
   conf::CompilerOptions compiler_opts;
   compiler_opts.include_paths.push_back((cppup_dir / "include").string());
@@ -704,7 +684,7 @@ std::expected<conf::BuildConfiguration, std::string> load_build_configuration(
   auto                        config_result = conf::load_with_subprojects(project_root, compiler);
   if (!config_result)
   {
-    return std::unexpected("load build configuration failed: " + config_result.error());
+    throw std::runtime_error("load build configuration failed: " + config_result.error());
   }
   return *config_result;
 }
@@ -718,29 +698,20 @@ std::string format_project_summary(const conf::BuildConfiguration& config)
          plural(config.tests.size(), "test", "tests") + ")";
 }
 
-std::expected<std::size_t, std::string> build_binaries_parallel(
-    const conf::BuildConfiguration& config, const BuildPaths& paths, bld::BuildCache* cache,
-    conf::BuildOptions options, Logger& logger, ProgressReporter& progress)
+std::size_t build_binaries_parallel(const conf::BuildConfiguration& config, const BuildPaths& paths,
+                                    bld::BuildCache* cache, conf::BuildOptions options,
+                                    Logger& logger, ProgressReporter& progress)
 {
   std::atomic<std::size_t> total_cached{0};
-  auto                     r = run_in_parallel(config.binaries, options.jobs,
-                                               [&](const conf::Binary& binary) -> std::expected<void, std::string>
-                                               {
-                             std::size_t local_cached = 0;
-                             auto rr = build_executable("binary", binary.name, binary.sources,
-                                                                            config, binary.libraries, paths, cache,
-                                                                            options, logger, local_cached, progress);
-                             if (!rr)
-                             {
-                               return std::unexpected(rr.error());
-                             }
-                             total_cached.fetch_add(local_cached, std::memory_order_relaxed);
-                             return {};
-                           });
-  if (!r)
-  {
-    return std::unexpected(r.error());
-  }
+  run_in_parallel(config.binaries, options.jobs,
+                  [&](const conf::Binary& binary)
+                  {
+                    std::size_t local_cached = 0;
+                    build_executable("binary", binary.name, binary.sources, config,
+                                     binary.libraries, paths, cache, options, logger, local_cached,
+                                     progress);
+                    total_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                  });
   return total_cached.load();
 }
 
@@ -748,9 +719,9 @@ std::expected<std::size_t, std::string> build_binaries_parallel(
 // in Test::libraries plus verbatim flags in Test::link_flags (e.g.
 // "-lgtest -lgtest_main -lpthread"). Binaries land in build/tests/ so both
 // the test runner and VSCode testMate's glob find them.
-std::expected<std::size_t, std::string> build_tests_parallel(
-    const conf::BuildConfiguration& config, const BuildPaths& paths, bld::BuildCache* cache,
-    conf::BuildOptions options, Logger& logger, ProgressReporter& progress)
+std::size_t build_tests_parallel(const conf::BuildConfiguration& config, const BuildPaths& paths,
+                                 bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
+                                 ProgressReporter& progress)
 {
   const auto tests_dir = paths.build_dir / "tests";
   if (!config.tests.empty())
@@ -759,31 +730,21 @@ std::expected<std::size_t, std::string> build_tests_parallel(
   }
 
   std::atomic<std::size_t> total_cached{0};
-  auto                     r = run_in_parallel(config.tests, options.jobs,
-                                               [&](const conf::Test& test) -> std::expected<void, std::string>
-                                               {
-                             std::vector<std::string> test_link_flag_strings;
-                             test_link_flag_strings.reserve(test.link_flags.size());
-                             for (const auto& f : test.link_flags)
-                             {
-                               test_link_flag_strings.emplace_back(f.flag);
-                             }
-                             std::size_t local_cached = 0;
-                             auto rr = build_executable("test", test.name, test.sources, config,
-                                                                            test.libraries, paths, cache, options,
-                                                                            logger, local_cached, progress,
-                                                                            test_link_flag_strings, tests_dir);
-                             if (!rr)
-                             {
-                               return std::unexpected(rr.error());
-                             }
-                             total_cached.fetch_add(local_cached, std::memory_order_relaxed);
-                             return {};
-                           });
-  if (!r)
-  {
-    return std::unexpected(r.error());
-  }
+  run_in_parallel(config.tests, options.jobs,
+                  [&](const conf::Test& test)
+                  {
+                    std::vector<std::string> test_link_flag_strings;
+                    test_link_flag_strings.reserve(test.link_flags.size());
+                    for (const auto& f : test.link_flags)
+                    {
+                      test_link_flag_strings.emplace_back(f.flag);
+                    }
+                    std::size_t local_cached = 0;
+                    build_executable("test", test.name, test.sources, config, test.libraries, paths,
+                                     cache, options, logger, local_cached, progress,
+                                     test_link_flag_strings, tests_dir);
+                    total_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                  });
   return total_cached.load();
 }
 
@@ -851,43 +812,25 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     std::filesystem::create_directories(build_dir);
     const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
 
-    std::unique_ptr<bld::BuildCache> cache;
-    if (auto c = bld::create_build_cache(cppup_dir / "cache", nullptr))
+    auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
+    if (!cache)
     {
-      cache = std::move(*c);
-    }
-    else
-    {
-      logger.warning("build cache unavailable: " + c.error());
+      logger.warning("build cache unavailable");
     }
 
     materialize_configuration_header(cppup_dir);
 
-    auto config_result = load_build_configuration(context.projectRoot, cppup_dir);
-    if (!config_result)
-    {
-      return std::unexpected(std::move(config_result).error());
-    }
-    const auto& config = *config_result;
+    const auto config = load_build_configuration(context.projectRoot, cppup_dir);
 
     logger.info(format_project_summary(config));
 
-    if (auto cc = conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options))
-    {
-      logger.debug("wrote " + cc->string());
-    }
-    else
-    {
-      logger.warning("compile_commands.json: " + cc.error());
-    }
+    logger.debug(
+        "wrote " +
+        conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
 
     for (const auto& sp : config.subprojects)
     {
-      auto r = run_external_subproject(sp, paths.project_root / sp.path, logger);
-      if (!r)
-      {
-        return std::unexpected(r.error());
-      }
+      run_external_subproject(sp, paths.project_root / sp.path, logger);
     }
 
     ProgressReporter progress;
@@ -897,12 +840,7 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
 
     for (const auto& library : config.libraries)
     {
-      auto r = build_library(config, library, paths, cache.get(), options, logger, counts.cached,
-                             progress);
-      if (!r)
-      {
-        return std::unexpected(r.error());
-      }
+      build_library(config, library, paths, cache.get(), options, logger, counts.cached, progress);
       ++counts.built;
     }
 
@@ -912,25 +850,15 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     conf::BuildOptions inner_opts = options;
     inner_opts.jobs               = 1;
 
-    auto bin_cached =
+    counts.cached +=
         build_binaries_parallel(config, paths, cache.get(), inner_opts, logger, progress);
-    if (!bin_cached)
-    {
-      return std::unexpected(std::move(bin_cached).error());
-    }
     counts.built += config.binaries.size();
-    counts.cached += *bin_cached;
 
     if (conf::enabled(options.with_tests))
     {
-      auto test_cached =
+      counts.cached +=
           build_tests_parallel(config, paths, cache.get(), inner_opts, logger, progress);
-      if (!test_cached)
-      {
-        return std::unexpected(std::move(test_cached).error());
-      }
       counts.built += config.tests.size();
-      counts.cached += *test_cached;
     }
 
     if (!config.build_steps.empty())
@@ -950,11 +878,8 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     logger.info(build_summary_line(counts, wall_ms));
     if (cache != nullptr)
     {
-      if (auto stats = cache->get_stats())
-      {
-        logger.info("cache hit rate: " + std::to_string(static_cast<int>(stats->hit_rate * 100.0)) +
-                    "%");
-      }
+      logger.info("cache hit rate: " +
+                  std::to_string(static_cast<int>(cache->get_stats().hit_rate * 100.0)) + "%");
     }
     return 0;
   }

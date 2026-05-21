@@ -77,7 +77,7 @@ void fill_source_checksum(Layout& layout, BuildCache& cache)
   for (auto& dep : layout.deps)
   {
     auto sum = cache.calculate_file_checksum(dep.file_path);
-    ASSERT_TRUE(sum.has_value()) << sum.error_or("");
+    ASSERT_TRUE(sum.has_value());
     dep.checksum = *sum;
   }
 }
@@ -88,11 +88,9 @@ TEST(BuildCache, FirstCheckIsMiss)
 {
   auto L     = make_layout("first_miss");
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value()) << cache.error_or("");
+  ASSERT_NE(cache, nullptr);
 
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_TRUE(*need) << "fresh cache must report a miss";
+  EXPECT_TRUE(cache->needs_rebuild(L.target)) << "fresh cache must report a miss";
 
   fs::remove_all(L.root);
 }
@@ -101,14 +99,12 @@ TEST(BuildCache, HitWhenSourceAndHeaderUnchanged)
 {
   auto L     = make_layout("hit_unchanged");
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value());
+  ASSERT_NE(cache, nullptr);
 
-  fill_source_checksum(L, **cache);
-  ASSERT_TRUE((*cache)->cache_build_result(L.target, L.deps).has_value());
+  fill_source_checksum(L, *cache);
+  cache->cache_build_result(L.target, L.deps);
 
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_FALSE(*need) << "no changes -> cache hit";
+  EXPECT_FALSE(cache->needs_rebuild(L.target)) << "no changes -> cache hit";
 
   fs::remove_all(L.root);
 }
@@ -117,22 +113,19 @@ TEST(BuildCache, MissWhenHeaderContentChanges)
 {
   auto L     = make_layout("hdr_change");
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value());
+  ASSERT_NE(cache, nullptr);
 
-  fill_source_checksum(L, **cache);
-  ASSERT_TRUE((*cache)->cache_build_result(L.target, L.deps).has_value());
+  fill_source_checksum(L, *cache);
+  cache->cache_build_result(L.target, L.deps);
 
   // Sanity: first lookup hits cache.
-  auto first = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(first.has_value());
-  ASSERT_FALSE(*first);
+  ASSERT_FALSE(cache->needs_rebuild(L.target));
 
   // Mutate the header content (same path).
   write_text(L.header, "#pragma once\nstatic constexpr int kAnswer = 99;\n");
 
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_TRUE(*need) << "header content change must invalidate the cache entry";
+  EXPECT_TRUE(cache->needs_rebuild(L.target))
+      << "header content change must invalidate the cache entry";
 
   fs::remove_all(L.root);
 }
@@ -141,16 +134,14 @@ TEST(BuildCache, MissWhenHeaderDeleted)
 {
   auto L     = make_layout("hdr_deleted");
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value());
+  ASSERT_NE(cache, nullptr);
 
-  fill_source_checksum(L, **cache);
-  ASSERT_TRUE((*cache)->cache_build_result(L.target, L.deps).has_value());
+  fill_source_checksum(L, *cache);
+  cache->cache_build_result(L.target, L.deps);
 
   fs::remove(L.header);
 
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_TRUE(*need) << "missing header must invalidate the cache entry";
+  EXPECT_TRUE(cache->needs_rebuild(L.target)) << "missing header must invalidate the cache entry";
 
   fs::remove_all(L.root);
 }
@@ -161,18 +152,17 @@ TEST(BuildCache, HitAfterRevertingHeaderContent)
   const auto original_hpp = std::string{"#pragma once\nstatic constexpr int kAnswer = 42;\n"};
 
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value());
+  ASSERT_NE(cache, nullptr);
 
-  fill_source_checksum(L, **cache);
-  ASSERT_TRUE((*cache)->cache_build_result(L.target, L.deps).has_value());
+  fill_source_checksum(L, *cache);
+  cache->cache_build_result(L.target, L.deps);
 
   write_text(L.header, "#pragma once\nstatic constexpr int kAnswer = 99;\n");
-  ASSERT_TRUE(*(*cache)->needs_rebuild(L.target));
+  ASSERT_TRUE(cache->needs_rebuild(L.target));
 
   write_text(L.header, original_hpp);
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_FALSE(*need) << "restoring original header content should hit cache again";
+  EXPECT_FALSE(cache->needs_rebuild(L.target))
+      << "restoring original header content should hit cache again";
 
   fs::remove_all(L.root);
 }
@@ -181,15 +171,13 @@ TEST(BuildCache, MissWhenOutputDeleted)
 {
   auto L     = make_layout("out_deleted");
   auto cache = create_build_cache(L.cache_dir);
-  ASSERT_TRUE(cache.has_value());
+  ASSERT_NE(cache, nullptr);
 
-  fill_source_checksum(L, **cache);
-  ASSERT_TRUE((*cache)->cache_build_result(L.target, L.deps).has_value());
+  fill_source_checksum(L, *cache);
+  cache->cache_build_result(L.target, L.deps);
 
   fs::remove(L.output);
-  auto need = (*cache)->needs_rebuild(L.target);
-  ASSERT_TRUE(need.has_value());
-  EXPECT_TRUE(*need);
+  EXPECT_TRUE(cache->needs_rebuild(L.target));
 
   fs::remove_all(L.root);
 }

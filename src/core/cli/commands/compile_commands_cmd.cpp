@@ -45,13 +45,9 @@ std::expected<int, std::string> executeCompileCommands(conf::BuildOptions    opt
       return std::unexpected("load build configuration failed: " + config_result.error());
     }
 
-    auto cc = conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, options);
-    if (!cc)
-    {
-      return std::unexpected("compile_commands.json: " + cc.error());
-    }
-
-    logger.info("wrote " + cc->string());
+    logger.info("wrote " +
+                conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, options)
+                    .string());
     return 0;
   }
   catch (const std::exception& e)

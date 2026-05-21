@@ -1,8 +1,6 @@
 #pragma once
 
-#include <expected>
 #include <filesystem>
-#include <string>
 
 #include "build_configuration.hpp"
 #include "build_options.hpp"
@@ -18,19 +16,15 @@ namespace cppup::configuration
  * clangd-based tooling (VSCode C/C++, neovim, JetBrains) sees the same view
  * of the project as `cppup build`.
  *
- * @param config        Loaded build configuration.
- * @param project_root  Absolute project root; used as the "directory" field
- *                      and as the base for relative source paths.
- * @param build_dir     Build output directory (currently unused for emission
- *                      but accepted to keep signatures aligned with the build
- *                      path; future per-target object paths may use it).
- * @param options       Mirror the same toggles the build accepts (--asan,
- *                      --coverage). Defaults to all-off.
+ * Panics (aborts) if the file cannot be opened or written — the project root
+ * being unwritable is treated as an environmental failure that the build
+ * could not recover from anyway.
  *
- * @return Absolute path to the written compile_commands.json on success.
+ * @return Absolute path to the written compile_commands.json.
  */
-std::expected<std::filesystem::path, std::string> emit_compile_commands(
-    const BuildConfiguration& config, const std::filesystem::path& project_root,
-    const std::filesystem::path& build_dir, BuildOptions options = {}) noexcept;
+std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
+                                            const std::filesystem::path& project_root,
+                                            const std::filesystem::path& build_dir,
+                                            BuildOptions                 options = {});
 
 }  // namespace cppup::configuration

@@ -38,43 +38,38 @@ PackageInfo make_test_package()
 
 TEST(Database, CreateOpensDatabase)
 {
-  auto root      = make_tmp_root("create");
-  auto db_result = create_dependency_database(root / "test.db");
-  ASSERT_TRUE(db_result.has_value()) << (db_result ? "" : db_result.error());
+  auto root = make_tmp_root("create");
+  auto db   = create_dependency_database(root / "test.db");
+  ASSERT_NE(db, nullptr);
   fs::remove_all(root);
 }
 
 TEST(Database, InstallAndGetPackage)
 {
-  auto root      = make_tmp_root("install");
-  auto db_result = create_dependency_database(root / "test.db");
-  ASSERT_TRUE(db_result.has_value());
-  auto& db = *db_result;
+  auto root = make_tmp_root("install");
+  auto db   = create_dependency_database(root / "test.db");
+  ASSERT_NE(db, nullptr);
 
-  auto pkg            = make_test_package();
-  auto install_result = db->install_package(pkg);
-  ASSERT_TRUE(install_result.has_value()) << (install_result ? "" : install_result.error());
+  auto pkg = make_test_package();
+  db->install_package(pkg);
 
-  auto get_result = db->get_package("test_lib", "1.0.0");
-  ASSERT_TRUE(get_result.has_value());
-  EXPECT_EQ(get_result->name, pkg.name);
-  EXPECT_EQ(get_result->version, pkg.version);
+  auto got = db->get_package("test_lib", "1.0.0");
+  ASSERT_TRUE(got.has_value());
+  EXPECT_EQ(got->name, pkg.name);
+  EXPECT_EQ(got->version, pkg.version);
 
   fs::remove_all(root);
 }
 
 TEST(Database, ListInstalledReturnsInstalledPackages)
 {
-  auto root      = make_tmp_root("list");
-  auto db_result = create_dependency_database(root / "test.db");
-  ASSERT_TRUE(db_result.has_value());
-  auto& db = *db_result;
+  auto root = make_tmp_root("list");
+  auto db   = create_dependency_database(root / "test.db");
+  ASSERT_NE(db, nullptr);
 
-  ASSERT_TRUE(db->install_package(make_test_package()).has_value());
+  db->install_package(make_test_package());
 
-  auto list_result = db->list_installed_packages();
-  ASSERT_TRUE(list_result.has_value());
-  EXPECT_FALSE(list_result->empty());
+  EXPECT_FALSE(db->list_installed_packages().empty());
 
   fs::remove_all(root);
 }
