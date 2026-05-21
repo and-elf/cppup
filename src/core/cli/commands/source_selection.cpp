@@ -33,9 +33,13 @@ std::filesystem::path exclusion_root_for(const std::filesystem::path& dir,
   return (path_is_under(dir, project_root) || dir == project_root) ? project_root : dir;
 }
 
+// `sink` is taken by value (a cheap copy of the caller's lambda/functor)
+// because it's invoked once per matching file: a forwarding reference would
+// move from it on the first call and leave subsequent iterations operating
+// on a moved-from sink.
 template <typename Sink>
 void walk_cpp_files(const std::filesystem::path& dir, const std::filesystem::path& exclusion_root,
-                    Sink&& sink)
+                    Sink sink)
 {
   std::error_code ec;
   if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec))
@@ -54,7 +58,7 @@ void walk_cpp_files(const std::filesystem::path& dir, const std::filesystem::pat
     }
     if (is_cpp_source_extension(entry.path().extension().string()))
     {
-      std::forward<Sink>(sink)(entry.path());
+      sink(entry.path());
     }
   }
 }

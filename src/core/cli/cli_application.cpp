@@ -18,27 +18,31 @@
 namespace cppup::cli
 {
 
+// std::print can throw if stderr/stdout isn't writable; we're already
+// reporting an error/warning so there's no useful recovery — swallow it
+// rather than let the exception escape the noexcept boundary.
 void ErrorHandler::reportError(const std::string& message, ErrorCode /*code*/) noexcept
 {
   try
   {
     std::print(stderr, "Error: {}\n", message);
   }
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- swallow is intentional in noexcept reporter
   catch (...)
   {
-    // If printing fails, there's not much we can do. Swallow the exception.
   }
-  // std::print can throw if stderr is not writable, but we don't want to let that propagate since
-  // we're already in an error state. In that case, we just silently fail to report the error, since
-  // there's no good fallback. Note: In a more robust implementation, we might want to log this to a
-  // file or take some other action if printing to stderr fails, but for simplicity we'll just
-  // ignore it here.
-  std::print(stderr, "Error: {}\n", message);
 }
 
 void ErrorHandler::reportWarning(const std::string& message) noexcept
 {
-  std::print("Warning: {}\n", message);
+  try
+  {
+    std::print("Warning: {}\n", message);
+  }
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- swallow is intentional in noexcept reporter
+  catch (...)
+  {
+  }
 }
 
 int ErrorHandler::getExitCode(ErrorCode code) noexcept

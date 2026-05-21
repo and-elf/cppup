@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <expected>
@@ -100,14 +101,14 @@ CoverageSummary parse_gcov_summary(const std::string& gcov_output)
       const double      pct   = std::stod(line.substr(pct_start, pct_end - pct_start));
       const std::size_t total = std::stoul(line.substr(of_pos + 4));
       const auto        executed =
-          static_cast<std::size_t>((pct * static_cast<double>(total) / 100.0) + 0.5);
+          static_cast<std::size_t>(std::lround(pct * static_cast<double>(total) / 100.0));
       weighted_executed += executed;
       weighted_total += total;
       ++s.files_seen;
     }
+    // NOLINTNEXTLINE(bugprone-empty-catch) -- skipping malformed gcov summary lines is intentional
     catch (const std::exception&)
     {
-      // Skip malformed summary lines.
     }
   }
   if (weighted_total > 0)
