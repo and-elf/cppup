@@ -38,6 +38,10 @@ struct CacheStats
   double      hit_rate = 0.0;
 };
 
+// Polymorphic interface with no state; rule of zero can't be fully followed
+// because a virtual dtor is required for safe `delete base_ptr`. Defaulting
+// it is the correct minimum; the rest are compiler-synthesized as needed.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class BuildCache
 {
  public:

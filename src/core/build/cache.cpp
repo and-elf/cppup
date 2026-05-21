@@ -22,6 +22,21 @@ namespace cppup::build
 namespace
 {
 
+// RAII handle for a sqlite3 connection: closes on destruction so the
+// surrounding class can stay "rule of zero" -- no explicit dtor, no
+// rule-of-five.
+struct SqliteCloser
+{
+  void operator()(sqlite3* db) const noexcept
+  {
+    if (db != nullptr)
+    {
+      sqlite3_close(db);
+    }
+  }
+};
+using SqliteHandle = std::unique_ptr<sqlite3, SqliteCloser>;
+
 std::string to_hex(const unsigned char* data, std::size_t len)
 {
   std::ostringstream oss;
@@ -104,17 +119,9 @@ std::string target_signature(const BuildTarget& target)
 class SqliteBuildCache final : public BuildCache
 {
  public:
-  SqliteBuildCache(sqlite3* db, std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db) :
-      db_(db), dep_db_(std::move(dep_db))
+  SqliteBuildCache(SqliteHandle db, std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db) :
+      db_(std::move(db)), dep_db_(std::move(dep_db))
   {
-  }
-
-  ~SqliteBuildCache() override
-  {
-    if (db_ != nullptr)
-    {
-      sqlite3_close(db_);
-    }
   }
 
   bool needs_rebuild(const BuildTarget& target) override
@@ -167,8 +174,8 @@ class SqliteBuildCache final : public BuildCache
       VALUES (?, ?, ?, ?)
     )";
     sqlite3_stmt* stmt = nullptr;
-    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
-                std::string{"prepare cache_entries failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare cache_entries failed: "} + sqlite3_errmsg(db_.get()));
 
     const auto signature  = target_signature(target);
     const auto build_time = std::chrono::duration_cast<std::chrono::seconds>(
@@ -183,7 +190,7 @@ class SqliteBuildCache final : public BuildCache
     const auto step_rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     CPPUP_CHECK(step_rc == SQLITE_DONE,
-                std::string{"insert cache_entries failed: "} + sqlite3_errmsg(db_));
+                std::string{"insert cache_entries failed: "} + sqlite3_errmsg(db_.get()));
 
     exec_bound("DELETE FROM file_dependencies WHERE target_name = ?", target.name);
 
@@ -192,8 +199,8 @@ class SqliteBuildCache final : public BuildCache
       VALUES (?, ?, ?)
     )";
     sqlite3_stmt* dep_stmt = nullptr;
-    CPPUP_CHECK(sqlite3_prepare_v2(db_, dep_sql, -1, &dep_stmt, nullptr) == SQLITE_OK,
-                std::string{"prepare file_dependencies failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), dep_sql, -1, &dep_stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare file_dependencies failed: "} + sqlite3_errmsg(db_.get()));
 
     const auto bind_and_step = [&](const std::string& path, const std::string& checksum)
     {
@@ -202,7 +209,7 @@ class SqliteBuildCache final : public BuildCache
       sqlite3_bind_text(dep_stmt, 2, path.c_str(), -1, SQLITE_TRANSIENT);
       sqlite3_bind_text(dep_stmt, 3, checksum.c_str(), -1, SQLITE_TRANSIENT);
       CPPUP_CHECK(sqlite3_step(dep_stmt) == SQLITE_DONE,
-                  std::string{"insert file_dependencies failed: "} + sqlite3_errmsg(db_));
+                  std::string{"insert file_dependencies failed: "} + sqlite3_errmsg(db_.get()));
     };
 
     for (const auto& dep : dependencies)
@@ -247,8 +254,8 @@ class SqliteBuildCache final : public BuildCache
     const char* sql =
         "SELECT output_path, signature, build_time FROM cache_entries WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
-                std::string{"prepare load_entry failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare load_entry failed: "} + sqlite3_errmsg(db_.get()));
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::optional<StoredEntry> result;
     if (sqlite3_step(stmt) == SQLITE_ROW)
@@ -267,8 +274,8 @@ class SqliteBuildCache final : public BuildCache
   {
     const char*   sql  = "SELECT file_path, checksum FROM file_dependencies WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
-    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
-                std::string{"prepare load_dependencies failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare load_dependencies failed: "} + sqlite3_errmsg(db_.get()));
     sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
     std::vector<FileDependency> deps;
     while (sqlite3_step(stmt) == SQLITE_ROW)
@@ -285,7 +292,7 @@ class SqliteBuildCache final : public BuildCache
   void exec(const char* sql)
   {
     char* err = nullptr;
-    if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK)
+    if (sqlite3_exec(db_.get(), sql, nullptr, nullptr, &err) != SQLITE_OK)
     {
       std::string const msg = err != nullptr ? err : "unknown sqlite error";
       sqlite3_free(err);
@@ -296,12 +303,12 @@ class SqliteBuildCache final : public BuildCache
   void exec_bound(const char* sql, const std::string& arg)
   {
     sqlite3_stmt* stmt = nullptr;
-    CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
-                std::string{"prepare failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) == SQLITE_OK,
+                std::string{"prepare failed: "} + sqlite3_errmsg(db_.get()));
     sqlite3_bind_text(stmt, 1, arg.c_str(), -1, SQLITE_TRANSIENT);
     const auto rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step failed: "} + sqlite3_errmsg(db_));
+    CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step failed: "} + sqlite3_errmsg(db_.get()));
   }
 
   void record_hit()
@@ -313,7 +320,7 @@ class SqliteBuildCache final : public BuildCache
     ++misses_;
   }
 
-  sqlite3*                                               db_;
+  SqliteHandle                                           db_;
   std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db_;
   std::size_t                                            hits_   = 0;
   std::size_t                                            misses_ = 0;
@@ -401,7 +408,7 @@ std::unique_ptr<BuildCache> create_build_cache(
     return nullptr;
   }
 
-  return std::unique_ptr<BuildCache>(new SqliteBuildCache(handle, std::move(db)));
+  return std::unique_ptr<BuildCache>(new SqliteBuildCache(SqliteHandle{handle}, std::move(db)));
 }
 
 }  // namespace cppup::build
