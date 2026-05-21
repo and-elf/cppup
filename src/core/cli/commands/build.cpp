@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -293,23 +294,47 @@ void compile_objects_parallel(const std::string& compiler, const std::vector<Com
   }
 }
 
-bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
-                                     const conf::Library& library, const BuildPaths& paths,
-                                     conf::BuildOptions options);
-
-std::filesystem::path build_library(const conf::BuildConfiguration& config,
-                                    const conf::Library& library, const BuildPaths& paths,
-                                    bld::BuildCache* cache, conf::BuildOptions options,
-                                    Logger& logger, std::size_t& cached_counter,
-                                    ProgressReporter& progress)
+// Shared environment for the build pipeline. Non-owning pointers (not refs)
+// so the struct is trivially copyable — the inner-jobs override (force
+// per-source jobs=1 while parallelizing across targets) is done by copying a
+// BuildContext and mutating the copy's value-typed `options`. All pointers
+// are required to be non-null; constructed once in executeBuild and threaded
+// through the per-target functions.
+struct BuildContext
 {
-  auto target = make_library_target(config, library, paths, options);
+  const conf::BuildConfiguration* config;
+  const BuildPaths*               paths;
+  bld::BuildCache*                cache;
+  conf::BuildOptions              options;
+  Logger*                         logger;
+  ProgressReporter*               progress;
+};
 
-  if (cache != nullptr && !cache->needs_rebuild(target))
+// Per-executable build inputs. Spans are non-owning views into vectors that
+// outlive the spec (the source Binary/Test/local vector lives in the caller's
+// stack frame). `kind` is "binary" or "test" — used in target.type and in
+// object filenames to keep binary and test objects from colliding.
+struct ExecutableSpec
+{
+  std::string                  kind;
+  std::string                  name;
+  std::span<const std::string> sources;
+  std::span<const std::string> linked_library_names;
+  std::span<const std::string> extra_link_flags = {};
+  std::filesystem::path        output_dir       = {};
+};
+
+bld::BuildTarget make_library_target(const conf::Library& library, const BuildContext& ctx);
+
+// Returns true if the library was served from cache (no compile/archive done).
+bool build_library(const conf::Library& library, const BuildContext& ctx)
+{
+  auto target = make_library_target(library, ctx);
+
+  if (!ctx.cache->needs_rebuild(target))
   {
-    logger.info("cached library: " + library.name);
-    ++cached_counter;
-    return target.output_path;
+    ctx.logger->info("cached library: " + library.name);
+    return true;
   }
 
   std::vector<CompileTask>           lib_tasks;
@@ -318,11 +343,12 @@ std::filesystem::path build_library(const conf::BuildConfiguration& config,
   objects.reserve(target.source_files.size());
   for (const auto& src : target.source_files)
   {
-    auto obj = paths.build_dir / (src.stem().string() + "_" + library.name + ".o");
+    auto obj = ctx.paths->build_dir / (src.stem().string() + "_" + library.name + ".o");
     lib_tasks.push_back({src, obj});
     objects.push_back(obj);
   }
-  compile_objects_parallel("g++", lib_tasks, target.compile_flags, options.jobs, logger, &progress);
+  compile_objects_parallel("g++", lib_tasks, target.compile_flags, ctx.options.jobs, *ctx.logger,
+                           ctx.progress);
 
   std::ostringstream ar_cmd;
   ar_cmd << "ar rcs " << target.output_path.string();
@@ -330,19 +356,16 @@ std::filesystem::path build_library(const conf::BuildConfiguration& config,
   {
     ar_cmd << ' ' << obj.string();
   }
-  logger.debug("archive: " + ar_cmd.str());
+  ctx.logger->debug("archive: " + ar_cmd.str());
   if (std::system(ar_cmd.str().c_str()) != 0)
   {
     throw std::runtime_error("archive failed: " + library.name);
   }
-  progress.step("archiving", target.output_path.filename().string());
+  ctx.progress->step("archiving", target.output_path.filename().string());
 
-  if (cache != nullptr)
-  {
-    auto deps = collect_dependencies(*cache, target.source_files, target.include_paths);
-    cache->cache_build_result(target, deps);
-  }
-  return target.output_path;
+  auto deps = collect_dependencies(*ctx.cache, target.source_files, target.include_paths);
+  ctx.cache->cache_build_result(target, deps);
+  return false;
 }
 
 // The two outputs of resolve_link_set + aggregate_link_flags, bundled so they
@@ -360,7 +383,7 @@ struct ResolvedLinks
 // cache key depends on link_flags so the two must compose identically.
 std::vector<std::string> compose_link_flags(const ResolvedLinks&            resolved,
                                             const conf::BuildConfiguration& config,
-                                            const std::vector<std::string>& extra_link_flags,
+                                            std::span<const std::string>    extra_link_flags,
                                             conf::BuildOptions              options,
                                             const std::filesystem::path&    build_dir)
 {
@@ -400,10 +423,11 @@ std::vector<std::string> compose_link_flags(const ResolvedLinks&            reso
 
 // Factory: build the BuildTarget for a library. Shared between the real
 // builder and the planning pass so cache keys can't drift out of sync.
-bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
-                                     const conf::Library& library, const BuildPaths& paths,
-                                     conf::BuildOptions options)
+bld::BuildTarget make_library_target(const conf::Library& library, const BuildContext& ctx)
 {
+  const auto& config = *ctx.config;
+  const auto& paths  = *ctx.paths;
+
   bld::BuildTarget target;
   target.name        = library.name;
   target.type        = "library";
@@ -413,7 +437,7 @@ bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
   {
     target.source_files.push_back(paths.project_root / src);
   }
-  append_common_flags(target.compile_flags, config, paths.project_root, options);
+  append_common_flags(target.compile_flags, config, paths.project_root, ctx.options);
   for (const auto& inc : config.include_paths)
   {
     target.include_paths.push_back(paths.project_root / inc);
@@ -422,64 +446,56 @@ bld::BuildTarget make_library_target(const conf::BuildConfiguration& config,
 }
 
 // Factory: build the BuildTarget for a binary or test. Throws runtime_error
-// if linked_library_names can't be resolved. The planner catches and treats
-// the target as needing a full rebuild's worth of steps; the real builder
-// lets the throw propagate to the executeBuild boundary.
-bld::BuildTarget make_executable_target(const std::string& kind, const std::string& name,
-                                        const std::vector<std::string>& sources,
-                                        const conf::BuildConfiguration& config,
-                                        const std::vector<std::string>& linked_library_names,
-                                        const BuildPaths& paths, conf::BuildOptions options,
-                                        const std::vector<std::string>& extra_link_flags,
-                                        const std::filesystem::path&    output_dir)
+// if spec.linked_library_names can't be resolved. The planner catches and
+// treats the target as needing a full rebuild's worth of steps; the real
+// builder lets the throw propagate to the executeBuild boundary.
+bld::BuildTarget make_executable_target(const ExecutableSpec& spec, const BuildContext& ctx)
 {
-  const auto& target_dir = output_dir.empty() ? paths.build_dir : output_dir;
+  const auto& config     = *ctx.config;
+  const auto& paths      = *ctx.paths;
+  const auto& target_dir = spec.output_dir.empty() ? paths.build_dir : spec.output_dir;
 
   bld::BuildTarget target;
-  target.name        = name;
-  target.type        = kind;
-  target.output_path = target_dir / name;
-  for (const auto& src : sources)
+  target.name        = spec.name;
+  target.type        = spec.kind;
+  target.output_path = target_dir / spec.name;
+  for (const auto& src : spec.sources)
   {
     target.source_files.push_back(paths.project_root / src);
   }
-  append_common_flags(target.compile_flags, config, paths.project_root, options);
+  append_common_flags(target.compile_flags, config, paths.project_root, ctx.options);
   for (const auto& inc : config.include_paths)
   {
     target.include_paths.push_back(paths.project_root / inc);
   }
 
-  auto resolved = conf::resolve_link_set(linked_library_names, config.libraries);
+  const std::vector<std::string> link_roots(spec.linked_library_names.begin(),
+                                            spec.linked_library_names.end());
+  auto                           resolved = conf::resolve_link_set(link_roots, config.libraries);
   if (!resolved)
   {
-    throw std::runtime_error(kind + " " + name + ": " + std::move(resolved).error());
+    throw std::runtime_error(spec.kind + " " + spec.name + ": " + std::move(resolved).error());
   }
   const ResolvedLinks links{
       .libs = *resolved, .library_flags = conf::aggregate_link_flags(*resolved, config.libraries)};
-  target.link_flags = compose_link_flags(links, config, extra_link_flags, options, paths.build_dir);
+  target.link_flags =
+      compose_link_flags(links, config, spec.extra_link_flags, ctx.options, paths.build_dir);
   return target;
 }
 
-void build_executable(const std::string& kind, const std::string& name,
-                      const std::vector<std::string>& sources,
-                      const conf::BuildConfiguration& config,
-                      const std::vector<std::string>& linked_library_names, const BuildPaths& paths,
-                      bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
-                      std::size_t& cached_counter, ProgressReporter& progress,
-                      const std::vector<std::string>& extra_link_flags = {},
-                      const std::filesystem::path&    output_dir       = {})
+// Returns true if the executable was served from cache (no compile/link done).
+bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
 {
-  auto target = make_executable_target(kind, name, sources, config, linked_library_names, paths,
-                                       options, extra_link_flags, output_dir);
+  auto target = make_executable_target(spec, ctx);
 
-  if (cache != nullptr && !cache->needs_rebuild(target))
+  if (!ctx.cache->needs_rebuild(target))
   {
-    logger.info("cached " + kind + ": " + name);
-    ++cached_counter;
-    return;
+    ctx.logger->info("cached " + spec.kind + ": " + spec.name);
+    return true;
   }
 
-  const std::string compiler = config.toolchain ? std::string(config.toolchain->name) : "g++";
+  const std::string compiler =
+      ctx.config->toolchain ? std::string(ctx.config->toolchain->name) : "g++";
 
   // Split compile and link so per-source compilation can run in parallel under
   // -j. Object filenames include kind+name to avoid colliding with library
@@ -490,12 +506,13 @@ void build_executable(const std::string& kind, const std::string& name,
   bin_objects.reserve(target.source_files.size());
   for (const auto& src : target.source_files)
   {
-    auto obj = paths.build_dir / (src.stem().string() + "_" + name + "_" + kind + ".o");
+    auto obj =
+        ctx.paths->build_dir / (src.stem().string() + "_" + spec.name + "_" + spec.kind + ".o");
     bin_tasks.push_back({src, obj});
     bin_objects.push_back(obj);
   }
-  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, options.jobs, logger,
-                           &progress);
+  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, ctx.options.jobs, *ctx.logger,
+                           ctx.progress);
 
   std::ostringstream cmd;
   cmd << compiler;
@@ -509,18 +526,16 @@ void build_executable(const std::string& kind, const std::string& name,
   }
   cmd << " -o " << target.output_path.string();
 
-  logger.debug("link: " + cmd.str());
+  ctx.logger->debug("link: " + cmd.str());
   if (std::system(cmd.str().c_str()) != 0)
   {
-    throw std::runtime_error(kind + " link failed: " + name);
+    throw std::runtime_error(spec.kind + " link failed: " + spec.name);
   }
-  progress.step("linking", target.output_path.filename().string());
+  ctx.progress->step("linking", target.output_path.filename().string());
 
-  if (cache != nullptr)
-  {
-    auto deps = collect_dependencies(*cache, target.source_files, target.include_paths);
-    cache->cache_build_result(target, deps);
-  }
+  auto deps = collect_dependencies(*ctx.cache, target.source_files, target.include_paths);
+  ctx.cache->cache_build_result(target, deps);
+  return false;
 }
 
 // Hand off a non-Cppup subproject to its native build system. The external
@@ -585,12 +600,11 @@ void run_external_subproject(const conf::Subproject& sp, const std::filesystem::
 // progress steps the build will emit: compile-per-source plus one finalize
 // step (archive for libraries, link for binaries/tests). Cached targets are
 // skipped — they emit a single "cached X" line instead, outside progress.
-std::size_t count_planned_steps(const conf::BuildConfiguration& config, const BuildPaths& paths,
-                                bld::BuildCache* cache, conf::BuildOptions options)
+std::size_t count_planned_steps(const BuildContext& ctx)
 {
   const auto contribution = [&](const bld::BuildTarget& target) -> std::size_t
   {
-    if (cache != nullptr && !cache->needs_rebuild(target))
+    if (!ctx.cache->needs_rebuild(target))
     {
       return 0;
     }
@@ -599,35 +613,36 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config, const Bu
   // If the executable factory throws (unresolved link set), assume it'll
   // need a full rebuild's worth of steps — the real builder will surface
   // the error later.
-  const auto exec_contribution =
-      [&](const std::string& kind, const std::string& name, const std::vector<std::string>& sources,
-          const std::vector<std::string>& libraries, const std::vector<std::string>& extra,
-          const std::filesystem::path& output_dir) -> std::size_t
+  const auto exec_contribution = [&](const ExecutableSpec& spec) -> std::size_t
   {
     try
     {
-      return contribution(make_executable_target(kind, name, sources, config, libraries, paths,
-                                                 options, extra, output_dir));
+      return contribution(make_executable_target(spec, ctx));
     }
     catch (const std::exception&)
     {
-      return sources.size() + 1;
+      return spec.sources.size() + 1;
     }
   };
 
   std::size_t total = 0;
-  for (const auto& library : config.libraries)
+  for (const auto& library : ctx.config->libraries)
   {
-    total += contribution(make_library_target(config, library, paths, options));
+    total += contribution(make_library_target(library, ctx));
   }
-  for (const auto& binary : config.binaries)
+  for (const auto& binary : ctx.config->binaries)
   {
-    total += exec_contribution("binary", binary.name, binary.sources, binary.libraries, {}, {});
+    total += exec_contribution({
+        .kind                 = "binary",
+        .name                 = binary.name,
+        .sources              = binary.sources,
+        .linked_library_names = binary.libraries,
+    });
   }
-  if (conf::enabled(options.with_tests))
+  if (conf::enabled(ctx.options.with_tests))
   {
-    const auto tests_dir = paths.build_dir / "tests";
-    for (const auto& test : config.tests)
+    const auto tests_dir = ctx.paths->build_dir / "tests";
+    for (const auto& test : ctx.config->tests)
     {
       std::vector<std::string> test_link_flag_strings;
       test_link_flag_strings.reserve(test.link_flags.size());
@@ -635,8 +650,14 @@ std::size_t count_planned_steps(const conf::BuildConfiguration& config, const Bu
       {
         test_link_flag_strings.emplace_back(f.flag);
       }
-      total += exec_contribution("test", test.name, test.sources, test.libraries,
-                                 test_link_flag_strings, tests_dir);
+      total += exec_contribution({
+          .kind                 = "test",
+          .name                 = test.name,
+          .sources              = test.sources,
+          .linked_library_names = test.libraries,
+          .extra_link_flags     = test_link_flag_strings,
+          .output_dir           = tests_dir,
+      });
     }
   }
   return total;
@@ -693,19 +714,24 @@ std::string format_project_summary(const conf::BuildConfiguration& config)
          plural(config.tests.size(), "test", "tests") + ")";
 }
 
-std::size_t build_binaries_parallel(const conf::BuildConfiguration& config, const BuildPaths& paths,
-                                    bld::BuildCache* cache, conf::BuildOptions options,
-                                    Logger& logger, ProgressReporter& progress)
+std::size_t build_binaries_parallel(const BuildContext& ctx)
 {
   std::atomic<std::size_t> total_cached{0};
-  run_in_parallel(config.binaries, options.jobs,
+  run_in_parallel(ctx.config->binaries, ctx.options.jobs,
                   [&](const conf::Binary& binary)
                   {
-                    std::size_t local_cached = 0;
-                    build_executable("binary", binary.name, binary.sources, config,
-                                     binary.libraries, paths, cache, options, logger, local_cached,
-                                     progress);
-                    total_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                    const bool cached = build_executable(
+                        {
+                            .kind                 = "binary",
+                            .name                 = binary.name,
+                            .sources              = binary.sources,
+                            .linked_library_names = binary.libraries,
+                        },
+                        ctx);
+                    if (cached)
+                    {
+                      total_cached.fetch_add(1, std::memory_order_relaxed);
+                    }
                   });
   return total_cached.load();
 }
@@ -714,18 +740,16 @@ std::size_t build_binaries_parallel(const conf::BuildConfiguration& config, cons
 // in Test::libraries plus verbatim flags in Test::link_flags (e.g.
 // "-lgtest -lgtest_main -lpthread"). Binaries land in build/tests/ so both
 // the test runner and VSCode testMate's glob find them.
-std::size_t build_tests_parallel(const conf::BuildConfiguration& config, const BuildPaths& paths,
-                                 bld::BuildCache* cache, conf::BuildOptions options, Logger& logger,
-                                 ProgressReporter& progress)
+std::size_t build_tests_parallel(const BuildContext& ctx)
 {
-  const auto tests_dir = paths.build_dir / "tests";
-  if (!config.tests.empty())
+  const auto tests_dir = ctx.paths->build_dir / "tests";
+  if (!ctx.config->tests.empty())
   {
     std::filesystem::create_directories(tests_dir);
   }
 
   std::atomic<std::size_t> total_cached{0};
-  run_in_parallel(config.tests, options.jobs,
+  run_in_parallel(ctx.config->tests, ctx.options.jobs,
                   [&](const conf::Test& test)
                   {
                     std::vector<std::string> test_link_flag_strings;
@@ -734,11 +758,20 @@ std::size_t build_tests_parallel(const conf::BuildConfiguration& config, const B
                     {
                       test_link_flag_strings.emplace_back(f.flag);
                     }
-                    std::size_t local_cached = 0;
-                    build_executable("test", test.name, test.sources, config, test.libraries, paths,
-                                     cache, options, logger, local_cached, progress,
-                                     test_link_flag_strings, tests_dir);
-                    total_cached.fetch_add(local_cached, std::memory_order_relaxed);
+                    const bool cached = build_executable(
+                        {
+                            .kind                 = "test",
+                            .name                 = test.name,
+                            .sources              = test.sources,
+                            .linked_library_names = test.libraries,
+                            .extra_link_flags     = test_link_flag_strings,
+                            .output_dir           = tests_dir,
+                        },
+                        ctx);
+                    if (cached)
+                    {
+                      total_cached.fetch_add(1, std::memory_order_relaxed);
+                    }
                   });
   return total_cached.load();
 }
@@ -787,101 +820,103 @@ std::string build_summary_line(const BuildCounters& counts, long long wall_ms)
 std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
                                              const CommandContext& context) noexcept
 {
-  try
+  auto&      logger     = *context.logger;
+  const auto wall_start = std::chrono::steady_clock::now();
+  if (conf::enabled(options.verbose))
   {
-    auto&      logger     = *context.logger;
-    const auto wall_start = std::chrono::steady_clock::now();
-    if (conf::enabled(options.verbose))
-    {
-      cppup::logger::console::ConsoleLogger::setGlobalConfig(
-          {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
-    }
-
-    if (!std::filesystem::exists(context.projectRoot / "build.cpp"))
-    {
-      return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
-    }
-
-    const auto cppup_dir = context.projectRoot / ".cppup";
-    const auto build_dir = context.projectRoot / "build";
-    std::filesystem::create_directories(build_dir);
-    const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
-
-    auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
-    if (!cache)
-    {
-      logger.warning("build cache unavailable");
-    }
-
-    materialize_configuration_header(cppup_dir);
-
-    const auto config = load_build_configuration(context.projectRoot, cppup_dir);
-
-    logger.info(format_project_summary(config));
-
-    logger.debug(
-        "wrote " +
-        conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
-
-    for (const auto& sp : config.subprojects)
-    {
-      run_external_subproject(sp, paths.project_root / sp.path, logger);
-    }
-
-    ProgressReporter progress;
-    progress.set_total(count_planned_steps(config, paths, cache.get(), options));
-
-    BuildCounters counts;
-
-    for (const auto& library : config.libraries)
-    {
-      build_library(config, library, paths, cache.get(), options, logger, counts.cached, progress);
-      ++counts.built;
-    }
-
-    // Tests/binaries are independent and typically one source each — outer
-    // parallelism across targets is a bigger win than inner per-source. Force
-    // inner jobs=1 in the workers so we don't run jobs² g++ processes.
-    conf::BuildOptions inner_opts = options;
-    inner_opts.jobs               = 1;
-
-    counts.cached +=
-        build_binaries_parallel(config, paths, cache.get(), inner_opts, logger, progress);
-    counts.built += config.binaries.size();
-
-    if (conf::enabled(options.with_tests))
-    {
-      counts.cached +=
-          build_tests_parallel(config, paths, cache.get(), inner_opts, logger, progress);
-      counts.built += config.tests.size();
-    }
-
-    if (!config.build_steps.empty())
-    {
-      conf::BuildStepExecutor const executor;
-      auto                          step_result = executor.execute_build_steps(config);
-      if (!step_result.success)
-      {
-        return std::unexpected("build step failed: " + step_result.error_message);
-      }
-    }
-
-    const auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                             std::chrono::steady_clock::now() - wall_start)
-                             .count();
-    counts.steps = progress.done.load(std::memory_order_relaxed);
-    logger.info(build_summary_line(counts, wall_ms));
-    if (cache != nullptr)
-    {
-      logger.info("cache hit rate: " +
-                  std::to_string(static_cast<int>(cache->get_stats().hit_rate * 100.0)) + "%");
-    }
-    return 0;
+    cppup::logger::console::ConsoleLogger::setGlobalConfig(
+        {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
   }
-  catch (const std::exception& e)
+
+  if (!std::filesystem::exists(context.projectRoot / "build.cpp"))
   {
-    return std::unexpected(std::string{"build failed: "} + e.what());
+    return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
   }
+
+  const auto cppup_dir = context.projectRoot / ".cppup";
+  const auto build_dir = context.projectRoot / "build";
+  std::filesystem::create_directories(build_dir);
+  const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
+
+  auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
+  if (!cache)
+  {
+    logger.warning("build cache unavailable");
+  }
+
+  materialize_configuration_header(cppup_dir);
+
+  const auto config = load_build_configuration(context.projectRoot, cppup_dir);
+
+  logger.info(format_project_summary(config));
+
+  logger.debug(
+      "wrote " +
+      conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
+
+  for (const auto& sp : config.subprojects)
+  {
+    run_external_subproject(sp, paths.project_root / sp.path, logger);
+  }
+
+  ProgressReporter   progress;
+  const BuildContext ctx{
+      .config   = &config,
+      .paths    = &paths,
+      .cache    = cache.get(),
+      .options  = options,
+      .logger   = &logger,
+      .progress = &progress,
+  };
+  progress.set_total(count_planned_steps(ctx));
+
+  BuildCounters counts;
+
+  for (const auto& library : config.libraries)
+  {
+    if (build_library(library, ctx))
+    {
+      ++counts.cached;
+    }
+    ++counts.built;
+  }
+
+  // Tests/binaries are independent and typically one source each — outer
+  // parallelism across targets is a bigger win than inner per-source. Force
+  // inner jobs=1 in the workers so we don't run jobs² g++ processes.
+  BuildContext inner_ctx = ctx;
+  inner_ctx.options.jobs = 1;
+
+  counts.cached += build_binaries_parallel(inner_ctx);
+  counts.built += config.binaries.size();
+
+  if (conf::enabled(options.with_tests))
+  {
+    counts.cached += build_tests_parallel(inner_ctx);
+    counts.built += config.tests.size();
+  }
+
+  if (!config.build_steps.empty())
+  {
+    conf::BuildStepExecutor const executor;
+    auto                          step_result = executor.execute_build_steps(config);
+    if (!step_result.success)
+    {
+      return std::unexpected("build step failed: " + step_result.error_message);
+    }
+  }
+
+  const auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - wall_start)
+                           .count();
+  counts.steps = progress.done.load(std::memory_order_relaxed);
+  logger.info(build_summary_line(counts, wall_ms));
+  if (cache != nullptr)
+  {
+    logger.info("cache hit rate: " +
+                std::to_string(static_cast<int>(cache->get_stats().hit_rate * 100.0)) + "%");
+  }
+  return 0;
 }
 
 }  // namespace cppup::cli
