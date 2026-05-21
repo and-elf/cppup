@@ -105,7 +105,7 @@ std::vector<std::string> json_to_vector(const std::string& json)
   std::string        item;
   while (std::getline(iss, item, ','))
   {
-    auto trash = std::ranges::remove_if(item, [](char c) { return c == '"' || c == ' '; });
+    auto trash = std::ranges::remove_if(item, [](char c) noexcept { return c == '"' || c == ' '; });
     item.erase(trash.begin(), trash.end());
     if (!item.empty())
     {
@@ -344,7 +344,7 @@ std::vector<DependencyRelation> DependencyDatabase::get_dependencies(
   sqlite3_bind_text(stmt, 2, package_version.c_str(), -1, SQLITE_STATIC);
 
   std::vector<DependencyRelation> dependencies;
-  int                             rc;
+  int                             rc{};
   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
   {
     DependencyRelation relation;

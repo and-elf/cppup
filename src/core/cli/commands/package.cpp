@@ -247,8 +247,8 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
     }
 
     auto records = registry.load();
-    if (std::ranges::any_of(records,
-                            [&](const PackageRecord& r) { return r.name == options.name; }))
+    if (std::ranges::any_of(
+            records, [&](const PackageRecord& r) noexcept { return r.name == options.name; }))
     {
       return std::unexpected("Package already installed: " + options.name);
     }
@@ -354,7 +354,7 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
 
     auto       records = registry.load();
     const auto it      = std::ranges::find_if(
-        records, [&](const PackageRecord& r) { return r.name == package_name; });
+        records, [&](const PackageRecord& r) noexcept { return r.name == package_name; });
     if (it == records.end())
     {
       return std::unexpected("Package not found: " + package_name);

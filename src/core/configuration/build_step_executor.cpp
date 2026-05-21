@@ -44,7 +44,7 @@ class BuildStepStatusTracker
   {
     std::scoped_lock const lock(mutex_);
     return std::ranges::all_of(dependency_indices.begin(), dependency_indices.end(),
-                               [this](size_t idx)
+                               [this](size_t idx) noexcept
                                { return statuses_[idx] == BuildStepStatus::Completed; });
   }
 
@@ -60,7 +60,7 @@ class BuildStepStatusTracker
              [this, &dependency_indices]()
              {
                return std::ranges::all_of(dependency_indices.begin(), dependency_indices.end(),
-                                          [this](size_t idx)
+                                          [this](size_t idx) noexcept
                                           {
                                             return statuses_[idx] == BuildStepStatus::Completed ||
                                                    statuses_[idx] == BuildStepStatus::Failed;

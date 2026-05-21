@@ -1,13 +1,6 @@
 #pragma once
 
-#include <algorithm>
-#include <filesystem>
-#include <iostream>
-#include <map>
-#include <memory>
 #include <optional>
-#include <regex>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -19,7 +12,7 @@ namespace cppup::configuration
 /**
  * Types of validation errors
  */
-enum class ValidationErrorType
+enum class ValidationErrorType : uint8_t
 {
   PackageNotFound,
   ToolchainNotFound,
@@ -38,7 +31,8 @@ struct ValidationError
   std::string         message;
   std::string         suggestion;  // CLI command or action to fix the issue
 
-  ValidationError(ValidationErrorType type, std::string message, std::string suggestion = "") :
+  ValidationError(ValidationErrorType type, std::string message,
+                  std::string suggestion = "") noexcept :
       type(type), message(std::move(message)), suggestion(std::move(suggestion))
   {
   }
@@ -96,6 +90,11 @@ class PackageValidationCache
  public:
   virtual ~PackageValidationCache() = default;
 
+  PackageValidationCache(const PackageValidationCache&)            = delete;
+  PackageValidationCache& operator=(const PackageValidationCache&) = delete;
+  PackageValidationCache(PackageValidationCache&&)                 = delete;
+  PackageValidationCache& operator=(PackageValidationCache&&)      = delete;
+
   /**
    * Check if a package exists in the cache
    * @param name Package name
@@ -120,6 +119,11 @@ class ToolchainCache
 {
  public:
   virtual ~ToolchainCache() = default;
+
+  ToolchainCache(const ToolchainCache&)            = delete;
+  ToolchainCache& operator=(const ToolchainCache&) = delete;
+  ToolchainCache(ToolchainCache&&)                 = delete;
+  ToolchainCache& operator=(ToolchainCache&&)      = delete;
 
   /**
    * Check if a toolchain exists in the cache
