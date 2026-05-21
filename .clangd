@@ -1,0 +1,16 @@
+# Test files: gtest's ASSERT_TRUE / EXPECT_* macros don't model checked-
+# optional or other dataflow invariants that clang-tidy expects, so checks
+# like bugprone-unchecked-optional-access produce false positives in every
+# test file. We disable clang-tidy entirely for tests rather than chase
+# per-check NOLINTs. Matches files under any tests/ subdir AND sibling
+# test_*.cpp / *_test.cpp files alongside their impl.
+If:
+  PathMatch:
+    - .*/tests/.*
+    - .*/test_.*\.cpp
+    - .*/test_.*\.hpp
+    - .*/.*_test\.cpp
+    - .*/.*_test\.hpp
+Diagnostics:
+  ClangTidy:
+    Remove: "*"
