@@ -80,15 +80,10 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
 }
 
 std::vector<bld::FileDependency> collect_dependencies(
-    bld::BuildCache* cache, const std::vector<std::filesystem::path>& sources,
+    bld::BuildCache& cache, const std::vector<std::filesystem::path>& sources,
     const std::vector<std::filesystem::path>& include_paths)
 {
   std::vector<bld::FileDependency> deps;
-  if (!cache)
-  {
-    return deps;
-  }
-
   for (const auto& source : sources)
   {
     if (!std::filesystem::exists(source))
@@ -98,7 +93,7 @@ std::vector<bld::FileDependency> collect_dependencies(
     bld::FileDependency dep;
     dep.file_path     = source;
     dep.last_modified = std::filesystem::last_write_time(source);
-    if (auto checksum = cache->calculate_file_checksum(source))
+    if (auto checksum = cache.calculate_file_checksum(source))
     {
       dep.checksum = *checksum;
     }
@@ -344,7 +339,7 @@ std::filesystem::path build_library(const conf::BuildConfiguration& config,
 
   if (cache != nullptr)
   {
-    auto deps = collect_dependencies(cache, target.source_files, target.include_paths);
+    auto deps = collect_dependencies(*cache, target.source_files, target.include_paths);
     cache->cache_build_result(target, deps);
   }
   return target.output_path;
@@ -459,8 +454,8 @@ bld::BuildTarget make_executable_target(const std::string& kind, const std::stri
   {
     throw std::runtime_error(kind + " " + name + ": " + std::move(resolved).error());
   }
-  ResolvedLinks links{.libs          = *resolved,
-                      .library_flags = conf::aggregate_link_flags(*resolved, config.libraries)};
+  const ResolvedLinks links{
+      .libs = *resolved, .library_flags = conf::aggregate_link_flags(*resolved, config.libraries)};
   target.link_flags = compose_link_flags(links, config, extra_link_flags, options, paths.build_dir);
   return target;
 }
@@ -523,7 +518,7 @@ void build_executable(const std::string& kind, const std::string& name,
 
   if (cache != nullptr)
   {
-    auto deps = collect_dependencies(cache, target.source_files, target.include_paths);
+    auto deps = collect_dependencies(*cache, target.source_files, target.include_paths);
     cache->cache_build_result(target, deps);
   }
 }

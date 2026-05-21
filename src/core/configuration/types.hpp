@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 
+#include "../panic.hpp"
+
 namespace cppup::configuration
 {
 
@@ -92,42 +94,34 @@ class Package
   Package& operator=(Package&&) = default;
   ~Package()                    = default;
 
-  // Core package interface
+  // Core package interface. A null impl_ is a moved-from / programmer-bug
+  // state; methods that need it assert rather than returning a defaulted
+  // result.
   [[nodiscard]] const PackageInfo& info() const
   {
-    if (!impl_)
-    {
-      throw std::runtime_error("Invalid package");
-    }
+    CPPUP_CHECK(impl_ != nullptr, "Package::info() called on moved-from Package");
     return impl_->info();
   }
 
   [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const
   {
-    if (!impl_)
-    {
-      return std::unexpected("Invalid package");
-    }
+    CPPUP_CHECK(impl_ != nullptr, "Package::resolve_source() called on moved-from Package");
     return impl_->resolve_source();
   }
 
   // Dependency injection
   template <typename ExecutorType>
-  void set_command_executor(std::shared_ptr<ExecutorType> executor)
+  void set_command_executor(std::shared_ptr<ExecutorType>& executor)
   {
-    if (impl_)
-    {
-      impl_->set_command_executor(std::static_pointer_cast<void>(executor));
-    }
+    CPPUP_CHECK(impl_ != nullptr, "Package::set_command_executor() called on moved-from Package");
+    impl_->set_command_executor(std::static_pointer_cast<void>(executor));
   }
 
   template <typename CacheType>
-  void set_cache(std::shared_ptr<CacheType> cache)
+  void set_cache(std::shared_ptr<CacheType>& cache)
   {
-    if (impl_)
-    {
-      impl_->set_cache(std::static_pointer_cast<void>(cache));
-    }
+    CPPUP_CHECK(impl_ != nullptr, "Package::set_cache() called on moved-from Package");
+    impl_->set_cache(std::static_pointer_cast<void>(cache));
   }
 
   // Convenience accessors
@@ -142,14 +136,8 @@ class Package
 
   bool operator==(const Package& other) const
   {
-    if (!impl_ && !other.impl_)
-    {
-      return true;
-    }
-    if (!impl_ || !other.impl_)
-    {
-      return false;
-    }
+    CPPUP_CHECK(impl_ != nullptr && other.impl_ != nullptr,
+                "Package::operator== called on moved-from Package");
     return impl_->info().name == other.impl_->info().name &&
            impl_->info().version == other.impl_->info().version;
   }
