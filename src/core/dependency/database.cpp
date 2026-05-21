@@ -132,7 +132,9 @@ std::vector<std::string> json_to_vector(const std::string& json)
 
 }  // namespace
 
-DependencyDatabase::DependencyDatabase(const std::filesystem::path& db_path) : db_path_(db_path) {}
+DependencyDatabase::DependencyDatabase(std::filesystem::path db_path) : db_path_(std::move(db_path))
+{
+}
 
 DependencyDatabase::~DependencyDatabase()
 {
@@ -384,7 +386,7 @@ void DependencyDatabase::execute_sql(const std::string& sql)
   const int rc        = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
   if (rc != SQLITE_OK)
   {
-    std::string msg = error_msg != nullptr ? error_msg : "unknown sqlite error";
+    std::string const msg = error_msg != nullptr ? error_msg : "unknown sqlite error";
     sqlite3_free(error_msg);
     ::cppup::panic("SQL error: " + msg);
   }
@@ -424,7 +426,7 @@ std::vector<std::string> DependencyDatabase::get_package_versions(const std::str
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
 
   std::vector<std::string> versions;
-  int                      rc;
+  int                      rc = SQLITE_OK;
   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
   {
     if (const char* v = column_cstr(stmt, 0))

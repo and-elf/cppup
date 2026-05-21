@@ -35,7 +35,7 @@ void ConfigurationValidator::validate_packages(const BuildConfiguration&     con
                                                ValidationResult&             result,
                                                const PackageValidationCache* package_cache)
 {
-  if (!package_cache)
+  if (package_cache == nullptr)
   {
     result.add_warning(ValidationErrorType::Warning,
                        "Package cache not available - skipping package validation",
@@ -57,7 +57,7 @@ void ConfigurationValidator::validate_toolchain(const BuildConfiguration& config
                                                 ValidationResult&         result,
                                                 const ToolchainCache*     toolchain_cache)
 {
-  if (!toolchain_cache)
+  if (toolchain_cache == nullptr)
   {
     result.add_warning(ValidationErrorType::Warning,
                        "Toolchain cache not available - skipping toolchain validation",

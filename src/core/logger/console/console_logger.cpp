@@ -50,7 +50,7 @@ void ConsoleLogger::log(LogLevel level, std::string_view message) const
         << "\033[0m: " << message << "\n";
   }
 
-  if (fileStream_)
+  if (fileStream_ != nullptr)
   {
     if (category_.empty())
     {

@@ -90,7 +90,7 @@ class ConfigurationCompiler
    * Clean compiled configuration files
    * @param build_cpp_path Optional specific build.cpp file to clean, or all if not specified
    */
-  void clean(const std::optional<std::filesystem::path>& build_cpp_path = std::nullopt);
+  void clean(const std::optional<std::filesystem::path>& build_cpp_path = std::nullopt) const;
 
  private:
   CompilerOptions options_;

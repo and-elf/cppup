@@ -61,7 +61,7 @@ struct RegistryEntry
 class DependencyDatabase
 {
  public:
-  explicit DependencyDatabase(const std::filesystem::path& db_path);
+  explicit DependencyDatabase(std::filesystem::path db_path);
   ~DependencyDatabase();
 
   DependencyDatabase(const DependencyDatabase&)            = delete;

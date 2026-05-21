@@ -136,7 +136,7 @@ std::filesystem::path ConfigurationCompiler::get_shared_library_path(
   return std::filesystem::path(options_.output_directory) / filename;
 }
 
-void ConfigurationCompiler::clean(const std::optional<std::filesystem::path>& build_cpp_path)
+void ConfigurationCompiler::clean(const std::optional<std::filesystem::path>& build_cpp_path) const
 {
   if (build_cpp_path.has_value())
   {

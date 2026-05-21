@@ -111,7 +111,7 @@ class SqliteBuildCache final : public BuildCache
 
   ~SqliteBuildCache() override
   {
-    if (db_)
+    if (db_ != nullptr)
     {
       sqlite3_close(db_);
     }
@@ -287,7 +287,7 @@ class SqliteBuildCache final : public BuildCache
     char* err = nullptr;
     if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK)
     {
-      std::string const msg = err ? err : "unknown sqlite error";
+      std::string const msg = err != nullptr ? err : "unknown sqlite error";
       sqlite3_free(err);
       ::cppup::panic("sqlite exec failed: " + msg);
     }

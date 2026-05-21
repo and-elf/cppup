@@ -49,7 +49,7 @@ std::optional<std::vector<ResolvedPackage>> PackageResolver::resolve_transitive(
 
   while (!work.empty())
   {
-    Package pkg = std::move(work.back());
+    const Package pkg = std::move(work.back());
     work.pop_back();
 
     auto info = provider_->get_package_info(pkg.name(), pkg.version());
