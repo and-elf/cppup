@@ -39,7 +39,7 @@ WarningsAsErrors: ''
 # `.*/(src|include)/`. Without this anchor, gtest macro contexts surface in
 # every test file's tidy output.
 HeaderFilterRegex:        '^.*/cppup/(src|include)/.*\.(hpp|h)$'
-ExcludeHeaderFilterRegex: '.*/CLI/CLI11\.hpp$|.*/init_templates_data\.hpp$|.*/embedded_configuration_header\.hpp$'
+ExcludeHeaderFilterRegex: '.*/CLI/CLI11\.hpp$|.*/init_templates_data\.hpp$|.*/embedded_configuration_header\.hpp$|.*/toml\+\+/toml\.hpp$'
 
 CheckOptions:
   # Types: uniformly CamelCase.

@@ -1,0 +1,3 @@
+# Vendored upstream — do not reformat.
+DisableFormat: true
+SortIncludes: Never

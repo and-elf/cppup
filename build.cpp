@@ -39,6 +39,7 @@ extern "C" BuildConfiguration configure()
           .build_args   = {},
       },
       Subproject{.path = "src/core/logger/console", .build_system = {}, .build_args = {}},
+      Subproject{.path = "src/core/plugin", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/cli", .build_system = {}, .build_args = {}},
   };
 
