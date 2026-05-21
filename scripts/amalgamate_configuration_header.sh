@@ -21,7 +21,10 @@ PUB_DIR="${ROOT}/include/cppup"
 # Dependency order: anything that includes types.hpp must come after it, etc.
 # The top-level shim (configuration.hpp) goes last and contributes only its
 # top-of-file doc comments — its internal `#include "..."` lines are stripped.
+# panic.hpp must come first: types.hpp uses CPPUP_CHECK and its quoted
+# `#include "../panic.hpp"` is stripped by the amalgamation pass below.
 FILES=(
+    "${ROOT}/src/core/panic.hpp"
     "${SRC_DIR}/types.hpp"
     "${SRC_DIR}/subproject.hpp"
     "${SRC_DIR}/profile.hpp"

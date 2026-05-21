@@ -63,6 +63,17 @@ struct CommandResult
   }
 };
 
+// The trio every register*Command function threads through: where to attach
+// the subcommand (`app`), what CommandContext to hand to the executor, and
+// where to record the exit code. Non-owning pointers (struct-of-refs trips
+// the cppcoreguidelines ref-data-member check), all three required non-null.
+struct CommandRegistration
+{
+  CLI::App*       app;
+  CommandContext* ctx;
+  CommandResult*  result;
+};
+
 int handleExpectedResult(std::expected<int, std::string> result, const std::string& operation_name,
                          ErrorHandler::ErrorCode error_code) noexcept
 {
@@ -139,19 +150,21 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
 }
 #endif  // !CPPUP_SLIM
 
-BuildOptions makeBuildOptions(bool asan, bool coverage, bool verbose = false,
-                              bool with_tests = false, unsigned jobs = 0) noexcept
+// Map a bool from a CLI11 add_flag binding to the matching strong-enum value.
+// CLI11 only writes bools; this is the single bridge to the typed
+// BuildOptions / InitOptions enums.
+template <typename E>
+[[nodiscard]] constexpr E to_enum(bool b) noexcept
 {
-  return BuildOptions{.asan       = asan ? Asan::On : Asan::Off,
-                      .coverage   = coverage ? Coverage::On : Coverage::Off,
-                      .verbose    = verbose ? Verbose::On : Verbose::Off,
-                      .with_tests = with_tests ? WithTests::On : WithTests::Off,
-                      .jobs       = jobs};
+  return b ? E::On : E::Off;
 }
 
 #ifndef CPPUP_SLIM
-void registerInitCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerInitCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     std::string name;
@@ -198,8 +211,11 @@ void registerInitCommand(CLI::App& app, CommandContext& ctx, CommandResult& resu
 }
 #endif
 
-void registerBuildCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerBuildCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool     asan       = false;
@@ -228,16 +244,22 @@ void registerBuildCommand(CLI::App& app, CommandContext& ctx, CommandResult& res
               {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
         }
         result.set(handleExpectedResult(
-            executeBuild(makeBuildOptions(opts->asan, opts->coverage, opts->verbose,
-                                          opts->with_tests, opts->jobs),
+            executeBuild(BuildOptions{.asan       = to_enum<Asan>(opts->asan),
+                                      .coverage   = to_enum<Coverage>(opts->coverage),
+                                      .verbose    = to_enum<Verbose>(opts->verbose),
+                                      .with_tests = to_enum<WithTests>(opts->with_tests),
+                                      .jobs       = opts->jobs},
                          ctx),
             "Build", ErrorHandler::ErrorCode::BuildFailure));
       });
 }
 
 #ifndef CPPUP_SLIM
-void registerCompileCommandsCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerCompileCommandsCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool asan     = false;
@@ -254,15 +276,20 @@ void registerCompileCommandsCommand(CLI::App& app, CommandContext& ctx, CommandR
       [opts, &ctx, &result]
       {
         result.set(handleExpectedResult(
-            executeCompileCommands(makeBuildOptions(opts->asan, opts->coverage), ctx),
+            executeCompileCommands(BuildOptions{.asan     = to_enum<Asan>(opts->asan),
+                                                .coverage = to_enum<Coverage>(opts->coverage)},
+                                   ctx),
             "compile-commands", ErrorHandler::ErrorCode::BuildFailure));
       });
 }
 
-void registerCleanCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerCleanCommand(const CommandRegistration& reg)
 {
-  auto  flag = std::make_shared<bool>(false);
-  auto* cmd  = app.add_subcommand("clean", "Remove build artifacts");
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto  flag   = std::make_shared<bool>(false);
+  auto* cmd    = app.add_subcommand("clean", "Remove build artifacts");
   cmd->add_flag("--all", *flag, "Also remove .cppup/packages, toolchains, plugins, and bin");
 
   cmd->callback(
@@ -274,8 +301,11 @@ void registerCleanCommand(CLI::App& app, CommandContext& ctx, CommandResult& res
       });
 }
 
-void registerTestCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerTestCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool asan     = false;
@@ -291,14 +321,19 @@ void registerTestCommand(CLI::App& app, CommandContext& ctx, CommandResult& resu
   cmd->callback(
       [opts, &ctx, &result]
       {
-        result.set(
-            handleExpectedResult(executeTest(makeBuildOptions(opts->asan, opts->coverage), ctx),
-                                 "Test", ErrorHandler::ErrorCode::TestFailure));
+        result.set(handleExpectedResult(
+            executeTest(BuildOptions{.asan     = to_enum<Asan>(opts->asan),
+                                     .coverage = to_enum<Coverage>(opts->coverage)},
+                        ctx),
+            "Test", ErrorHandler::ErrorCode::TestFailure));
       });
 }
 
-void registerFormatCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerFormatCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool                     check = false;
@@ -318,8 +353,11 @@ void registerFormatCommand(CLI::App& app, CommandContext& ctx, CommandResult& re
       });
 }
 
-void registerTidyCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerTidyCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool                     fix = false;
@@ -339,9 +377,12 @@ void registerTidyCommand(CLI::App& app, CommandContext& ctx, CommandResult& resu
       });
 }
 
-void registerPackageCommands(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerPackageCommands(const CommandRegistration& reg)
 {
-  auto* group = app.add_subcommand("package", "Manage project packages");
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("package", "Manage project packages");
   group->require_subcommand(1);
 
   auto* list_cmd = group->add_subcommand("list", "List installed packages");
@@ -387,9 +428,12 @@ void registerPackageCommands(CLI::App& app, CommandContext& ctx, CommandResult& 
       });
 }
 
-void registerToolchainCommands(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerToolchainCommands(const CommandRegistration& reg)
 {
-  auto* group = app.add_subcommand("toolchain", "Manage toolchains");
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("toolchain", "Manage toolchains");
   group->require_subcommand(1);
 
   auto* list_cmd = group->add_subcommand("list", "List toolchains");
@@ -435,9 +479,12 @@ void registerToolchainCommands(CLI::App& app, CommandContext& ctx, CommandResult
       });
 }
 
-void registerPluginCommands(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerPluginCommands(const CommandRegistration& reg)
 {
-  auto* group = app.add_subcommand("plugin", "Manage plugins");
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("plugin", "Manage plugins");
   group->require_subcommand(1);
 
   auto* list_cmd = group->add_subcommand("list", "List plugins");
@@ -473,9 +520,12 @@ void registerPluginCommands(CLI::App& app, CommandContext& ctx, CommandResult& r
       });
 }
 
-void registerModuleCommands(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerModuleCommands(const CommandRegistration& reg)
 {
-  auto* group = app.add_subcommand("module", "Manage modules");
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("module", "Manage modules");
   group->require_subcommand(1);
 
   auto  add_name = std::make_shared<std::string>();
@@ -490,8 +540,11 @@ void registerModuleCommands(CLI::App& app, CommandContext& ctx, CommandResult& r
 }
 #endif  // !CPPUP_SLIM
 
-void registerUpdateCommand(CLI::App& app, CommandContext& ctx, CommandResult& result)
+void registerUpdateCommand(const CommandRegistration& reg)
 {
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
   struct Opts
   {
     bool        check_only = false;
@@ -534,21 +587,22 @@ int CLIApplication::run(int argc, char* argv[]) noexcept
   bool show_version = false;
   app.add_flag("--version,-v", show_version, "Show version information");
 
-  CommandResult result;
+  CommandResult             result;
+  const CommandRegistration reg{.app = &app, .ctx = &context_, .result = &result};
 
-  registerUpdateCommand(app, context_, result);
-  registerBuildCommand(app, context_, result);
+  registerUpdateCommand(reg);
+  registerBuildCommand(reg);
 #ifndef CPPUP_SLIM
-  registerInitCommand(app, context_, result);
-  registerCompileCommandsCommand(app, context_, result);
-  registerCleanCommand(app, context_, result);
-  registerTestCommand(app, context_, result);
-  registerFormatCommand(app, context_, result);
-  registerTidyCommand(app, context_, result);
-  registerPackageCommands(app, context_, result);
-  registerToolchainCommands(app, context_, result);
-  registerPluginCommands(app, context_, result);
-  registerModuleCommands(app, context_, result);
+  registerInitCommand(reg);
+  registerCompileCommandsCommand(reg);
+  registerCleanCommand(reg);
+  registerTestCommand(reg);
+  registerFormatCommand(reg);
+  registerTidyCommand(reg);
+  registerPackageCommands(reg);
+  registerToolchainCommands(reg);
+  registerPluginCommands(reg);
+  registerModuleCommands(reg);
 #endif
 
   try

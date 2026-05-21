@@ -22,6 +22,7 @@
 #include "build_options.hpp"
 #include "commands.hpp"
 #include "common.h"
+#include "core/panic.hpp"
 #include "embedded_configuration_header.hpp"
 
 namespace cppup::cli
@@ -698,10 +699,7 @@ conf::BuildConfiguration load_build_configuration(const std::filesystem::path& p
 
   conf::ConfigurationCompiler compiler(std::move(compiler_opts));
   auto                        config_result = conf::load_with_subprojects(project_root, compiler);
-  if (!config_result)
-  {
-    throw std::runtime_error("load build configuration failed: " + config_result.error());
-  }
+  CPPUP_CHECK(config_result.has_value(), "configuration compilation failed");
   return *config_result;
 }
 
