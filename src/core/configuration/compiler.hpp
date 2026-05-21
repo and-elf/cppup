@@ -75,8 +75,8 @@ class ConfigurationCompiler
    * @param shared_lib_path Path to the existing shared library
    * @return true if recompilation is needed
    */
-  [[nodiscard]] bool needs_recompilation(const std::filesystem::path& build_cpp_path,
-                                         const std::filesystem::path& shared_lib_path) const;
+  [[nodiscard]] static bool needs_recompilation(const std::filesystem::path& build_cpp_path,
+                                                const std::filesystem::path& shared_lib_path);
 
   /**
    * Get the expected shared library path for a build.cpp file
@@ -98,7 +98,7 @@ class ConfigurationCompiler
   /**
    * Execute a shell command and capture output
    */
-  [[nodiscard]] CompilationResult execute_command(const std::string& command) const;
+  [[nodiscard]] static CompilationResult execute_command(const std::string& command);
 
   /**
    * Build the compiler command line

@@ -62,7 +62,7 @@ CompilationResult ConfigurationCompiler::compile(const std::filesystem::path& bu
 }
 
 bool ConfigurationCompiler::needs_recompilation(const std::filesystem::path& build_cpp_path,
-                                                const std::filesystem::path& shared_lib_path) const
+                                                const std::filesystem::path& shared_lib_path)
 {
   // If shared library doesn't exist, we need to compile
   if (!std::filesystem::exists(shared_lib_path))
@@ -157,7 +157,7 @@ void ConfigurationCompiler::clean(const std::optional<std::filesystem::path>& bu
   }
 }
 
-CompilationResult ConfigurationCompiler::execute_command(const std::string& command) const
+CompilationResult ConfigurationCompiler::execute_command(const std::string& command)
 {
   CompilationResult result;
 

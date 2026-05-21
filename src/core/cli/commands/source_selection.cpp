@@ -70,9 +70,9 @@ std::filesystem::path canonical_or(std::filesystem::path p)
 
 bool is_cpp_source_extension(const std::string& ext) noexcept
 {
-  static constexpr std::array<std::string_view, 7> kExts{".cpp", ".cxx", ".cc", ".c",
-                                                         ".hpp", ".hxx", ".h"};
-  return std::ranges::contains(kExts, ext);
+  static constexpr std::array<std::string_view, 7> cpp_extensions{".cpp", ".cxx", ".cc", ".c",
+                                                                  ".hpp", ".hxx", ".h"};
+  return std::ranges::contains(cpp_extensions, ext);
 }
 
 bool is_excluded_path(const std::filesystem::path& relative_path) noexcept

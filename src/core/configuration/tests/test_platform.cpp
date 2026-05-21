@@ -92,7 +92,10 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneOSBranch)
 
 TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
 {
-  if (TARGET_ARCH == "unknown") GTEST_SKIP();
+  if (TARGET_ARCH == "unknown")
+  {
+    GTEST_SKIP();
+  }
 
   bool x86_64_executed = false;
   bool arm64_executed  = false;
@@ -101,8 +104,14 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
   when_arm64([&]() { arm64_executed = true; });
 
   int arch_executed = 0;
-  if (x86_64_executed) arch_executed++;
-  if (arm64_executed) arch_executed++;
+  if (x86_64_executed)
+  {
+    arch_executed++;
+  }
+  if (arm64_executed)
+  {
+    arch_executed++;
+  }
   EXPECT_EQ(arch_executed, 1);
 
   if (is_x86_64())

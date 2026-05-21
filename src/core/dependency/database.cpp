@@ -15,7 +15,7 @@ namespace cppup::dependency
 namespace
 {
 
-constexpr const char* CREATE_PACKAGES_TABLE = R"(
+constexpr const char* create_packages_table = R"(
         CREATE TABLE IF NOT EXISTS packages (
             name TEXT NOT NULL,
             version TEXT NOT NULL,
@@ -33,7 +33,7 @@ constexpr const char* CREATE_PACKAGES_TABLE = R"(
         )
     )";
 
-constexpr const char* CREATE_DEPENDENCIES_TABLE = R"(
+constexpr const char* create_dependencies_table = R"(
         CREATE TABLE IF NOT EXISTS dependencies (
             package_name TEXT NOT NULL,
             package_version TEXT NOT NULL,
@@ -45,7 +45,7 @@ constexpr const char* CREATE_DEPENDENCIES_TABLE = R"(
         )
     )";
 
-constexpr const char* CREATE_REGISTRY_TABLE = R"(
+constexpr const char* create_registry_table = R"(
         CREATE TABLE IF NOT EXISTS registry (
             name TEXT PRIMARY KEY,
             latest_version TEXT,
@@ -56,7 +56,7 @@ constexpr const char* CREATE_REGISTRY_TABLE = R"(
         )
     )";
 
-constexpr const char* CREATE_INDEXES = R"(
+constexpr const char* create_indexes = R"(
         CREATE INDEX IF NOT EXISTS idx_packages_name ON packages(name);
         CREATE INDEX IF NOT EXISTS idx_dependencies_package ON dependencies(package_name, package_version);
         CREATE INDEX IF NOT EXISTS idx_dependencies_dependency ON dependencies(dependency_name);
@@ -372,10 +372,10 @@ void DependencyDatabase::cleanup() noexcept
 
 void DependencyDatabase::create_tables()
 {
-  execute_sql(CREATE_PACKAGES_TABLE);
-  execute_sql(CREATE_DEPENDENCIES_TABLE);
-  execute_sql(CREATE_REGISTRY_TABLE);
-  execute_sql(CREATE_INDEXES);
+  execute_sql(create_packages_table);
+  execute_sql(create_dependencies_table);
+  execute_sql(create_registry_table);
+  execute_sql(create_indexes);
 }
 
 void DependencyDatabase::execute_sql(const std::string& sql)

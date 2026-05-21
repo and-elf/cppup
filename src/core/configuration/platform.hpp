@@ -60,9 +60,13 @@ constexpr std::string_view TARGET_ARCH = "unknown";
   {
     return (type == LibraryType::Static) ? ".lib" : ".dll";
   }
-  else if constexpr (is_linux() || is_macos())
+  else if constexpr (is_linux())
   {
-    return (type == LibraryType::Static) ? ".a" : (is_macos() ? ".dylib" : ".so");
+    return (type == LibraryType::Static) ? ".a" : ".so";
+  }
+  else if constexpr (is_macos())
+  {
+    return (type == LibraryType::Static) ? ".a" : ".dylib";
   }
   else
   {
@@ -76,7 +80,7 @@ constexpr void when_windows(Func&& func)
 {
   if constexpr (is_windows())
   {
-    func();
+    std::forward<Func>(func)();
   }
 }
 
@@ -85,7 +89,7 @@ constexpr void when_linux(Func&& func)
 {
   if constexpr (is_linux())
   {
-    func();
+    std::forward<Func>(func)();
   }
 }
 
@@ -94,7 +98,7 @@ constexpr void when_macos(Func&& func)
 {
   if constexpr (is_macos())
   {
-    func();
+    std::forward<Func>(func)();
   }
 }
 
@@ -103,7 +107,7 @@ constexpr void when_x86_64(Func&& func)
 {
   if constexpr (is_x86_64())
   {
-    func();
+    std::forward<Func>(func)();
   }
 }
 
@@ -112,7 +116,7 @@ constexpr void when_arm64(Func&& func)
 {
   if constexpr (is_arm64())
   {
-    func();
+    std::forward<Func>(func)();
   }
 }
 

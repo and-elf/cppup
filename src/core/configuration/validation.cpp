@@ -9,7 +9,7 @@ namespace cppup::configuration
 
 ValidationResult ConfigurationValidator::validate(const BuildConfiguration&     config,
                                                   const PackageValidationCache* package_cache,
-                                                  const ToolchainCache* toolchain_cache) const
+                                                  const ToolchainCache*         toolchain_cache)
 {
   ValidationResult result;
 
@@ -33,7 +33,7 @@ ValidationResult ConfigurationValidator::validate(const BuildConfiguration&     
 
 void ConfigurationValidator::validate_packages(const BuildConfiguration&     config,
                                                ValidationResult&             result,
-                                               const PackageValidationCache* package_cache) const
+                                               const PackageValidationCache* package_cache)
 {
   if (!package_cache)
   {
@@ -55,7 +55,7 @@ void ConfigurationValidator::validate_packages(const BuildConfiguration&     con
 
 void ConfigurationValidator::validate_toolchain(const BuildConfiguration& config,
                                                 ValidationResult&         result,
-                                                const ToolchainCache*     toolchain_cache) const
+                                                const ToolchainCache*     toolchain_cache)
 {
   if (!toolchain_cache)
   {
@@ -77,7 +77,7 @@ void ConfigurationValidator::validate_toolchain(const BuildConfiguration& config
 }
 
 void ConfigurationValidator::validate_sources(const BuildConfiguration& config,
-                                              ValidationResult&         result) const
+                                              ValidationResult&         result)
 {
   // Simplified bootstrap validation
   if (config.sources.empty())
@@ -87,7 +87,7 @@ void ConfigurationValidator::validate_sources(const BuildConfiguration& config,
 }
 
 void ConfigurationValidator::validate_outputs(const BuildConfiguration& config,
-                                              ValidationResult&         result) const
+                                              ValidationResult&         result)
 {
   // Simplified bootstrap validation
   if (config.binaries.empty() && config.libraries.empty())
@@ -98,7 +98,7 @@ void ConfigurationValidator::validate_outputs(const BuildConfiguration& config,
 }
 
 void ConfigurationValidator::validate_build_steps(const BuildConfiguration& config,
-                                                  ValidationResult&         result) const
+                                                  ValidationResult&         result)
 {
   // Simplified bootstrap validation
   for (const auto& step : config.build_steps)

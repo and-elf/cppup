@@ -896,8 +896,7 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
 
   if (!config.build_steps.empty())
   {
-    conf::BuildStepExecutor const executor;
-    auto                          step_result = executor.execute_build_steps(config);
+    auto step_result = conf::BuildStepExecutor::execute_build_steps(config);
     if (!step_result.success)
     {
       return std::unexpected("build step failed: " + step_result.error_message);

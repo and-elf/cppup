@@ -43,8 +43,8 @@ class ProfileProcessor
    * @param profile_name Name of profile to activate (if empty, uses default)
    * @return ProfileProcessingResult with merged configuration
    */
-  [[nodiscard]] ProfileProcessingResult process_profiles(
-      const BuildConfiguration& config, const std::string& profile_name = "") const;
+  [[nodiscard]] static ProfileProcessingResult process_profiles(
+      const BuildConfiguration& config, const std::string& profile_name = "");
 
   /**
    * Get the effective profile name (specified or default)
@@ -52,8 +52,8 @@ class ProfileProcessor
    * @param profile_name Requested profile name (if empty, uses default)
    * @return Effective profile name to use
    */
-  [[nodiscard]] std::string get_effective_profile_name(const BuildConfiguration& config,
-                                                       const std::string& profile_name = "") const;
+  [[nodiscard]] static std::string get_effective_profile_name(const BuildConfiguration& config,
+                                                              const std::string& profile_name = "");
 
   /**
    * Find a profile by name in the configuration
@@ -61,8 +61,8 @@ class ProfileProcessor
    * @param profile_name Name of profile to find
    * @return Pointer to profile or nullptr if not found
    */
-  [[nodiscard]] const Profile* find_profile(const BuildConfiguration& config,
-                                            const std::string&        profile_name) const;
+  [[nodiscard]] static const Profile* find_profile(const BuildConfiguration& config,
+                                                   const std::string&        profile_name);
 
   /**
    * Merge profile settings into base configuration
@@ -70,14 +70,14 @@ class ProfileProcessor
    * @param profile Profile to merge
    * @return Merged configuration
    */
-  [[nodiscard]] BuildConfiguration merge_profile(const BuildConfiguration& base_config,
-                                                 const Profile&            profile) const;
+  [[nodiscard]] static BuildConfiguration merge_profile(const BuildConfiguration& base_config,
+                                                        const Profile&            profile);
 
   /**
    * Get default profile name
    * @return Default profile name ("debug")
    */
-  [[nodiscard]] std::string get_default_profile_name() const
+  [[nodiscard]] static std::string get_default_profile_name()
   {
     return "debug";
   }
@@ -88,8 +88,8 @@ class ProfileProcessor
    * @param profile_name Profile name to look for
    * @return true if profile exists
    */
-  [[nodiscard]] bool has_profile(const BuildConfiguration& config,
-                                 const std::string&        profile_name) const;
+  [[nodiscard]] static bool has_profile(const BuildConfiguration& config,
+                                        const std::string&        profile_name);
 
   /**
    * Get list of available profile names
@@ -158,7 +158,7 @@ class ProfileProcessor
 // Implementation
 
 ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfiguration& config,
-                                                           const std::string& profile_name) const
+                                                           const std::string&        profile_name)
 {
   ProfileProcessingResult result;
   result.processed_config = config;  // Start with base configuration
@@ -205,7 +205,7 @@ ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfigurat
 }
 
 std::string ProfileProcessor::get_effective_profile_name(const BuildConfiguration& /*config*/,
-                                                         const std::string& profile_name) const
+                                                         const std::string& profile_name)
 {
   if (!profile_name.empty())
   {
@@ -217,7 +217,7 @@ std::string ProfileProcessor::get_effective_profile_name(const BuildConfiguratio
 }
 
 const Profile* ProfileProcessor::find_profile(const BuildConfiguration& config,
-                                              const std::string&        profile_name) const
+                                              const std::string&        profile_name)
 {
   for (const auto& profile : config.profiles)
   {
@@ -230,7 +230,7 @@ const Profile* ProfileProcessor::find_profile(const BuildConfiguration& config,
 }
 
 BuildConfiguration ProfileProcessor::merge_profile(const BuildConfiguration& base_config,
-                                                   const Profile&            profile) const
+                                                   const Profile&            profile)
 {
   BuildConfiguration result = base_config;
 
@@ -251,7 +251,7 @@ BuildConfiguration ProfileProcessor::merge_profile(const BuildConfiguration& bas
 }
 
 bool ProfileProcessor::has_profile(const BuildConfiguration& config,
-                                   const std::string&        profile_name) const
+                                   const std::string&        profile_name)
 {
   return find_profile(config, profile_name) != nullptr;
 }

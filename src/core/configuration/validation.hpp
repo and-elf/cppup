@@ -154,37 +154,37 @@ class ConfigurationValidator
    * @param toolchain_cache Optional toolchain cache for validation
    * @return ValidationResult with any errors or warnings
    */
-  [[nodiscard]] ValidationResult validate(const BuildConfiguration&     config,
-                                          const PackageValidationCache* package_cache = nullptr,
-                                          const ToolchainCache* toolchain_cache = nullptr) const;
+  [[nodiscard]] static ValidationResult validate(
+      const BuildConfiguration& config, const PackageValidationCache* package_cache = nullptr,
+      const ToolchainCache* toolchain_cache = nullptr);
 
  private:
   /**
    * Validate packages in the configuration
    */
-  void validate_packages(const BuildConfiguration& config, ValidationResult& result,
-                         const PackageValidationCache* package_cache) const;
+  static void validate_packages(const BuildConfiguration& config, ValidationResult& result,
+                                const PackageValidationCache* package_cache);
 
   /**
    * Validate toolchain in the configuration
    */
-  void validate_toolchain(const BuildConfiguration& config, ValidationResult& result,
-                          const ToolchainCache* toolchain_cache) const;
+  static void validate_toolchain(const BuildConfiguration& config, ValidationResult& result,
+                                 const ToolchainCache* toolchain_cache);
 
   /**
    * Validate source files
    */
-  void validate_sources(const BuildConfiguration& config, ValidationResult& result) const;
+  static void validate_sources(const BuildConfiguration& config, ValidationResult& result);
 
   /**
    * Validate output paths
    */
-  void validate_outputs(const BuildConfiguration& config, ValidationResult& result) const;
+  static void validate_outputs(const BuildConfiguration& config, ValidationResult& result);
 
   /**
    * Validate build steps
    */
-  void validate_build_steps(const BuildConfiguration& config, ValidationResult& result) const;
+  static void validate_build_steps(const BuildConfiguration& config, ValidationResult& result);
 };
 
 }  // namespace cppup::configuration

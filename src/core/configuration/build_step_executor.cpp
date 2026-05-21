@@ -198,14 +198,13 @@ void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatu
 }  // namespace
 
 // Simplified bootstrap implementation
-BuildStepExecutionResult BuildStepExecutor::execute_build_steps(
-    const BuildConfiguration& config) const
+BuildStepExecutionResult BuildStepExecutor::execute_build_steps(const BuildConfiguration& config)
 {
   return execute_steps_parallel(config.build_steps);
 }
 
 BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
-    const std::vector<BuildStep>& steps, const std::vector<std::string>& /*execution_order*/) const
+    const std::vector<BuildStep>& steps, const std::vector<std::string>& /*execution_order*/)
 {
   BuildStepExecutionResult result;
   result.success = true;

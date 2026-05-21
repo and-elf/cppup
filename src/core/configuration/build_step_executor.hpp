@@ -11,7 +11,7 @@ namespace cppup::configuration
 /**
  * Status of a build step execution
  */
-enum class BuildStepStatus
+enum class BuildStepStatus : uint8_t
 {
   NotStarted,
   Waiting,  // Waiting for dependencies
@@ -70,15 +70,14 @@ class BuildStepExecutor
   /**
    * Execute all build steps in the configuration
    */
-  [[nodiscard]] BuildStepExecutionResult execute_build_steps(
-      const BuildConfiguration& config) const;
+  [[nodiscard]] static BuildStepExecutionResult execute_build_steps(
+      const BuildConfiguration& config);
 
   /**
    * Execute build steps in parallel
    */
-  [[nodiscard]] BuildStepExecutionResult execute_steps_parallel(
-      const std::vector<BuildStep>&   steps,
-      const std::vector<std::string>& execution_order = {}) const;
+  [[nodiscard]] static BuildStepExecutionResult execute_steps_parallel(
+      const std::vector<BuildStep>& steps, const std::vector<std::string>& execution_order = {});
 };
 
 }  // namespace cppup::configuration
