@@ -1,6 +1,5 @@
 #include <algorithm>
-#include <iostream>
-#include <optional>
+#include <functional>
 #include <set>
 #include <string>
 #include <vector>
@@ -107,20 +106,21 @@ class ProfileProcessor
   static std::string validate_profiles(const BuildConfiguration& config);
 
  private:
-  /**
-   * Merge vectors without duplicates
-   * @param base Base vector
-   * @param additional Additional items to merge
-   * @return Merged vector
-   */
-  template <typename T>
-  [[nodiscard]] std::vector<T> merge_vectors(const std::vector<T>& base,
-                                             const std::vector<T>& additional) const
+  // Merge `additional` into `base`, deduping by `key`. Items in `additional`
+  // whose projected key is already present are skipped. Default projection
+  // is std::identity (full-value equality). `key` is invoked via std::invoke,
+  // so pointer-to-member projections like `&Flag::flag` work directly.
+  template <typename T, typename KeyFn = std::identity>
+  [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
+                                                   const std::vector<T>& additional, KeyFn key = {})
   {
     std::vector<T> result = base;
     for (const auto& item : additional)
     {
-      if (std::find(result.begin(), result.end(), item) == result.end())
+      const auto match =
+          std::ranges::find_if(result, [&](const T& existing)
+                               { return std::invoke(key, existing) == std::invoke(key, item); });
+      if (match == result.end())
       {
         result.push_back(item);
       }
@@ -128,65 +128,29 @@ class ProfileProcessor
     return result;
   }
 
-  /**
-   * Merge flags without duplicates
-   * @param base Base flags
-   * @param additional Additional flags to merge
-   * @return Merged flags
-   */
-  [[nodiscard]] std::vector<Flag> merge_flags(const std::vector<Flag>& base,
-                                              const std::vector<Flag>& additional) const
+  // Same as above, but when a key collides on_collide(existing&, new&) is
+  // invoked instead of skipping — for fields like Definition::value where
+  // the additional entry should override the base entry.
+  template <typename T, typename KeyFn, typename OnCollide>
+  [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
+                                                   const std::vector<T>& additional, KeyFn key,
+                                                   OnCollide on_collide)
   {
-    std::vector<Flag> result = base;
-    for (const auto& flag : additional)
+    std::vector<T> result = base;
+    for (const auto& item : additional)
     {
-      bool found = false;
-      for (const auto& existing : result)
+      auto match =
+          std::ranges::find_if(result, [&](const T& existing)
+                               { return std::invoke(key, existing) == std::invoke(key, item); });
+      if (match == result.end())
       {
-        if (existing.flag == flag.flag)
-        {
-          found = true;
-          break;
-        }
+        result.push_back(item);
       }
-      if (!found)
+      else
       {
-        result.push_back(flag);
+        on_collide(*match, item);
       }
     }
-    return result;
-  }
-
-  /**
-   * Merge definitions, with profile definitions overriding base definitions
-   * @param base Base definitions
-   * @param additional Additional definitions to merge
-   * @return Merged definitions
-   */
-  [[nodiscard]] std::vector<Definition> merge_definitions(
-      const std::vector<Definition>& base, const std::vector<Definition>& additional) const
-  {
-    std::vector<Definition> result = base;
-
-    for (const auto& new_def : additional)
-    {
-      bool found = false;
-      for (auto& existing : result)
-      {
-        if (existing.name == new_def.name)
-        {
-          // Override existing definition
-          existing.value = new_def.value;
-          found          = true;
-          break;
-        }
-      }
-      if (!found)
-      {
-        result.push_back(new_def);
-      }
-    }
-
     return result;
   }
 };
@@ -270,20 +234,18 @@ BuildConfiguration ProfileProcessor::merge_profile(const BuildConfiguration& bas
 {
   BuildConfiguration result = base_config;
 
-  // Merge packages (profile packages are added to base packages)
-  result.packages = merge_vectors(result.packages, profile.packages);
+  // Packages and include paths dedupe by full-value equality.
+  result.packages      = merge_unique(result.packages, profile.packages);
+  result.include_paths = merge_unique(result.include_paths, profile.include_paths);
 
-  // Merge compile flags (profile flags are added to base flags)
-  result.compile_flags = merge_flags(result.compile_flags, profile.compile_flags);
+  // Flags dedupe by their `.flag` string (same flag, same effect).
+  result.compile_flags = merge_unique(result.compile_flags, profile.compile_flags, &Flag::flag);
+  result.link_flags    = merge_unique(result.link_flags, profile.link_flags, &Flag::flag);
 
-  // Merge link flags (profile flags are added to base flags)
-  result.link_flags = merge_flags(result.link_flags, profile.link_flags);
-
-  // Merge include paths (profile paths are added to base paths)
-  result.include_paths = merge_vectors(result.include_paths, profile.include_paths);
-
-  // Merge definitions (profile definitions override base definitions with same name)
-  result.definitions = merge_definitions(result.definitions, profile.definitions);
+  // Definitions dedupe by `.name`; profile value wins on collision.
+  result.definitions = merge_unique(result.definitions, profile.definitions, &Definition::name,
+                                    [](Definition& existing, const Definition& new_def)
+                                    { existing.value = new_def.value; });
 
   return result;
 }
