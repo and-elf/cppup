@@ -17,11 +17,16 @@ namespace cppup
 
 }  // namespace cppup
 
-#define CPPUP_CHECK(cond, msg) \
-  do                           \
-  {                            \
-    if (!(cond)) [[unlikely]]  \
-    {                          \
-      ::cppup::panic(msg);     \
-    }                          \
+// `cond` is materialized into a local bool before negation so that callers
+// passing a logical expression like `a || b` don't trip
+// readability-simplify-boolean-expr's DeMorgan check on the expanded
+// `if (!(a || b))` at every CPPUP_CHECK site.
+#define CPPUP_CHECK(cond, msg)                               \
+  do                                                         \
+  {                                                          \
+    const bool cppup_check_passed = static_cast<bool>(cond); \
+    if (!cppup_check_passed) [[unlikely]]                    \
+    {                                                        \
+      ::cppup::panic(msg);                                   \
+    }                                                        \
   } while (0)
