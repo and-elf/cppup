@@ -709,6 +709,7 @@ size_t DependencyDatabase::get_registry_count() const
   return 0;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion) -- DFS cycle detection is naturally recursive
 bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
                                        std::set<std::string>& visited,
                                        std::set<std::string>& recursion_stack) const

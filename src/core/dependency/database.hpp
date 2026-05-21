@@ -119,6 +119,7 @@ class DependencyDatabase
   void cleanup() noexcept;
   void execute_sql(const std::string& sql);
 
+  // NOLINTNEXTLINE(misc-no-recursion) -- DFS cycle detection is naturally recursive
   bool has_cycle_dfs(const std::string& package, std::set<std::string>& visited,
                      std::set<std::string>& recursion_stack) const;
 };

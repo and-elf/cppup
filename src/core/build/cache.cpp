@@ -37,6 +37,15 @@ struct SqliteCloser
 };
 using SqliteHandle = std::unique_ptr<sqlite3, SqliteCloser>;
 
+// sqlite3_column_text returns const unsigned char* but the SQLite docs treat
+// it as interchangeable with const char* for UTF-8 text. Centralize the cast
+// so the NOLINT lives in one place instead of every column access.
+[[nodiscard]] const char* column_cstr(sqlite3_stmt* stmt, int idx) noexcept
+{
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  return reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
+}
+
 std::string to_hex(const unsigned char* data, std::size_t len)
 {
   std::ostringstream oss;
@@ -261,8 +270,8 @@ class SqliteBuildCache final : public BuildCache
     if (sqlite3_step(stmt) == SQLITE_ROW)
     {
       StoredEntry entry;
-      entry.output_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-      entry.signature   = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+      entry.output_path = column_cstr(stmt, 0);
+      entry.signature   = column_cstr(stmt, 1);
       entry.build_time  = sqlite3_column_int64(stmt, 2);
       result            = std::move(entry);
     }
@@ -281,8 +290,8 @@ class SqliteBuildCache final : public BuildCache
     while (sqlite3_step(stmt) == SQLITE_ROW)
     {
       FileDependency dep;
-      dep.file_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
-      dep.checksum  = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+      dep.file_path = column_cstr(stmt, 0);
+      dep.checksum  = column_cstr(stmt, 1);
       deps.push_back(std::move(dep));
     }
     sqlite3_finalize(stmt);

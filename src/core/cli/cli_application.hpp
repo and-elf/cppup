@@ -45,7 +45,7 @@ class CLIApplication
  public:
   explicit CLIApplication(CommandContext&& context) noexcept;
 
-  [[nodiscard]] int run(int argc, char* argv[]) noexcept;
+  [[nodiscard]] int run(int argc, char** argv) noexcept;
 
  private:
   CommandContext context_;

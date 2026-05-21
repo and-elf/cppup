@@ -583,7 +583,7 @@ void registerUpdateCommand(const CommandRegistration& reg)
 
 }  // anonymous namespace
 
-int CLIApplication::run(int argc, char* argv[]) noexcept
+int CLIApplication::run(int argc, char** argv) noexcept
 {
   CLI::App app{"cppup - Modern C++ Build System"};
   app.require_subcommand(0, 1);

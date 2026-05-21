@@ -21,6 +21,7 @@ namespace cppup
 // passing a logical expression like `a || b` don't trip
 // readability-simplify-boolean-expr's DeMorgan check on the expanded
 // `if (!(a || b))` at every CPPUP_CHECK site.
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage) -- needs lazy `msg` evaluation
 #define CPPUP_CHECK(cond, msg)                               \
   do                                                         \
   {                                                          \
