@@ -15,6 +15,12 @@ namespace cppup::cli
 // never be linted or formatted.
 [[nodiscard]] bool is_excluded_path(const std::filesystem::path& relative_path) noexcept;
 
+// True if `path` looks like a test file per the project convention:
+// basename starts with test_ or ends with _test, OR any path component
+// equals tests. Format applies to test files; tidy does not (gtest macros
+// trip many checks without surfacing real bugs).
+[[nodiscard]] bool is_test_file(const std::filesystem::path& path) noexcept;
+
 // Recursively walk `root`, returning every C++ source/header file that is
 // not under an excluded path.
 [[nodiscard]] std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& root);

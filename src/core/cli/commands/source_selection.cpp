@@ -86,6 +86,17 @@ bool is_excluded_path(const std::filesystem::path& relative_path) noexcept
                              });
 }
 
+bool is_test_file(const std::filesystem::path& path) noexcept
+{
+  const std::string stem = path.stem().string();
+  if (stem.starts_with("test_") || stem.ends_with("_test"))
+  {
+    return true;
+  }
+  return std::ranges::any_of(path, [](const std::filesystem::path& component) noexcept
+                             { return component.string() == "tests"; });
+}
+
 std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& root)
 {
   std::vector<std::filesystem::path> files;

@@ -31,12 +31,12 @@ std::string shell_quote(const std::filesystem::path& p)
 // up with its compile_commands.json entry.
 std::string regex_escape(std::string_view s)
 {
-  static constexpr std::string_view kMeta = R"(.^$*+?()[]{}\|)";
+  static constexpr std::string_view k_meta = R"(.^$*+?()[]{}\|)";
   std::string                       out;
   out.reserve(s.size() + 8);
   for (const char c : s)
   {
-    if (kMeta.find(c) != std::string_view::npos)
+    if (k_meta.find(c) != std::string_view::npos)
     {
       out.push_back('\\');
     }
@@ -49,6 +49,34 @@ bool tool_on_path(std::string_view name)
 {
   const std::string cmd = "command -v " + std::string(name) + " >/dev/null 2>&1";
   return std::system(cmd.c_str()) == 0;
+}
+
+// Partition `selected` into (non-test files kept for tidy) and the count of
+// test files dropped. gtest macros generate huge warning counts and rarely
+// surface real bugs in test code; the .clangd config does the same for IDE
+// diagnostics so `cppup tidy` stays consistent.
+struct FilterResult
+{
+  std::vector<std::filesystem::path> files;
+  std::size_t                        skipped_tests = 0;
+};
+
+FilterResult drop_test_files(std::vector<std::filesystem::path> selected)
+{
+  FilterResult out;
+  out.files.reserve(selected.size());
+  for (auto& f : selected)
+  {
+    if (is_test_file(f))
+    {
+      ++out.skipped_tests;
+    }
+    else
+    {
+      out.files.push_back(std::move(f));
+    }
+  }
+  return out;
 }
 
 }  // namespace
@@ -70,7 +98,7 @@ std::expected<int, std::string> executeTidy(bool                            appl
 
     std::vector<std::filesystem::path> skipped_non_cpp;
     std::vector<std::filesystem::path> skipped_missing;
-    const auto                         files =
+    auto                               selected =
         select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp, &skipped_missing);
 
     for (const auto& s : skipped_non_cpp)
@@ -82,13 +110,20 @@ std::expected<int, std::string> executeTidy(bool                            appl
       context.logger->warning("Skipped missing path: " + m.string());
     }
 
+    auto [files, skipped_tests] = drop_test_files(std::move(selected));
+
     if (files.empty())
     {
-      context.logger->info("No C++ source files to process");
+      context.logger->info(skipped_tests > 0 ? "Only test files selected; tidy disabled for tests"
+                                             : "No C++ source files to process");
       return 0;
     }
 
-    context.logger->info("Processing " + std::to_string(files.size()) + " files");
+    const std::string summary = skipped_tests > 0
+                                    ? "Processing " + std::to_string(files.size()) + " files (" +
+                                          std::to_string(skipped_tests) + " test file(s) skipped)"
+                                    : "Processing " + std::to_string(files.size()) + " files";
+    context.logger->info(summary);
 
     // Prefer `run-clang-tidy` when available — it shards across cores and is
     // dramatically faster on multi-file invocations than running `clang-tidy`

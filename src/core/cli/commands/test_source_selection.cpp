@@ -63,6 +63,32 @@ TEST(SourceSelection, ExcludedPathPredicate)
   EXPECT_FALSE(is_excluded_path("include/foo.hpp"));
 }
 
+TEST(SourceSelection, TestFilePredicate)
+{
+  // basename prefix test_
+  EXPECT_TRUE(is_test_file("src/core/build/test_cache.cpp"));
+  EXPECT_TRUE(is_test_file("src/core/dependency/test_dependency.cpp"));
+  EXPECT_TRUE(is_test_file("test_foo.hpp"));
+
+  // basename suffix _test
+  EXPECT_TRUE(is_test_file("src/something_test.cpp"));
+  EXPECT_TRUE(is_test_file("util_test.hpp"));
+
+  // any component named tests
+  EXPECT_TRUE(is_test_file("src/core/configuration/tests/test_loader.cpp"));
+  EXPECT_TRUE(is_test_file("tests/foo.cpp"));
+  EXPECT_TRUE(is_test_file("a/tests/b/c.cpp"));
+
+  // false positives we must avoid: substrings that aren't basenames or
+  // path components.
+  EXPECT_FALSE(is_test_file("src/main.cpp"));
+  EXPECT_FALSE(is_test_file("src/testing.cpp"));         // not test_*
+  EXPECT_FALSE(is_test_file("src/contestant.cpp"));      // not _test
+  EXPECT_FALSE(is_test_file("src/test/foo.cpp"));        // dir "test", not "tests"
+  EXPECT_FALSE(is_test_file("src/latest_version.cpp"));  // not _test (ends in _version)
+  EXPECT_FALSE(is_test_file("include/lib.hpp"));
+}
+
 TEST(SourceSelection, EmptyArgsWalksProject)
 {
   auto root = make_tmp_root("walk");
