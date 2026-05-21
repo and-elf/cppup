@@ -119,11 +119,19 @@ CoverageSummary parse_gcov_summary(const std::string& gcov_output)
   return s;
 }
 
-// Run gcov on every .gcda file under build_dir, drop .gcov text reports in
-// coverage_dir, and return a summary parsed from gcov's stdout.
-std::expected<CoverageSummary, std::string> collect_coverage(const fs::path& build_dir,
-                                                             const fs::path& coverage_dir,
-                                                             Logger&         logger)
+// build_dir is where .gcda files live; coverage_dir is where gcov writes
+// the per-source .gcov reports. Bundled so the two adjacent paths can't be
+// transposed at the call site.
+struct CoveragePaths
+{
+  fs::path build_dir;
+  fs::path coverage_dir;
+};
+
+// Run gcov on every .gcda file under paths.build_dir, drop .gcov text reports
+// in paths.coverage_dir, and return a summary parsed from gcov's stdout.
+std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths& paths,
+                                                             Logger&              logger)
 {
   if (!tool_exists("gcov"))
   {
@@ -132,7 +140,7 @@ std::expected<CoverageSummary, std::string> collect_coverage(const fs::path& bui
 
   std::vector<fs::path> gcda_files;
   std::error_code       ec;
-  for (const auto& entry : fs::recursive_directory_iterator(build_dir))
+  for (const auto& entry : fs::recursive_directory_iterator(paths.build_dir))
   {
     if (entry.is_regular_file() && entry.path().extension() == ".gcda")
     {
@@ -145,8 +153,8 @@ std::expected<CoverageSummary, std::string> collect_coverage(const fs::path& bui
     return std::unexpected("no .gcda files found; rebuild and run tests with --coverage first");
   }
 
-  fs::create_directories(coverage_dir, ec);
-  const auto coverage_abs = fs::absolute(coverage_dir, ec);
+  fs::create_directories(paths.coverage_dir, ec);
+  const auto coverage_abs = fs::absolute(paths.coverage_dir, ec);
 
   std::ostringstream cmd;
   cmd << "cd " << coverage_abs.string() << " && gcov -b -p";
@@ -243,7 +251,8 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
     if (conf::enabled(options.coverage))
     {
       const fs::path coverage_dir = build_dir / "coverage";
-      auto           summary      = collect_coverage(build_dir, coverage_dir, logger);
+      auto           summary =
+          collect_coverage({.build_dir = build_dir, .coverage_dir = coverage_dir}, logger);
       if (!summary)
       {
         logger.warning("coverage: " + summary.error());

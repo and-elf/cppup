@@ -110,9 +110,13 @@ class ProfileProcessor
   // whose projected key is already present are skipped. Default projection
   // is std::identity (full-value equality). `key` is invoked via std::invoke,
   // so pointer-to-member projections like `&Flag::flag` work directly.
+  // base/additional names make the merge direction unambiguous; strong-typing
+  // would propagate ceremony through every caller of this internal helper.
+  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
   template <typename T, typename KeyFn = std::identity>
   [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
                                                    const std::vector<T>& additional, KeyFn key = {})
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   {
     std::vector<T> result = base;
     for (const auto& item : additional)
@@ -131,10 +135,12 @@ class ProfileProcessor
   // Same as above, but when a key collides on_collide(existing&, new&) is
   // invoked instead of skipping — for fields like Definition::value where
   // the additional entry should override the base entry.
+  // NOLINTBEGIN(bugprone-easily-swappable-parameters) -- see overload above
   template <typename T, typename KeyFn, typename OnCollide>
   [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
                                                    const std::vector<T>& additional, KeyFn key,
                                                    OnCollide on_collide)
+  // NOLINTEND(bugprone-easily-swappable-parameters)
   {
     std::vector<T> result = base;
     for (const auto& item : additional)

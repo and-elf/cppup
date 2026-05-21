@@ -33,26 +33,35 @@ std::filesystem::path exclusion_root_for(const std::filesystem::path& dir,
   return (path_is_under(dir, project_root) || dir == project_root) ? project_root : dir;
 }
 
+// Pair of paths the walk needs: which tree to descend into, and which root
+// to compute exclusion-relative paths against (usually the project root, or
+// the dir itself when the dir is outside the project). Bundled in a
+// designated-init struct so callers can't transpose the two adjacent paths.
+struct WalkSpec
+{
+  std::filesystem::path dir;
+  std::filesystem::path exclusion_root;
+};
+
 // `sink` is taken by value (a cheap copy of the caller's lambda/functor)
 // because it's invoked once per matching file: a forwarding reference would
 // move from it on the first call and leave subsequent iterations operating
 // on a moved-from sink.
 template <typename Sink>
-void walk_cpp_files(const std::filesystem::path& dir, const std::filesystem::path& exclusion_root,
-                    Sink sink)
+void walk_cpp_files(const WalkSpec& spec, Sink sink)
 {
   std::error_code ec;
-  if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec))
+  if (!std::filesystem::exists(spec.dir, ec) || !std::filesystem::is_directory(spec.dir, ec))
   {
     return;
   }
-  for (const auto& entry : std::filesystem::recursive_directory_iterator(dir))
+  for (const auto& entry : std::filesystem::recursive_directory_iterator(spec.dir))
   {
     if (!entry.is_regular_file())
     {
       continue;
     }
-    if (is_excluded_path(std::filesystem::relative(entry.path(), exclusion_root)))
+    if (is_excluded_path(std::filesystem::relative(entry.path(), spec.exclusion_root)))
     {
       continue;
     }
@@ -104,7 +113,8 @@ bool is_test_file(const std::filesystem::path& path) noexcept
 std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& root)
 {
   std::vector<std::filesystem::path> files;
-  walk_cpp_files(root, root, [&](std::filesystem::path p) { files.push_back(std::move(p)); });
+  walk_cpp_files({.dir = root, .exclusion_root = root},
+                 [&](std::filesystem::path p) { files.push_back(std::move(p)); });
   return files;
 }
 
@@ -118,7 +128,7 @@ std::vector<std::filesystem::path> select_cpp_files(
 
   if (args.empty())
   {
-    walk_cpp_files(project_root, project_root, push);
+    walk_cpp_files({.dir = project_root, .exclusion_root = project_root}, push);
     return {dedup.begin(), dedup.end()};
   }
 
@@ -142,7 +152,7 @@ std::vector<std::filesystem::path> select_cpp_files(
 
     if (std::filesystem::is_directory(p, ec))
     {
-      walk_cpp_files(p, exclusion_root_for(p, project_root), push);
+      walk_cpp_files({.dir = p, .exclusion_root = exclusion_root_for(p, project_root)}, push);
       continue;
     }
 

@@ -81,12 +81,14 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
   }
 }
 
-std::vector<bld::FileDependency> collect_dependencies(
-    bld::BuildCache& cache, const std::vector<std::filesystem::path>& sources,
-    const std::vector<std::filesystem::path>& include_paths)
+// Take the whole BuildTarget rather than (sources, include_paths) so the
+// adjacent-same-type swap trap is gone and callers don't have to remember
+// which vector goes first.
+std::vector<bld::FileDependency> collect_dependencies(bld::BuildCache&        cache,
+                                                      const bld::BuildTarget& target)
 {
   std::vector<bld::FileDependency> deps;
-  for (const auto& source : sources)
+  for (const auto& source : target.source_files)
   {
     if (!std::filesystem::exists(source))
     {
@@ -102,7 +104,7 @@ std::vector<bld::FileDependency> collect_dependencies(
 
     for (const auto& inc : bld::DependencyScanner::scan_includes(source))
     {
-      for (const auto& dir : include_paths)
+      for (const auto& dir : target.include_paths)
       {
         auto resolved = dir / inc;
         if (std::filesystem::exists(resolved))
@@ -364,7 +366,7 @@ bool build_library(const conf::Library& library, const BuildContext& ctx)
   }
   ctx.progress->step("archiving", target.output_path.filename().string());
 
-  auto deps = collect_dependencies(*ctx.cache, target.source_files, target.include_paths);
+  auto deps = collect_dependencies(*ctx.cache, target);
   ctx.cache->cache_build_result(target, deps);
   return false;
 }
@@ -534,7 +536,7 @@ bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
   }
   ctx.progress->step("linking", target.output_path.filename().string());
 
-  auto deps = collect_dependencies(*ctx.cache, target.source_files, target.include_paths);
+  auto deps = collect_dependencies(*ctx.cache, target);
   ctx.cache->cache_build_result(target, deps);
   return false;
 }
