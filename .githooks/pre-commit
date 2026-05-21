@@ -77,15 +77,30 @@ if [[ "${CPPUP_SKIP_FORMAT:-0}" != "1" ]]; then
 fi
 
 # 3. cppup tidy on staged files only. Requires compile_commands.json.
+# Skip test files: gtest macros produce huge noise (~80k warnings/file) and
+# strict tidy checks rarely add signal in test code. Files under tests/ or
+# whose basename starts with test_ are excluded.
 if [[ "${CPPUP_SKIP_TIDY:-0}" != "1" ]]; then
     if [[ ! -f "$repo_root/compile_commands.json" ]]; then
         echo "[pre-commit] compile_commands.json missing — skipping tidy."
         echo "             Run \`cppup compile-commands\` to enable."
     else
-        echo "[pre-commit] cppup tidy (${#staged[@]} file(s))…"
-        if ! "$cppup_bin" tidy "${staged[@]}"; then
-            echo "[pre-commit] clang-tidy reported issues — fix or set CPPUP_SKIP_TIDY=1."
-            exit 1
+        tidy_targets=()
+        for f in "${staged[@]}"; do
+            base="${f##*/}"
+            if [[ "$f" == */tests/* || "$base" == test_* ]]; then
+                continue
+            fi
+            tidy_targets+=("$f")
+        done
+        if [[ ${#tidy_targets[@]} -eq 0 ]]; then
+            echo "[pre-commit] cppup tidy: no non-test files staged; skipping."
+        else
+            echo "[pre-commit] cppup tidy (${#tidy_targets[@]} file(s); ${#staged[@]} staged, $(( ${#staged[@]} - ${#tidy_targets[@]} )) test files skipped)…"
+            if ! "$cppup_bin" tidy "${tidy_targets[@]}"; then
+                echo "[pre-commit] clang-tidy reported issues — fix or set CPPUP_SKIP_TIDY=1."
+                exit 1
+            fi
         fi
     fi
 fi
