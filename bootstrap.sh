@@ -10,7 +10,11 @@
 #     ./bootstrap_build/cppup_bootstrap update     # prebuilt (fast)
 #     ./bootstrap_build/cppup_bootstrap build      # from source
 #
-# This script takes no arguments.
+# This script accepts an optional legacy command argument:
+#
+#     ./bootstrap.sh            # only build bootstrap binary
+#     ./bootstrap.sh build      # build bootstrap binary, then full cppup
+#     ./bootstrap.sh update     # build bootstrap binary, then install prebuilt cppup
 
 set -euo pipefail
 
@@ -135,16 +139,29 @@ install_githooks() {
 }
 
 main() {
-    if [[ $# -gt 0 ]]; then
-        log_error "bootstrap.sh takes no arguments (got: $*)"
-        echo "After running, use the slim binary directly:" >&2
-        echo "  $BOOTSTRAP_BINARY update    # install prebuilt cppup" >&2
-        echo "  $BOOTSTRAP_BINARY build     # build full cppup from source" >&2
+    local bootstrap_command=""
+    if [[ $# -gt 1 ]]; then
+        log_error "usage: ./bootstrap.sh [build|update]"
         exit 1
     fi
+    if [[ $# -eq 1 ]]; then
+        bootstrap_command="$1"
+        if [[ "$bootstrap_command" != "build" && "$bootstrap_command" != "update" ]]; then
+            log_error "unknown command '$bootstrap_command' (expected: build or update)"
+            exit 1
+        fi
+    fi
+
     check_prerequisites
     build_slim
     install_githooks
+
+    if [[ -n "$bootstrap_command" ]]; then
+        log_info "Running: $BOOTSTRAP_BINARY $bootstrap_command"
+        "$BOOTSTRAP_BINARY" "$bootstrap_command"
+        return 0
+    fi
+
     log_info "Next: '$BOOTSTRAP_BINARY update' (prebuilt) or '$BOOTSTRAP_BINARY build' (from source)"
 }
 

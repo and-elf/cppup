@@ -6,6 +6,7 @@
 #include <iostream>
 #endif
 
+#include <cppup/configuration.hpp>
 #include <memory>
 #include <print>
 #include <string>
@@ -14,7 +15,6 @@
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
 #include "core/logger/console/console_logger.hpp"
-#include "include/cppup/configuration.hpp"
 
 namespace cppup::cli
 {
