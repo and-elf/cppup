@@ -193,6 +193,18 @@ struct PackageAddOptions
 [[nodiscard]] std::expected<int, std::string> executePackageAdd(
     const PackageAddOptions& options, const CommandContext& context) noexcept;
 
+// `cppup package lock` — load the project manifest (`build.cpp`) and write
+// `cppup.lock` at the project root. Pure derivation from `config.packages`;
+// the local package database and `.cppup/packages/` are not consulted.
+[[nodiscard]] std::expected<int, std::string> executePackageLock(
+    const CommandContext& context) noexcept;
+
+// `cppup package sync` — reconcile `.cppup/packages/` and the local package
+// registry with `cppup.lock`. Idempotent: running twice on a project that
+// is already in-sync produces no changes.
+[[nodiscard]] std::expected<int, std::string> executePackageSync(
+    const CommandContext& context) noexcept;
+
 // Toolchain commands
 [[nodiscard]] std::expected<int, std::string> executeToolchainList(
     const CommandContext& context) noexcept;

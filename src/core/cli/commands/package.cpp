@@ -7,9 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "../../configuration/compiler.hpp"
 #include "../../configuration/subproject.hpp"
+#include "../../configuration/subproject_loader.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
+#include "embedded_configuration_header.hpp"
+#include "lockfile.hpp"
 
 namespace cppup::cli
 {
@@ -175,6 +179,108 @@ bool copyLocalPackage(const std::filesystem::path& src, const std::filesystem::p
   {
     return false;
   }
+}
+
+std::expected<cppup::configuration::BuildConfiguration, std::string> load_project_configuration(
+    const std::filesystem::path& project_root)
+{
+  if (!std::filesystem::exists(project_root / "build.cpp"))
+  {
+    return std::unexpected("No build.cpp found in: " + project_root.string());
+  }
+  const auto cppup_dir = project_root / ".cppup";
+
+  // The configuration compiler needs the embedded `configuration.hpp` to be
+  // present on disk so build.cpp can #include it. `cppup build` does this
+  // via `materialize_configuration_header`; we repeat the relevant bits
+  // here so `package lock` works on a fresh checkout that hasn't been built.
+  const auto      header_dir  = cppup_dir / "include" / "cppup";
+  const auto      header_path = header_dir / "configuration.hpp";
+  std::error_code error_code;
+  std::filesystem::create_directories(header_dir, error_code);
+  bool need_write = true;
+  if (std::filesystem::exists(header_path))
+  {
+    const std::ifstream ifs(header_path, std::ios::binary);
+    std::stringstream   buf;
+    buf << ifs.rdbuf();
+    need_write = buf.str() != kConfigurationHeader;
+  }
+  if (need_write)
+  {
+    std::ofstream out(header_path, std::ios::binary | std::ios::trunc);
+    out.write(kConfigurationHeader.data(),
+              static_cast<std::streamsize>(kConfigurationHeader.size()));
+  }
+
+  cppup::configuration::CompilerOptions compiler_opts;
+  compiler_opts.include_paths.push_back((cppup_dir / "include").string());
+  compiler_opts.include_paths.push_back((project_root / "include").string());
+  compiler_opts.include_paths.push_back((project_root / "src").string());
+  compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
+
+  cppup::configuration::ConfigurationCompiler compiler(std::move(compiler_opts));
+  auto config = cppup::configuration::load_with_subprojects(project_root, compiler);
+  if (!config)
+  {
+    return std::unexpected("Failed to load build.cpp: " + config.error());
+  }
+  return *config;
+}
+
+[[nodiscard]] std::filesystem::path lockfile_path(
+    const std::filesystem::path& project_root) noexcept
+{
+  return project_root / "cppup.lock";
+}
+
+// Materialize one lockfile entry into `.cppup/packages/<name>/`. Returns
+// true if the on-disk state is now valid for the entry; false if the fetch
+// failed. Idempotent: if the destination already has content we leave it
+// alone and report success.
+bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path& install_path,
+                       const CommandContext& context)
+{
+  if (std::filesystem::exists(install_path) && !std::filesystem::is_empty(install_path))
+  {
+    return true;
+  }
+  switch (entry.source)
+  {
+    case lockfile::SourceKind::Git:
+    {
+      if (context.git == nullptr)
+      {
+        context.logger->warning("git interface not configured; cannot sync " + entry.name);
+        return false;
+      }
+      const std::optional<std::string> branch =
+          entry.git_branch.empty() ? std::nullopt : std::optional{entry.git_branch};
+      return fetchGitPackage(*context.git, entry.url, install_path, branch);
+    }
+    case lockfile::SourceKind::Directory:
+    {
+      if (entry.url.empty())
+      {
+        context.logger->warning("directory source missing path; cannot sync " + entry.name);
+        return false;
+      }
+      return copyLocalPackage(entry.url, install_path);
+    }
+    case lockfile::SourceKind::Url:
+    case lockfile::SourceKind::Tar:
+    case lockfile::SourceKind::Zip:
+    case lockfile::SourceKind::Registry:
+    {
+      // Match `package add`'s behaviour for these sources: create an empty
+      // placeholder so the registry stays consistent. Real fetch support
+      // for archives lands separately.
+      std::error_code error_code;
+      std::filesystem::create_directories(install_path, error_code);
+      return !error_code;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -381,6 +487,146 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
   catch (const std::exception& e)
   {
     return std::unexpected("Package remove failed: " + std::string(e.what()));
+  }
+}
+
+std::expected<int, std::string> executePackageLock(const CommandContext& context) noexcept
+{
+  try
+  {
+    auto config = load_project_configuration(context.projectRoot);
+    if (!config)
+    {
+      return std::unexpected(config.error());
+    }
+
+    auto entries = lockfile::entries_from_configuration(*config);
+    if (!entries)
+    {
+      return std::unexpected(entries.error());
+    }
+    const auto serialized = lockfile::serialize(*entries);
+
+    const auto    path = lockfile_path(context.projectRoot);
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out)
+    {
+      return std::unexpected("Failed to open " + path.string() + " for writing");
+    }
+    out.write(serialized.data(), static_cast<std::streamsize>(serialized.size()));
+    if (!out)
+    {
+      return std::unexpected("Failed to write " + path.string());
+    }
+
+    context.logger->info("Wrote " + path.filename().string() + " (" +
+                         std::to_string(entries->size()) + " packages)");
+    return 0;
+  }
+  catch (const std::exception& e)
+  {
+    return std::unexpected("Package lock failed: " + std::string(e.what()));
+  }
+}
+
+std::expected<int, std::string> executePackageSync(const CommandContext& context) noexcept
+{
+  try
+  {
+    const auto path = lockfile_path(context.projectRoot);
+    if (!std::filesystem::exists(path))
+    {
+      return std::unexpected("No cppup.lock at project root. Run `cppup package lock` first.");
+    }
+    const std::ifstream ifs(path, std::ios::binary);
+    std::stringstream   buf;
+    buf << ifs.rdbuf();
+    auto parsed = lockfile::parse(buf.str());
+    if (!parsed)
+    {
+      return std::unexpected("Failed to parse cppup.lock: " + parsed.error());
+    }
+
+    PackageRegistry registry(context.projectRoot);
+    if (!registry.ensure_directories())
+    {
+      return std::unexpected("Could not initialize package directory");
+    }
+
+    auto       records = registry.load();
+    const auto lookup  = [&](const std::string& name)
+    {
+      return std::ranges::find_if(
+          records, [&](const PackageRecord& rec) noexcept { return rec.name == name; });
+    };
+
+    std::size_t fetched{};
+    std::size_t repaired_metadata{};
+    std::size_t unchanged{};
+
+    for (const auto& entry : *parsed)
+    {
+      const auto install_path = registry.packages_dir() / entry.name;
+      const bool dir_present =
+          std::filesystem::exists(install_path) && !std::filesystem::is_empty(install_path);
+      const auto record_it        = lookup(entry.name);
+      const bool metadata_present = record_it != records.end();
+
+      if (dir_present && metadata_present)
+      {
+        ++unchanged;
+        continue;
+      }
+
+      if (!dir_present)
+      {
+        context.logger->info("Syncing package: " + entry.name);
+        if (!materialize_entry(entry, install_path, context))
+        {
+          return std::unexpected("Failed to fetch package: " + entry.name);
+        }
+        ++fetched;
+      }
+
+      // Reconcile the local registry record. We treat the lockfile as
+      // truth: name/version/source/build_system come from there, and the
+      // installed_at timestamp is reset on repair so users can see when
+      // the local copy was last touched.
+      PackageRecord record;
+      record.name    = entry.name;
+      record.version = entry.version.empty() ? "latest" : entry.version;
+      record.source  = std::string(lockfile::to_string(entry.source));
+      if (!entry.url.empty())
+      {
+        record.source += ":" + entry.url;
+      }
+      record.build_system = entry.build_system;
+      record.installed_at = now_epoch();
+
+      if (metadata_present)
+      {
+        *record_it = std::move(record);
+        ++repaired_metadata;
+      }
+      else
+      {
+        records.push_back(std::move(record));
+      }
+    }
+
+    if (!registry.save(records))
+    {
+      return std::unexpected("Failed to update package registry");
+    }
+
+    context.logger->info("Sync complete: " + std::to_string(fetched) + " fetched, " +
+                         std::to_string(repaired_metadata) + " metadata repaired, " +
+                         std::to_string(unchanged) + " unchanged");
+    return 0;
+  }
+  catch (const std::exception& e)
+  {
+    return std::unexpected("Package sync failed: " + std::string(e.what()));
   }
 }
 

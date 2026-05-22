@@ -29,7 +29,16 @@ enum class SourceType : uint8_t
 };
 
 /**
- * Base package information that all package types share
+ * Base package information that all package types share.
+ *
+ * `dependencies` is the direct transitive children of this package, in
+ * declaration order. The manifest is the source of truth for the dep
+ * graph: `cppup lock` walks `BuildConfiguration::packages` plus each
+ * entry's `dependencies` recursively to write the resolved lockfile.
+ *
+ * Recursive `std::vector<PackageInfo>` is intentional - PackageInfo is
+ * pure data, so the recursion is cheap and avoids a forward-decl cycle
+ * with `Package` (which wraps PackageInfo via type erasure).
  */
 struct PackageInfo
 {
@@ -48,6 +57,9 @@ struct PackageInfo
   // Build options
   std::vector<std::string>   build_args   = {};
   std::optional<std::string> subdirectory = std::nullopt;
+
+  // Direct transitive dependencies, declared inline in the manifest.
+  std::vector<PackageInfo> dependencies = {};
 };
 
 /**
@@ -197,6 +209,151 @@ class Package
 
   std::unique_ptr<PackageInterface> impl_;
 };
+
+/**
+ * Minimal `PackageType` for the user-facing manifest API.
+ *
+ * Stores a `PackageInfo` and nothing else; `resolve_source()` returns the
+ * declared `source_directory` for DIRECTORY packages and an empty path
+ * otherwise (the actual fetch is done by `cppup sync` from the lockfile
+ * data, not by calling into Package methods).
+ *
+ * The internal package types in `src/core/package/` (`GitPackage`,
+ * `ArchivePackage`, ...) carry real fetch logic and live in the
+ * `cppup_package_core` library, which is not visible to user
+ * `build.cpp` files. `PlainPackage` is what the inline `from_*` helpers
+ * below wrap so users can build a `Package` directly from `<cppup/
+ * configuration.hpp>` without that library.
+ */
+class PlainPackage
+{
+ public:
+  explicit PlainPackage(PackageInfo info) : info_(std::move(info)) {}
+
+  [[nodiscard]] const PackageInfo& info() const noexcept
+  {
+    return info_;
+  }
+  [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const
+  {
+    if (info_.source_directory.has_value())
+    {
+      return std::filesystem::path{*info_.source_directory};
+    }
+    return std::filesystem::path{};
+  }
+  void set_command_executor(const std::shared_ptr<void>& /*unused*/) noexcept {}
+  void set_cache(const std::shared_ptr<void>& /*unused*/) noexcept {}
+
+ private:
+  PackageInfo info_;
+};
+
+/**
+ * User-facing helpers for declaring manifest packages.
+ *
+ * These wrap `PlainPackage`; they exist in `types.hpp` (not in the
+ * internal `src/core/package/packages.hpp`) so user `build.cpp` files
+ * pick them up through the amalgamated `<cppup/configuration.hpp>`.
+ *
+ * Every helper takes an optional final `dependencies` parameter:
+ *
+ *     config.packages.push_back(from_git(
+ *         "fmt", "https://github.com/fmtlib/fmt.git", "10.2.1",
+ *         {from_git("zlib", "https://github.com/madler/zlib.git")}));
+ *
+ * The manifest is the source of truth for the dep graph; `cppup lock`
+ * walks `config.packages` plus each entry's `dependencies` recursively.
+ */
+namespace package_helpers
+{
+
+inline std::vector<PackageInfo> extract_dependency_info(const std::vector<Package>& deps)
+{
+  std::vector<PackageInfo> out;
+  out.reserve(deps.size());
+  for (const auto& dep : deps)
+  {
+    out.push_back(dep.info());
+  }
+  return out;
+}
+
+inline Package from_git(std::string name, std::string url,
+                        std::optional<std::string>  branch       = std::nullopt,
+                        const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name        = std::move(name);
+  info.url         = std::move(url);
+  info.source_type = SourceType::GIT;
+  if (branch.has_value())
+  {
+    info.git_branch = std::move(branch);
+  }
+  info.dependencies = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+inline Package from_directory(std::string name, std::string directory,
+                              const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name             = std::move(name);
+  info.source_directory = std::move(directory);
+  info.source_type      = SourceType::DIRECTORY;
+  info.dependencies     = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+inline Package from_tar(std::string name, std::string url,
+                        const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name         = std::move(name);
+  info.url          = std::move(url);
+  info.source_type  = SourceType::TAR;
+  info.dependencies = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+inline Package from_zip(std::string name, std::string url,
+                        const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name         = std::move(name);
+  info.url          = std::move(url);
+  info.source_type  = SourceType::ZIP;
+  info.dependencies = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+inline Package from_http(std::string name, std::string url,
+                         const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name         = std::move(name);
+  info.url          = std::move(url);
+  info.source_type  = SourceType::HTTP;
+  info.dependencies = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+inline Package from_registry(std::string name, std::optional<std::string> version = std::nullopt,
+                             const std::vector<Package>& dependencies = {})
+{
+  PackageInfo info;
+  info.name = std::move(name);
+  if (version.has_value())
+  {
+    info.version = std::move(version);
+  }
+  info.source_type  = SourceType::REGISTRY;
+  info.dependencies = extract_dependency_info(dependencies);
+  return Package(PlainPackage(std::move(info)));
+}
+
+}  // namespace package_helpers
 
 /**
  * Represents a module reference

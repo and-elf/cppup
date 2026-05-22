@@ -216,6 +216,38 @@ void registerInitCommand(const CommandRegistration& reg)
 }
 #endif
 
+// `cppup lock` and `cppup sync` are shortcuts for the `package` subcommands
+// of the same name. The package-scoped versions stay registered too so
+// existing CI scripts keep working; the top-level forms match the workflow
+// users expect from cargo/uv/npm.
+void registerLockCommand(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* cmd    = app.add_subcommand("lock", "Generate cppup.lock from build.cpp");
+  cmd->callback(
+      [&ctx, &result]
+      {
+        result.set(handleExpectedResult(executePackageLock(ctx), "Lock",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+
+void registerSyncCommand(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* cmd    = app.add_subcommand("sync", "Reconcile local package state with cppup.lock");
+  cmd->callback(
+      [&ctx, &result]
+      {
+        result.set(handleExpectedResult(executePackageSync(ctx), "Sync",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+
 void registerBuildCommand(const CommandRegistration& reg)
 {
   auto& app    = *reg.app;
@@ -431,6 +463,22 @@ void registerPackageCommands(const CommandRegistration& reg)
         result.set(handleExpectedResult(executePackageRemove(*remove_name, ctx), "Package remove",
                                         ErrorHandler::ErrorCode::UnknownError));
       });
+
+  auto* lock_cmd = group->add_subcommand("lock", "Generate cppup.lock from build.cpp");
+  lock_cmd->callback(
+      [&ctx, &result]
+      {
+        result.set(handleExpectedResult(executePackageLock(ctx), "Package lock",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+
+  auto* sync_cmd = group->add_subcommand("sync", "Reconcile local package state with cppup.lock");
+  sync_cmd->callback(
+      [&ctx, &result]
+      {
+        result.set(handleExpectedResult(executePackageSync(ctx), "Package sync",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
 }
 
 void registerToolchainCommands(const CommandRegistration& reg)
@@ -613,6 +661,8 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerUpdateCommand(reg);
     registerBuildCommand(reg);
 #ifndef CPPUP_SLIM
+    registerLockCommand(reg);
+    registerSyncCommand(reg);
     registerInitCommand(reg);
     registerCompileCommandsCommand(reg);
     registerCleanCommand(reg);

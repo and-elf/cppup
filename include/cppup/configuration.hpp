@@ -112,11 +112,12 @@ using Profile            = Profile;
 using BuildConfiguration = BuildConfiguration;
 
 // Package helper functions
-// using package_helpers::from_git;
-// using package_helpers::from_directory;
-// using package_helpers::from_tar;
-// using package_helpers::header_only;
-// using package_helpers::from_registry;
+using package_helpers::from_directory;
+using package_helpers::from_git;
+using package_helpers::from_http;
+using package_helpers::from_registry;
+using package_helpers::from_tar;
+using package_helpers::from_zip;
 
 // Platform detection constants
 // using TARGET_OS = TARGET_OS;

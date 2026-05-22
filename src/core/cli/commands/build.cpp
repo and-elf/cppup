@@ -860,6 +860,19 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
       return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
     }
 
+    // Auto-sync from `cppup.lock` when present so a fresh `git clone &&
+    // cppup build` reproduces the package state without an explicit
+    // `cppup sync`. Sync is idempotent; on a fully materialized project
+    // it's a no-op.
+    if (std::filesystem::exists(context.projectRoot / "cppup.lock"))
+    {
+      auto sync_result = executePackageSync(context);
+      if (!sync_result)
+      {
+        return std::unexpected("cppup.lock present but sync failed: " + sync_result.error());
+      }
+    }
+
     const auto cppup_dir = context.projectRoot / ".cppup";
     const auto build_dir = context.projectRoot / "build";
     std::filesystem::create_directories(build_dir);
