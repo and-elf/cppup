@@ -47,14 +47,12 @@ constexpr cppup::configuration::Package make_package(cppup::configuration::Packa
     case SourceType::DIRECTORY:
       return Package(directory::DirectoryPackage(std::move(info)));
     case SourceType::TAR:
+      [[fallthrough]];
     case SourceType::ZIP:
       return Package(archive::ArchivePackage(std::move(info)));
     case SourceType::HTTP:
       return Package(http::HttpPackage(std::move(info)));
     case SourceType::REGISTRY:
-      return Package(registry::RegistryPackage(std::move(info)));
-    default:
-      // This should never happen in a well-formed program
       return Package(registry::RegistryPackage(std::move(info)));
   }
 }
