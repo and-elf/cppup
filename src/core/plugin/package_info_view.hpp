@@ -41,4 +41,10 @@ class PackageInfoView
   cppup_package_info_v1    view_{};
 };
 
+// Inverse of PackageInfoView: read a C-ABI package_info struct into a
+// fresh C++ PackageInfo. Used by static plugins on the receiving end
+// of a vtable->create call. `dependencies` is left empty — the C ABI
+// does not carry the dep graph by design.
+[[nodiscard]] cppup::configuration::PackageInfo from_c_view(const cppup_package_info_v1& view);
+
 }  // namespace cppup::plugin

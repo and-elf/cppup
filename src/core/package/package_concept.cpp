@@ -2,10 +2,7 @@
 
 #include <algorithm>
 
-namespace cppup::package
-{
-
-namespace utils
+namespace cppup::package::utils
 {
 
 std::expected<void, std::string> execute_command(const CommandExecutor&       executor,
@@ -89,8 +86,6 @@ bool extract_archive(const CommandExecutor& executor, const std::filesystem::pat
   return result.has_value();
 }
 
-}  // namespace utils
-
 // PackageCacheInterface is pure virtual - no implementation needed here
 
-}  // namespace cppup::package
+}  // namespace cppup::package::utils

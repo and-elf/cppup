@@ -7,6 +7,11 @@
 #include "core/cli/process_runner_git_interface.hpp"
 #include "core/logger/console/console_logger.hpp"
 #include "core/logger/console/console_logger_plugin.hpp"
+#include "core/package/archive/archive_plugin.hpp"
+#include "core/package/directory/directory_plugin.hpp"
+#include "core/package/git/git_plugin.hpp"
+#include "core/package/http/http_plugin.hpp"
+#include "core/package/registry/registry_plugin.hpp"
 
 int main(int argc, char* argv[])
 {
@@ -16,6 +21,11 @@ int main(int argc, char* argv[])
     // before any plugin lookups happen. Order in this block defines
     // the order they appear in `cppup plugin list`.
     cppup::logger::console::register_static_plugin();
+    cppup::package::git::register_static_plugin();
+    cppup::package::directory::register_static_plugin();
+    cppup::package::archive::register_static_plugin();
+    cppup::package::http::register_static_plugin();
+    cppup::package::registry::register_static_plugin();
 
     // Create command context
     cppup::cli::CommandContext context;

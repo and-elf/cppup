@@ -18,7 +18,7 @@ class HttpPackage
   {
     return info_;
   }
-  std::expected<std::filesystem::path, std::string> resolve_source() const;
+  [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const;
 
   // Dependency injection
   void set_command_executor(const std::shared_ptr<void>& executor)
@@ -35,7 +35,7 @@ class HttpPackage
   std::shared_ptr<CommandExecutor>       command_executor_;
   std::shared_ptr<PackageCacheInterface> cache_;
 
-  std::expected<std::filesystem::path, std::string> download_resource() const;
+  [[nodiscard]] std::expected<std::filesystem::path, std::string> download_resource() const;
 };
 
 }  // namespace cppup::package::http

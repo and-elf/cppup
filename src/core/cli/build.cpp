@@ -15,7 +15,7 @@ extern "C" BuildConfiguration configure()
       .type    = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",
-                     "cppup_plugin"},
+                     "cppup_plugin", "cppup_packages"},
   });
 
   config.tests.push_back(Test{"test_source_selection", {"commands/test_source_selection.cpp"}});

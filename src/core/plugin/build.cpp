@@ -17,7 +17,8 @@ extern "C" BuildConfiguration configure()
       .sources = {"manifest.cpp", "vtable_support.cpp", "descriptor_validation.cpp",
                   "libdl_loader.cpp", "loader.cpp", "plugin_logger.cpp", "package_info_view.cpp",
                   "plugin_host_services.cpp", "plugin_package_source.cpp",
-                  "plugin_build_system.cpp", "static_registry.cpp", "plugin_listing.cpp"},
+                  "plugin_build_system.cpp", "static_registry.cpp", "plugin_listing.cpp",
+                  "host_service_adapters.cpp"},
       .type    = LibraryType::Static,
   });
 

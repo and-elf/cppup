@@ -37,6 +37,11 @@ std::expected<std::filesystem::path, std::string> ArchivePackage::resolve_source
 
 std::expected<std::filesystem::path, std::string> ArchivePackage::download_and_extract() const
 {
+  if (!info_.url.has_value())
+  {
+    return std::unexpected("Archive URL not specified");
+  }
+
   auto cache_path = cache_->get_package_cache_path(info_.name, info_);
 
   // Download archive

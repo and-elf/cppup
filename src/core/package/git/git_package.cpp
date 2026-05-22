@@ -54,6 +54,11 @@ std::expected<std::filesystem::path, std::string> GitPackage::resolve_source() c
 
 std::expected<std::filesystem::path, std::string> GitPackage::clone_repository() const
 {
+  if (!info_.url.has_value())
+  {
+    return std::unexpected("Git URL not specified");
+  }
+
   auto cache_path = cache_->get_package_cache_path(info_.name, info_);
 
   // Create cache directory
@@ -79,6 +84,10 @@ std::expected<std::filesystem::path, std::string> GitPackage::clone_repository()
 std::expected<void, std::string> GitPackage::checkout_commit(
     const std::filesystem::path& repo_path) const
 {
+  if (!info_.git_commit.has_value())
+  {
+    return std::unexpected("Git commit not specified");
+  }
   std::string const checkout_command = "git checkout " + info_.git_commit.value();
   auto result = utils::execute_command(*command_executor_, checkout_command, repo_path);
   if (!result)

@@ -50,6 +50,11 @@ std::expected<std::filesystem::path, std::string> HttpPackage::resolve_source() 
 
 std::expected<std::filesystem::path, std::string> HttpPackage::download_resource() const
 {
+  if (!info_.url.has_value())
+  {
+    return std::unexpected("HTTP URL not specified");
+  }
+
   auto cache_path = cache_->get_package_cache_path(info_.name, info_);
 
   std::filesystem::create_directories(cache_path.parent_path());
@@ -59,9 +64,9 @@ std::expected<std::filesystem::path, std::string> HttpPackage::download_resource
   std::filesystem::path const url_path(url);
   std::string const           extension = url_path.extension().string();
 
-  auto download_path = cache_path.parent_path() / (info_.name + extension);
+  auto archive_path = cache_path.parent_path() / (info_.name + extension);
 
-  if (!utils::download_file(*command_executor_, url, download_path))
+  if (!utils::download_file(*command_executor_, url, archive_path))
   {
     return std::unexpected("Failed to download HTTP resource");
   }
@@ -69,17 +74,17 @@ std::expected<std::filesystem::path, std::string> HttpPackage::download_resource
   // If it's an archive, extract it
   if (is_archive_extension(extension))
   {
-    if (!utils::extract_archive(*command_executor_, download_path, cache_path))
+    if (!utils::extract_archive(*command_executor_, archive_path, cache_path))
     {
       return std::unexpected("Failed to extract downloaded archive");
     }
-    std::filesystem::remove(download_path);
+    std::filesystem::remove(archive_path);
     return cache_path;
   }
   // Single file - move to cache directory
   std::filesystem::create_directories(cache_path);
   auto final_path = cache_path / url_path.filename();
-  std::filesystem::rename(download_path, final_path);
+  std::filesystem::rename(archive_path, final_path);
   return cache_path;
 }
 
