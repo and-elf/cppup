@@ -732,7 +732,7 @@ conf::BuildConfiguration load_build_configuration(const std::filesystem::path& p
 std::string format_project_summary(const conf::BuildConfiguration& config)
 {
   const auto plural = [](std::size_t n, std::string_view singular, std::string_view plur)
-  { return std::format("{} {}{}", n, singular, (n == 1) ? "" : plur); };
+  { return std::format("{} {}", n, (n == 1) ? singular : plur); };
   return std::format("Building project ({}, {}, {})",
                      plural(config.libraries.size(), "library", "libraries"),
                      plural(config.binaries.size(), "binary", "binaries"),

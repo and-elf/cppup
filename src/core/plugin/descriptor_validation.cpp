@@ -28,6 +28,10 @@ EntryKind from_c_kind(cppup_plugin_kind kind)
       return EntryKind::PackageSource;
     case CPPUP_KIND_LOGGER:
       return EntryKind::Logger;
+    case CPPUP_KIND_TEMPLATE:
+      return EntryKind::Template;
+    case CPPUP_KIND_TEST_SYSTEM:
+      return EntryKind::TestSystem;
   }
   ::cppup::panic("from_c_kind: unknown cppup_plugin_kind");
 }

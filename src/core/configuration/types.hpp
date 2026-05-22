@@ -36,9 +36,15 @@ enum class SourceType : uint8_t
  * graph: `cppup lock` walks `BuildConfiguration::packages` plus each
  * entry's `dependencies` recursively to write the resolved lockfile.
  *
- * Recursive `std::vector<PackageInfo>` is intentional - PackageInfo is
- * pure data, so the recursion is cheap and avoids a forward-decl cycle
- * with `Package` (which wraps PackageInfo via type erasure).
+ * Dependencies are held through `shared_ptr` rather than by value to
+ * break the type-level self-reference. A `std::vector<PackageInfo>`
+ * inside `PackageInfo` makes the implicit copy/move constructors form
+ * an instantiation cycle through STL machinery, which clang-tidy
+ * reports as a recursive call chain. Indirection through a pointer
+ * type makes the cycle disappear without changing the value semantics
+ * of `PackageInfo` for its users — copies of a `PackageInfo` share
+ * the same dep nodes (cheap) and the manifest builder treats deps as
+ * write-once after assembly.
  */
 struct PackageInfo
 {
@@ -59,7 +65,7 @@ struct PackageInfo
   std::optional<std::string> subdirectory = std::nullopt;
 
   // Direct transitive dependencies, declared inline in the manifest.
-  std::vector<PackageInfo> dependencies = {};
+  std::vector<std::shared_ptr<PackageInfo>> dependencies = {};
 };
 
 /**
@@ -268,13 +274,14 @@ class PlainPackage
 namespace package_helpers
 {
 
-inline std::vector<PackageInfo> extract_dependency_info(const std::vector<Package>& deps)
+inline std::vector<std::shared_ptr<PackageInfo>> extract_dependency_info(
+    const std::vector<Package>& deps)
 {
-  std::vector<PackageInfo> out;
+  std::vector<std::shared_ptr<PackageInfo>> out;
   out.reserve(deps.size());
   for (const auto& dep : deps)
   {
-    out.push_back(dep.info());
+    out.push_back(std::make_shared<PackageInfo>(dep.info()));
   }
   return out;
 }

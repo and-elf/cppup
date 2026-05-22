@@ -83,7 +83,12 @@ cppup::configuration::Package make_package(std::string name, cppup::configuratio
     info.url        = "https://example.com/" + info.name + ".git";
     info.git_branch = "main";
   }
-  info.dependencies = std::move(deps);
+  info.dependencies.reserve(deps.size());
+  for (auto& dep : deps)
+  {
+    info.dependencies.push_back(
+        std::make_shared<cppup::configuration::PackageInfo>(std::move(dep)));
+  }
   return cppup::configuration::Package(FakePackage{std::move(info)});
 }
 
@@ -228,7 +233,7 @@ TEST(LockfileGraph, CycleIsDetected)
   // and B's PackageInfo into A's deps. The walker should refuse to recurse.
   auto a_info = make_info("a", SourceType::GIT);
   auto b_info = make_info("b", SourceType::GIT, {a_info});
-  a_info.dependencies.push_back(b_info);
+  a_info.dependencies.push_back(std::make_shared<cppup::configuration::PackageInfo>(b_info));
 
   cppup::configuration::BuildConfiguration config;
   config.packages.push_back(cppup::configuration::Package(FakePackage{a_info}));

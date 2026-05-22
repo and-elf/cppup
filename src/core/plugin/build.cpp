@@ -15,7 +15,9 @@ extern "C" BuildConfiguration configure()
   config.libraries.push_back(Library{
       .name    = "cppup_plugin",
       .sources = {"manifest.cpp", "vtable_support.cpp", "descriptor_validation.cpp",
-                  "libdl_loader.cpp", "loader.cpp"},
+                  "libdl_loader.cpp", "loader.cpp", "plugin_logger.cpp", "package_info_view.cpp",
+                  "plugin_host_services.cpp", "plugin_package_source.cpp",
+                  "plugin_build_system.cpp", "static_registry.cpp", "plugin_listing.cpp"},
       .type    = LibraryType::Static,
   });
 
@@ -37,6 +39,34 @@ extern "C" BuildConfiguration configure()
   config.tests.back().link_flags = test_links;
 
   config.tests.push_back(Test{"test_plugin_loader", {"test_plugin_loader.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_logger", {"test_plugin_logger.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_package_info_view", {"test_package_info_view.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_host_services", {"test_plugin_host_services.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_package_source", {"test_plugin_package_source.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_build_system", {"test_plugin_build_system.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_static_registry", {"test_static_registry.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_listing", {"test_plugin_listing.cpp"}});
   config.tests.back().libraries  = {"cppup_plugin"};
   config.tests.back().link_flags = test_links;
 

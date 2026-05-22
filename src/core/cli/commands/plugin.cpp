@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "../../plugin/plugin_listing.hpp"
+#include "../../plugin/static_registry.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
 
@@ -17,40 +19,52 @@ std::expected<int, std::string> executePluginList(const CommandContext& context)
   {
     context.logger->info("Listing installed plugins...");
 
-    // Check for plugins directory
-    std::filesystem::path const plugins_dir = context.projectRoot / ".cppup" / "plugins";
-    if (!std::filesystem::exists(plugins_dir))
+    auto builtins = cppup::plugin::list_static_plugins(cppup::plugin::global_static_registry());
+    std::filesystem::path const plugins_dir      = context.projectRoot / ".cppup" / "plugins";
+    const bool                  has_external_dir = std::filesystem::exists(plugins_dir);
+
+    if (builtins.empty() && !has_external_dir)
     {
-      std::cout << "No plugins installed" << std::endl;
+      std::cout << "No plugins installed" << '\n';
       return 0;
     }
 
-    std::cout << "Installed plugins:" << std::endl;
-    bool found_plugins = false;
+    std::cout << "Installed plugins:" << '\n';
 
-    for (const auto& entry : std::filesystem::directory_iterator(plugins_dir))
+    for (const auto& builtin : builtins)
     {
-      if (entry.is_directory())
+      std::cout << "  [builtin]  " << builtin.name;
+      if (!builtin.version.empty())
       {
-        found_plugins                 = true;
-        std::string const plugin_name = entry.path().filename().string();
-        std::cout << "  " << plugin_name;
-
-        // Check for plugin manifest
-        std::filesystem::path const manifest = entry.path() / "manifest.json";
-        if (std::filesystem::exists(manifest))
-        {
-          // In a real implementation, would parse JSON to get version/description
-          std::cout << " (installed)";
-        }
-
-        std::cout << std::endl;
+        std::cout << ' ' << builtin.version;
+      }
+      std::cout << '\n';
+      for (const auto& entry : builtin.entries)
+      {
+        std::cout << "             " << entry.first << " (" << entry.second << ")" << '\n';
       }
     }
 
-    if (!found_plugins)
+    bool found_external = false;
+    if (has_external_dir)
     {
-      std::cout << "No plugins installed" << std::endl;
+      // TODO: replace this stub walk with installed.toml + sidecar
+      // parsing (spec §6.4/§6.5) once cppup plugin add is on-spec.
+      for (const auto& entry : std::filesystem::directory_iterator(plugins_dir))
+      {
+        if (!entry.is_directory())
+        {
+          continue;
+        }
+        found_external                = true;
+        std::string const plugin_name = entry.path().filename().string();
+        std::cout << "  [external] " << plugin_name << '\n';
+      }
+    }
+
+    if (builtins.empty() && !found_external)
+    {
+      std::cout << "No plugins installed" << '\n';
     }
 
     return 0;

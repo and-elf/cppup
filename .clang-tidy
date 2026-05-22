@@ -35,8 +35,8 @@ Checks: >
   -misc-include-cleaner,
   -performance-avoid-endl,
   -readability-magic-numbers,
-  -readability-identifier-length
-  -readability-identifier-naming
+  -readability-identifier-length,
+  -readability-identifier-naming,
   -readability-identifier-should-be-in-braces
 
 WarningsAsErrors: ''

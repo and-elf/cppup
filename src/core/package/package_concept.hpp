@@ -16,13 +16,18 @@ namespace cppup::package
 class CommandExecutor
 {
  public:
-  virtual ~CommandExecutor() = default;
+  CommandExecutor()                                  = default;
+  virtual ~CommandExecutor()                         = default;
+  CommandExecutor(const CommandExecutor&)            = delete;
+  CommandExecutor& operator=(const CommandExecutor&) = delete;
+  CommandExecutor(CommandExecutor&&)                 = delete;
+  CommandExecutor& operator=(CommandExecutor&&)      = delete;
 
-  virtual std::expected<void, std::string> execute(
+  [[nodiscard]] virtual std::expected<void, std::string> execute(
       const std::string&           command,
       const std::filesystem::path& working_directory = std::filesystem::current_path()) const = 0;
 
-  virtual std::expected<std::string, std::string> execute_with_output(
+  [[nodiscard]] virtual std::expected<std::string, std::string> execute_with_output(
       const std::string&           command,
       const std::filesystem::path& working_directory = std::filesystem::current_path()) const = 0;
 };
@@ -36,32 +41,39 @@ class CommandExecutor
 class PackageCacheInterface
 {
  public:
-  virtual ~PackageCacheInterface() = default;
+  PackageCacheInterface()                                        = default;
+  virtual ~PackageCacheInterface()                               = default;
+  PackageCacheInterface(const PackageCacheInterface&)            = delete;
+  PackageCacheInterface& operator=(const PackageCacheInterface&) = delete;
+  PackageCacheInterface(PackageCacheInterface&&)                 = delete;
+  PackageCacheInterface& operator=(PackageCacheInterface&&)      = delete;
 
-  virtual std::filesystem::path get_cache_directory() const = 0;
-  virtual std::filesystem::path get_package_cache_path(
-      const std::string& package_name, const cppup::configuration::PackageInfo& info) const = 0;
-  virtual bool is_cached(const std::string&                       package_name,
-                         const cppup::configuration::PackageInfo& info) const               = 0;
-  virtual void clear_package_cache(const std::string&                       package_name,
-                                   const cppup::configuration::PackageInfo& info)           = 0;
-  virtual void clear_all_cache()                                                            = 0;
+  [[nodiscard]] virtual std::filesystem::path get_cache_directory() const = 0;
+  [[nodiscard]] virtual std::filesystem::path get_package_cache_path(
+      const std::string& package_name, const cppup::configuration::PackageInfo& info) const     = 0;
+  [[nodiscard]] virtual bool is_cached(const std::string&                       package_name,
+                                       const cppup::configuration::PackageInfo& info) const     = 0;
+  virtual void               clear_package_cache(const std::string&                       package_name,
+                                                 const cppup::configuration::PackageInfo& info) = 0;
+  virtual void               clear_all_cache()                                                  = 0;
 };
 
 /**
  * Package concept that all package types must satisfy
  */
 template <typename T>
-concept PackageType = requires(T t, const std::filesystem::path& source_path) {
+concept PackageType = requires(T package, const std::filesystem::path& source_path) {
   // Core package information
-  { t.info() } -> std::convertible_to<const cppup::configuration::PackageInfo&>;
+  { package.info() } -> std::convertible_to<const cppup::configuration::PackageInfo&>;
 
   // Source resolution
-  { t.resolve_source() } -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
+  {
+    package.resolve_source()
+  } -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
 
   // Dependency injection
-  { t.set_command_executor(std::shared_ptr<CommandExecutor>{}) } -> std::same_as<void>;
-  { t.set_cache(std::shared_ptr<PackageCacheInterface>{}) } -> std::same_as<void>;
+  { package.set_command_executor(std::shared_ptr<CommandExecutor>{}) } -> std::same_as<void>;
+  { package.set_cache(std::shared_ptr<PackageCacheInterface>{}) } -> std::same_as<void>;
 };
 
 /**

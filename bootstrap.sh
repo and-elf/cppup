@@ -60,21 +60,13 @@ build_slim() {
     # cppup_config: same set the previous bootstrap needed -- the config
     # library is consumed by executeBuild's loader path.
     local CONFIG_SOURCES=(
-        src/core/configuration/types.cpp
-        src/core/configuration/outputs.cpp
-        src/core/configuration/profile.cpp
-        src/core/configuration/build_configuration.cpp
-        src/core/configuration/platform.cpp
-        src/core/configuration/runtime.cpp
         src/core/configuration/compiler.cpp
         src/core/configuration/compile_commands.cpp
         src/core/configuration/loader.cpp
         src/core/configuration/validation.cpp
         src/core/configuration/package_resolver.cpp
-        src/core/configuration/toolchain_resolver.cpp
         src/core/configuration/toolchain_flags.cpp
         src/core/configuration/profile_processor.cpp
-        src/core/configuration/build_executor.cpp
         src/core/configuration/build_step_executor.cpp
     )
 
@@ -101,6 +93,8 @@ build_slim() {
         src/core/cli/commands.cpp
         src/core/cli/commands/build.cpp
         src/core/cli/commands/update.cpp
+        src/core/cli/commands/lockfile.cpp
+        src/core/cli/commands/package.cpp
         src/core/dependency/database.cpp
         src/core/build/cache.cpp
     )

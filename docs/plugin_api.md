@@ -366,10 +366,13 @@ resolution is out of scope for v1 (see §1.2). The user is responsible.
 
 ### 6.4 `cppup plugin list`
 
-Reads `installed.toml` only. Output for each installed plugin: name,
-version, source it was added from, install date, and the list of
-entries (id + kind) from the on-disk sidecar manifest. Does not
-`dlopen` anything.
+Reads `installed.toml` and the in-process static-plugin registry
+(see §7.3). Output for each installed plugin: name, version, source
+it was added from (or `builtin` for static-linked entries), install
+date, and the list of entries (id + kind) from the on-disk sidecar
+manifest. Does not `dlopen` anything. External entries are tagged
+`[external]`; static-linked entries are tagged `[builtin]` so the
+user can tell them apart.
 
 ### 6.5 `installed.toml`
 
@@ -435,6 +438,22 @@ the `PluginHost`.
 `RTLD_LOCAL` is mandatory. Plugins must not see each other's symbols.
 Plugins should not depend on cppup's internal symbols — they only see
 their own copy of the SDK headers and the C ABI.
+
+### 7.3 Static-linked plugins
+
+cppup's own internal extension points — the built-in loggers, package
+sources, and build systems — are themselves plugins that ship inside
+the cppup binary. They register at process startup through a
+`StaticPluginRegistry` rather than via `dlopen`, but they go through
+the same manifest parse + descriptor validation pipeline as external
+plugins. The only difference: there is no SO file, so the manifest's
+`build_hash` field is a sentinel (`sha256:00…00`) and the host skips
+file-hash verification for static entries.
+
+Static plugins live alongside dlopen'd ones in the same per-kind
+registries used at build time, so user configurations can't tell
+which side an entry came from. `cppup plugin list` surfaces both
+populations, marking each entry's origin (see §6.4).
 
 ## 8. Plugin SDK headers
 

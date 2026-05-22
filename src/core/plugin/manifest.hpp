@@ -15,6 +15,8 @@ enum class EntryKind : std::uint8_t
   BuildSystem   = 1,
   PackageSource = 2,
   Logger        = 3,
+  Template      = 4,
+  TestSystem    = 5,
 };
 
 struct ManifestEntry

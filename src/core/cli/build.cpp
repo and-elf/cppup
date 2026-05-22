@@ -13,8 +13,9 @@ extern "C" BuildConfiguration configure()
                   "commands/package.cpp", "commands/lockfile.cpp", "commands/module.cpp",
                   "commands/toolchain.cpp", "commands/plugin.cpp", "commands/update.cpp"},
       .type    = LibraryType::Static,
-      .link_flags = {Flag{"-pthread"}},
-      .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console"},
+      .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
+      .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",
+                     "cppup_plugin"},
   });
 
   config.tests.push_back(Test{"test_source_selection", {"commands/test_source_selection.cpp"}});

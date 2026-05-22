@@ -453,7 +453,7 @@ Entry entry_from_info(const conf::PackageInfo& info)
   entry.dependencies.reserve(info.dependencies.size());
   for (const auto& dep : info.dependencies)
   {
-    entry.dependencies.push_back(dep.name);
+    entry.dependencies.push_back(dep->name);
   }
   return entry;
 }
@@ -510,7 +510,7 @@ struct WalkFrame
       frame_ref.expanded = true;
       for (const auto& dep : info->dependencies | std::views::reverse)
       {
-        stack.push_back({&dep, false});  // invalidates frame_ref
+        stack.push_back({dep.get(), false});  // invalidates frame_ref
       }
     }
     else

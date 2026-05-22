@@ -27,6 +27,10 @@ bool is_supported(const VtableSupport& support, EntryKind kind, std::uint32_t vt
       return contains(support.package_source_versions, vtable_version);
     case EntryKind::Logger:
       return contains(support.logger_versions, vtable_version);
+    case EntryKind::Template:
+      [[fallthrough]];
+    case EntryKind::TestSystem:
+      ::cppup::panic("is_supported: invalid EntryKind");
   }
   ::cppup::panic("is_supported: invalid EntryKind");
 }
