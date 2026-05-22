@@ -195,6 +195,59 @@ void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatu
   }
 }
 
+void execute_ready_steps_worker(const std::vector<BuildStep>&      steps,
+                                const std::vector<DependencyNode>& graph,
+                                BuildStepStatusTracker&            tracker,
+                                std::vector<BuildStepResult>&      step_results,
+                                std::mutex& results_mutex, std::atomic<size_t>& completed_steps,
+                                size_t total_steps, std::queue<size_t>& ready_queue,
+                                std::mutex& queue_mutex, std::condition_variable& queue_cv,
+                                std::vector<std::atomic<int>>& remaining_deps)
+{
+  bool has_work = true;
+  while (has_work)
+  {
+    size_t step_idx{};
+    {
+      std::unique_lock lock(queue_mutex);
+      queue_cv.wait(lock, [&]() { return !ready_queue.empty() || completed_steps == total_steps; });
+
+      has_work = !ready_queue.empty();
+      if (has_work)
+      {
+        step_idx = ready_queue.front();
+        ready_queue.pop();
+      }
+    }
+
+    if (!has_work)
+    {
+      continue;
+    }
+
+    // Execute the step
+    execute_build_step(steps[step_idx], step_idx, tracker, step_results, results_mutex);
+    size_t const current_completed = ++completed_steps;
+
+    // Notify dependents that this step is complete
+    for (size_t const dependent : graph[step_idx].dependents)
+    {
+      if (--remaining_deps[dependent] == 0)
+      {
+        std::scoped_lock const lock(queue_mutex);
+        ready_queue.push(dependent);
+        queue_cv.notify_one();
+      }
+    }
+
+    // If all steps are complete, notify all workers to terminate
+    if (current_completed == total_steps)
+    {
+      queue_cv.notify_all();
+    }
+  }
+}
+
 }  // namespace
 
 // Simplified bootstrap implementation
@@ -270,89 +323,33 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
   }
   queue_cv.notify_all();
 
-  // Worker function for executing steps
-  auto worker = [&]()
-  {
-    while (true)
-    {
-      size_t step_idx{};
-      bool   has_work = false;
-      {
-        std::unique_lock lock(queue_mutex);
-        queue_cv.wait(lock,
-                      [&]() { return !ready_queue.empty() || completed_steps == total_steps; });
-
-        if (ready_queue.empty() && completed_steps == total_steps)
-        {
-          // All work is done
-          break;
-        }
-
-        if (!ready_queue.empty())
-        {
-          step_idx = ready_queue.front();
-          ready_queue.pop();
-          has_work = true;
-        }
-      }
-
-      if (!has_work)
-      {
-        break;
-      }
-
-      // Execute the step
-      execute_build_step(steps[step_idx], step_idx, tracker, result.step_results, results_mutex);
-      size_t const current_completed = ++completed_steps;
-
-      // Notify dependents that this step is complete
-      for (size_t const dependent : graph[step_idx].dependents)
-      {
-        if (--remaining_deps[dependent] == 0)
-        {
-          std::scoped_lock const lock(queue_mutex);
-          ready_queue.push(dependent);
-          queue_cv.notify_one();
-        }
-      }
-
-      // If all steps are complete, notify all workers to terminate
-      if (current_completed == total_steps)
-      {
-        queue_cv.notify_all();
-      }
-    }
-  };
-
   // Start worker threads
   std::vector<std::thread> workers;
   unsigned int const       num_threads = std::max(1U, std::thread::hardware_concurrency());
   workers.reserve(num_threads);
   for (unsigned int i = 0; i < num_threads; ++i)
   {
-    workers.emplace_back(worker);
+    workers.emplace_back(execute_ready_steps_worker, std::cref(steps), std::cref(graph),
+                         std::ref(tracker), std::ref(result.step_results), std::ref(results_mutex),
+                         std::ref(completed_steps), total_steps, std::ref(ready_queue),
+                         std::ref(queue_mutex), std::ref(queue_cv), std::ref(remaining_deps));
   }
 
   // Wait for all workers to complete
-  for (auto& worker_thread : workers)
-  {
-    if (worker_thread.joinable())
-    {
-      worker_thread.join();
-    }
-  }
+  std::ranges::for_each(workers, [](std::thread& t) { t.join(); });
 
   // Check final results
   for (const auto& step_result : result.step_results)
   {
-    if (step_result.status == BuildStepStatus::Failed)
+    if (step_result.status != BuildStepStatus::Failed)
     {
-      result.success = false;
-      if (result.error_message.empty())
-      {
-        result.error_message =
-            "Build step '" + step_result.step_name + "' failed: " + step_result.error_message;
-      }
+      continue;
+    }
+    result.success = false;
+    if (result.error_message.empty())
+    {
+      result.error_message =
+          "Build step '" + step_result.step_name + "' failed: " + step_result.error_message;
     }
   }
 
