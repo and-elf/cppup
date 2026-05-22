@@ -3,8 +3,7 @@
 #include <filesystem>
 #include <memory>
 
-class ProcessRunner;
-
+#include "../../ProcessRunner.h"
 #include "../logger/logger.hpp"
 
 namespace cppup::cli

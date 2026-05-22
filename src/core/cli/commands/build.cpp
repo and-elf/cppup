@@ -13,15 +13,18 @@
 #include <thread>
 #include <vector>
 
+#include "../../build/cache.hpp"
 #include "../../configuration/build_configuration.hpp"
+#include "../../configuration/build_step_executor.hpp"
 #include "../../configuration/compile_commands.hpp"
+#include "../../configuration/compiler.hpp"
 #include "../../configuration/link_resolution.hpp"
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
 #include "../../logger/console/console_logger.hpp"
 #include "build_options.hpp"
+#include "command_context.hpp"
 #include "commands.hpp"
-#include "common.h"
 #include "core/panic.hpp"
 #include "embedded_configuration_header.hpp"
 
@@ -821,102 +824,113 @@ std::string build_summary_line(const BuildCounters& counts, long long wall_ms)
 std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
                                              const CommandContext& context) noexcept
 {
-  auto&      logger     = *context.logger;
-  const auto wall_start = std::chrono::steady_clock::now();
-  if (conf::enabled(options.verbose))
+  try
   {
-    cppup::logger::console::ConsoleLogger::setGlobalConfig(
-        {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
-  }
-
-  if (!std::filesystem::exists(context.projectRoot / "build.cpp"))
-  {
-    return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
-  }
-
-  const auto cppup_dir = context.projectRoot / ".cppup";
-  const auto build_dir = context.projectRoot / "build";
-  std::filesystem::create_directories(build_dir);
-  const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
-
-  auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
-  if (!cache)
-  {
-    logger.warning("build cache unavailable");
-  }
-
-  materialize_configuration_header(cppup_dir);
-
-  const auto config = load_build_configuration(context.projectRoot, cppup_dir);
-
-  logger.info(format_project_summary(config));
-
-  logger.debug(
-      "wrote " +
-      conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
-
-  for (const auto& sp : config.subprojects)
-  {
-    run_external_subproject(sp, paths.project_root / sp.path, logger);
-  }
-
-  ProgressReporter   progress;
-  const BuildContext ctx{
-      .config   = &config,
-      .paths    = &paths,
-      .cache    = cache.get(),
-      .options  = options,
-      .logger   = &logger,
-      .progress = &progress,
-  };
-  progress.set_total(count_planned_steps(ctx));
-
-  BuildCounters counts;
-
-  for (const auto& library : config.libraries)
-  {
-    if (build_library(library, ctx))
+    auto&      logger     = *context.logger;
+    const auto wall_start = std::chrono::steady_clock::now();
+    if (conf::enabled(options.verbose))
     {
-      ++counts.cached;
+      cppup::logger::console::ConsoleLogger::setGlobalConfig(
+          {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
     }
-    ++counts.built;
-  }
 
-  // Tests/binaries are independent and typically one source each — outer
-  // parallelism across targets is a bigger win than inner per-source. Force
-  // inner jobs=1 in the workers so we don't run jobs² g++ processes.
-  BuildContext inner_ctx = ctx;
-  inner_ctx.options.jobs = 1;
-
-  counts.cached += build_binaries_parallel(inner_ctx);
-  counts.built += config.binaries.size();
-
-  if (conf::enabled(options.with_tests))
-  {
-    counts.cached += build_tests_parallel(inner_ctx);
-    counts.built += config.tests.size();
-  }
-
-  if (!config.build_steps.empty())
-  {
-    auto step_result = conf::BuildStepExecutor::execute_build_steps(config);
-    if (!step_result.success)
+    if (!std::filesystem::exists(context.projectRoot / "build.cpp"))
     {
-      return std::unexpected("build step failed: " + step_result.error_message);
+      return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
     }
-  }
 
-  const auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::steady_clock::now() - wall_start)
-                           .count();
-  counts.steps = progress.done.load(std::memory_order_relaxed);
-  logger.info(build_summary_line(counts, wall_ms));
-  if (cache != nullptr)
-  {
-    logger.info("cache hit rate: " +
-                std::to_string(static_cast<int>(cache->get_stats().hit_rate * 100.0)) + "%");
+    const auto cppup_dir = context.projectRoot / ".cppup";
+    const auto build_dir = context.projectRoot / "build";
+    std::filesystem::create_directories(build_dir);
+    const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
+
+    auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
+    if (!cache)
+    {
+      logger.warning("build cache unavailable");
+    }
+
+    materialize_configuration_header(cppup_dir);
+
+    const auto config = load_build_configuration(context.projectRoot, cppup_dir);
+
+    logger.info(format_project_summary(config));
+
+    logger.debug(
+        "wrote " +
+        conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
+
+    for (const auto& sp : config.subprojects)
+    {
+      run_external_subproject(sp, paths.project_root / sp.path, logger);
+    }
+
+    ProgressReporter   progress;
+    const BuildContext ctx{
+        .config   = &config,
+        .paths    = &paths,
+        .cache    = cache.get(),
+        .options  = options,
+        .logger   = &logger,
+        .progress = &progress,
+    };
+    progress.set_total(count_planned_steps(ctx));
+
+    BuildCounters counts;
+
+    for (const auto& library : config.libraries)
+    {
+      if (build_library(library, ctx))
+      {
+        ++counts.cached;
+      }
+      ++counts.built;
+    }
+
+    // Tests/binaries are independent and typically one source each — outer
+    // parallelism across targets is a bigger win than inner per-source. Force
+    // inner jobs=1 in the workers so we don't run jobs² g++ processes.
+    BuildContext inner_ctx = ctx;
+    inner_ctx.options.jobs = 1;
+
+    counts.cached += build_binaries_parallel(inner_ctx);
+    counts.built += config.binaries.size();
+
+    if (conf::enabled(options.with_tests))
+    {
+      counts.cached += build_tests_parallel(inner_ctx);
+      counts.built += config.tests.size();
+    }
+
+    if (!config.build_steps.empty())
+    {
+      auto step_result = conf::BuildStepExecutor::execute_build_steps(config);
+      if (!step_result.success)
+      {
+        return std::unexpected("build step failed: " + step_result.error_message);
+      }
+    }
+
+    const auto wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - wall_start)
+                             .count();
+    counts.steps = progress.done.load(std::memory_order_relaxed);
+    logger.info(build_summary_line(counts, wall_ms));
+    if (cache != nullptr)
+    {
+      logger.info("cache hit rate: " +
+                  std::to_string(static_cast<int>(cache->get_stats().hit_rate * 100.0)) + "%");
+    }
+    return 0;
   }
-  return 0;
+  catch (const std::exception& e)
+  {
+    return std::unexpected(e.what());
+  }
+  catch (...)
+  {
+    return std::unexpected("build failed with unknown error");
+  }
 }
 
 }  // namespace cppup::cli

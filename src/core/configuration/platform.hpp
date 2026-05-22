@@ -9,47 +9,47 @@ namespace cppup::configuration
 
 // Compile-time platform detection
 #ifdef _WIN32
-constexpr std::string_view TARGET_OS = "windows";
-#elif defined(__linux__)
-constexpr std::string_view TARGET_OS = "linux";
-#elif defined(__APPLE__)
-constexpr std::string_view TARGET_OS = "macos";
+constexpr std::string_view target_os = "windows";
+#elifdef __linux__
+constexpr std::string_view target_os = "linux";
+#elifdef __APPLE__
+constexpr std::string_view target_os = "macos";
 #else
-constexpr std::string_view TARGET_OS = "unknown";
+constexpr std::string_view target_os = "unknown";
 #endif
 
 #if defined(_M_X64) || defined(__x86_64__)
-constexpr std::string_view TARGET_ARCH = "x86_64";
+constexpr std::string_view target_arch = "x86_64";
 #elif defined(_M_ARM64) || defined(__aarch64__)
-constexpr std::string_view TARGET_ARCH = "arm64";
+constexpr std::string_view target_arch = "arm64";
 #else
-constexpr std::string_view TARGET_ARCH = "unknown";
+constexpr std::string_view target_arch = "unknown";
 #endif
 
 // Compile-time platform queries
 [[nodiscard]] constexpr bool is_windows() noexcept
 {
-  return TARGET_OS == "windows";
+  return target_os == "windows";
 }
 
 [[nodiscard]] constexpr bool is_linux() noexcept
 {
-  return TARGET_OS == "linux";
+  return target_os == "linux";
 }
 
 [[nodiscard]] constexpr bool is_macos() noexcept
 {
-  return TARGET_OS == "macos";
+  return target_os == "macos";
 }
 
 [[nodiscard]] constexpr bool is_x86_64() noexcept
 {
-  return TARGET_ARCH == "x86_64";
+  return target_arch == "x86_64";
 }
 
 [[nodiscard]] constexpr bool is_arm64() noexcept
 {
-  return TARGET_ARCH == "arm64";
+  return target_arch == "arm64";
 }
 
 // Library extension for the current platform

@@ -486,20 +486,6 @@ size_t DependencyDatabase::get_package_count() const
   return count;
 }
 
-void DependencyDatabase::remove_dependency(const std::string& /*package_name*/,
-                                           const std::string& /*package_version*/,
-                                           const std::string& /*dependency_name*/)
-{
-  // TODO: implement
-}
-
-std::vector<DependencyRelation> DependencyDatabase::get_dependents(
-    const std::string& /*package_name*/, const std::string& /*package_version*/) const
-{
-  // TODO: implement
-  return {};
-}
-
 void DependencyDatabase::update_registry_entry(const RegistryEntry& entry)
 {
   const char* sql = R"(
@@ -685,28 +671,6 @@ std::vector<std::string> DependencyDatabase::detect_dependency_cycles() const
 void DependencyDatabase::vacuum()
 {
   execute_sql("VACUUM");
-}
-
-void DependencyDatabase::backup(const std::filesystem::path& /*backup_path*/)
-{
-  // TODO: implement
-}
-
-void DependencyDatabase::restore(const std::filesystem::path& /*backup_path*/)
-{
-  // TODO: implement
-}
-
-size_t DependencyDatabase::get_dependency_count() const
-{
-  // TODO: implement
-  return 0;
-}
-
-size_t DependencyDatabase::get_registry_count() const
-{
-  // TODO: implement
-  return 0;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion) -- DFS cycle detection is naturally recursive

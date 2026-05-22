@@ -1,7 +1,7 @@
 #pragma once
 
+#include <cstdio>
 #include <cstdlib>
-#include <print>
 #include <source_location>
 #include <string_view>
 
@@ -9,9 +9,16 @@ namespace cppup
 {
 
 [[noreturn]] inline void panic(std::string_view     msg,
-                               std::source_location loc = std::source_location::current())
+                               std::source_location loc = std::source_location::current()) noexcept
 {
-  std::println(stderr, "cppup: panic at {}:{}: {}", loc.file_name(), loc.line(), msg);
+  std::fputs("cppup: panic at ", stderr);
+  std::fputs(loc.file_name(), stderr);
+  std::fputc(':', stderr);
+  // NOLINTNEXTLINE(modernize-use-std-print) -- keep panic path non-throwing under noexcept
+  std::fprintf(stderr, "%u", static_cast<unsigned>(loc.line()));
+  std::fputs(": ", stderr);
+  std::fwrite(msg.data(), sizeof(char), msg.size(), stderr);
+  std::fputc('\n', stderr);
   std::abort();
 }
 

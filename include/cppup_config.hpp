@@ -73,7 +73,7 @@ using configuration::is_macos;
 using configuration::is_windows;
 using configuration::is_x86_64;
 using configuration::TARGET_ARCH;
-using configuration::TARGET_OS;
+using configuration::target_os;
 using configuration::when_arm64;
 using configuration::when_linux;
 using configuration::when_macos;

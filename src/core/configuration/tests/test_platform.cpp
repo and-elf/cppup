@@ -8,11 +8,11 @@ using namespace cppup::configuration;
 
 TEST(Platform, ConstantsAreCompileTime)
 {
-  static_assert(!TARGET_OS.empty());
-  static_assert(!TARGET_ARCH.empty());
-  static_assert(TARGET_OS == "windows" || TARGET_OS == "linux" || TARGET_OS == "macos" ||
-                TARGET_OS == "unknown");
-  static_assert(TARGET_ARCH == "x86_64" || TARGET_ARCH == "arm64" || TARGET_ARCH == "unknown");
+  static_assert(!target_os.empty());
+  static_assert(!target_arch.empty());
+  static_assert(target_os == "windows" || target_os == "linux" || target_os == "macos" ||
+                target_os == "unknown");
+  static_assert(target_arch == "x86_64" || target_arch == "arm64" || target_arch == "unknown");
 }
 
 TEST(Platform, ExactlyOneOSDetected)
@@ -92,7 +92,7 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneOSBranch)
 
 TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
 {
-  if (TARGET_ARCH == "unknown")
+  if (target_arch == "unknown")
   {
     GTEST_SKIP();
   }

@@ -108,8 +108,6 @@ class DependencyDatabase
 
   // Statistics.
   [[nodiscard]] size_t get_package_count() const;
-  [[nodiscard]] size_t get_dependency_count() const;
-  [[nodiscard]] size_t get_registry_count() const;
 
  private:
   sqlite3*              db_ = nullptr;
