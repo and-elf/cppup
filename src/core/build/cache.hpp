@@ -46,6 +46,7 @@ class BuildCache
 {
  public:
   virtual ~BuildCache()         = default;
+  BuildCache()                  = default;
   BuildCache(const BuildCache&) = delete;
   BuildCache(BuildCache&&)      = delete;
 
