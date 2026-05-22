@@ -31,37 +31,37 @@ std::unexpected<Diag> err(ManifestError code, std::string detail)
   return std::unexpected(Diag{.code = code, .detail = std::move(detail)});
 }
 
-bool is_semver(std::string_view s)
+bool is_semver(std::string_view version)
 {
   static const std::regex k_semver(R"(^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$)");
-  return std::regex_match(s.begin(), s.end(), k_semver);
+  return std::regex_match(version.begin(), version.end(), k_semver);
 }
 
-bool is_semver_range(std::string_view s)
+bool is_semver_range(std::string_view range)
 {
   static const std::regex k_range(
       R"(^\s*(?:[<>]=?|[\^~=])?\s*\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\s*)"
       R"((?:,\s*(?:[<>]=?|[\^~=])?\s*\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\s*)*$)");
-  return std::regex_match(s.begin(), s.end(), k_range);
+  return std::regex_match(range.begin(), range.end(), k_range);
 }
 
-bool is_rfc3339(std::string_view s)
+bool is_rfc3339(std::string_view date_str)
 {
   static const std::regex k_date(
       R"(^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$)");
-  return std::regex_match(s.begin(), s.end(), k_date);
+  return std::regex_match(date_str.begin(), date_str.end(), k_date);
 }
 
-bool is_valid_name(std::string_view s)
+bool is_valid_name(std::string_view name)
 {
   static const std::regex k_name(R"(^[a-z][a-z0-9_-]*$)");
-  return std::regex_match(s.begin(), s.end(), k_name);
+  return std::regex_match(name.begin(), name.end(), k_name);
 }
 
-bool is_valid_build_hash(std::string_view s)
+bool is_valid_build_hash(std::string_view hash)
 {
   static const std::regex k_hash(R"(^sha256:[a-f0-9]{64}$)");
-  return std::regex_match(s.begin(), s.end(), k_hash);
+  return std::regex_match(hash.begin(), hash.end(), k_hash);
 }
 
 std::expected<void, Diag> reject_unknown_keys(const toml::table&                             table,
@@ -128,12 +128,12 @@ std::expected<ManifestEntry, Diag> parse_entry(const toml::table& entry_t, std::
 
   ManifestEntry entry;
 
-  auto id = required_string(entry_t, "id", ctx);
-  if (!id)
+  auto identity = required_string(entry_t, "id", ctx);
+  if (!identity)
   {
-    return std::unexpected(id.error());
+    return std::unexpected(identity.error());
   }
-  entry.id = std::move(*id);
+  entry.id = std::move(*identity);
   if (!is_valid_name(entry.id))
   {
     return err(ManifestError::InvalidName, ctx + ".id: '" + entry.id + "'");
@@ -156,16 +156,17 @@ std::expected<ManifestEntry, Diag> parse_entry(const toml::table& entry_t, std::
   {
     return err(ManifestError::MissingField, ctx + ".vtable_version is required");
   }
-  auto vv = vv_node->value<std::int64_t>();
-  if (!vv)
+  auto vtable_version = vv_node->value<std::int64_t>();
+  if (!vtable_version)
   {
     return err(ManifestError::WrongFieldType, ctx + ".vtable_version must be an integer");
   }
-  if (*vv < 1 || std::cmp_greater(*vv, std::numeric_limits<std::uint32_t>::max()))
+  if (*vtable_version < 1 ||
+      std::cmp_greater(*vtable_version, std::numeric_limits<std::uint32_t>::max()))
   {
     return err(ManifestError::WrongFieldType, ctx + ".vtable_version out of range");
   }
-  entry.vtable_version = static_cast<std::uint32_t>(*vv);
+  entry.vtable_version = static_cast<std::uint32_t>(*vtable_version);
 
   if (const auto* d_node = entry_t.get("description"); d_node != nullptr)
   {
@@ -248,47 +249,48 @@ std::expected<void, Diag> parse_plugin_scalars(const toml::table& plugin, Manife
   }};
   for (const auto& slot : slots)
   {
-    auto v = required_string(plugin, slot.key, "plugin");
-    if (!v)
+    auto plugin_node = required_string(plugin, slot.key, "plugin");
+    if (!plugin_node)
     {
-      return std::unexpected(v.error());
+      return std::unexpected(plugin_node.error());
     }
-    *slot.dest = std::move(*v);
+    *slot.dest = std::move(*plugin_node);
   }
 
   if (const auto* hp_node = plugin.get("homepage"); hp_node != nullptr)
   {
-    auto hp = hp_node->value<std::string>();
-    if (!hp)
+    auto homepage = hp_node->value<std::string>();
+    if (!homepage)
     {
       return err(ManifestError::WrongFieldType, "plugin.homepage must be a string");
     }
-    out.homepage = std::move(*hp);
+    out.homepage = std::move(*homepage);
   }
   return {};
 }
 
-std::expected<void, Diag> validate_plugin_fields(const Manifest& m)
+std::expected<void, Diag> validate_plugin_fields(const Manifest& manifest)
 {
-  if (!is_valid_name(m.name))
+  if (!is_valid_name(manifest.name))
   {
-    return err(ManifestError::InvalidName, "plugin.name: '" + m.name + "'");
+    return err(ManifestError::InvalidName, "plugin.name: '" + manifest.name + "'");
   }
-  if (!is_semver(m.version))
+  if (!is_semver(manifest.version))
   {
-    return err(ManifestError::InvalidSemver, "plugin.version: '" + m.version + "'");
+    return err(ManifestError::InvalidSemver, "plugin.version: '" + manifest.version + "'");
   }
-  if (!is_semver_range(m.cppup_compat))
+  if (!is_semver_range(manifest.cppup_compat))
   {
-    return err(ManifestError::InvalidSemverRange, "plugin.cppup_compat: '" + m.cppup_compat + "'");
+    return err(ManifestError::InvalidSemverRange,
+               "plugin.cppup_compat: '" + manifest.cppup_compat + "'");
   }
-  if (!is_valid_build_hash(m.build_hash))
+  if (!is_valid_build_hash(manifest.build_hash))
   {
-    return err(ManifestError::InvalidBuildHash, "plugin.build_hash: '" + m.build_hash + "'");
+    return err(ManifestError::InvalidBuildHash, "plugin.build_hash: '" + manifest.build_hash + "'");
   }
-  if (!is_rfc3339(m.build_date))
+  if (!is_rfc3339(manifest.build_date))
   {
-    return err(ManifestError::InvalidBuildDate, "plugin.build_date: '" + m.build_date + "'");
+    return err(ManifestError::InvalidBuildDate, "plugin.build_date: '" + manifest.build_date + "'");
   }
   return {};
 }
@@ -384,9 +386,9 @@ std::expected<Manifest, ParseDiagnostic> parse_manifest(std::string_view toml_te
   {
     return std::unexpected(unknown.error());
   }
-  if (auto r = check_schema(root); !r)
+  if (auto schema_result = check_schema(root); !schema_result)
   {
-    return std::unexpected(r.error());
+    return std::unexpected(schema_result.error());
   }
 
   const auto* plugin_node = root.get("plugin");
@@ -408,24 +410,24 @@ std::expected<Manifest, ParseDiagnostic> parse_manifest(std::string_view toml_te
     return std::unexpected(unknown.error());
   }
 
-  Manifest m;
-  if (auto r = parse_plugin_scalars(*plugin, m); !r)
+  Manifest manifest;
+  if (auto scalar = parse_plugin_scalars(*plugin, manifest); !scalar)
   {
-    return std::unexpected(r.error());
+    return std::unexpected(scalar.error());
   }
-  if (auto r = validate_plugin_fields(m); !r)
+  if (auto validate = validate_plugin_fields(manifest); !validate)
   {
-    return std::unexpected(r.error());
+    return std::unexpected(validate.error());
   }
-  if (auto r = parse_plugin_entries(*plugin, m); !r)
+  if (auto entries = parse_plugin_entries(*plugin, manifest); !entries)
   {
-    return std::unexpected(r.error());
+    return std::unexpected(entries.error());
   }
-  if (auto r = parse_plugin_dependencies(*plugin, m); !r)
+  if (auto dependencies = parse_plugin_dependencies(*plugin, manifest); !dependencies)
   {
-    return std::unexpected(r.error());
+    return std::unexpected(dependencies.error());
   }
-  return m;
+  return manifest;
 }
 
 }  // namespace cppup::plugin

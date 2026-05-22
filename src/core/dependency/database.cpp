@@ -105,7 +105,8 @@ std::vector<std::string> json_to_vector(const std::string& json)
   std::string        item;
   while (std::getline(iss, item, ','))
   {
-    auto trash = std::ranges::remove_if(item, [](char c) noexcept { return c == '"' || c == ' '; });
+    auto trash = std::ranges::remove_if(
+        item, [](char character) noexcept { return character == '"' || character == ' '; });
     item.erase(trash.begin(), trash.end());
     if (!item.empty())
     {
@@ -117,7 +118,7 @@ std::vector<std::string> json_to_vector(const std::string& json)
 }
 
 // sqlite3_column_text returns const unsigned char*; the SQLite docs treat it
-// as interchangeable with const char* for UTF-8 text. Centralize the cast.
+// as interesult_codehangeable with const char* for UTF-8 text. Centralize the cast.
 [[nodiscard]] const char* column_cstr(sqlite3_stmt* stmt, int idx) noexcept
 {
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
@@ -126,8 +127,8 @@ std::vector<std::string> json_to_vector(const std::string& json)
 
 [[nodiscard]] std::string column_text(sqlite3_stmt* stmt, int idx)
 {
-  const char* p = column_cstr(stmt, idx);
-  return p != nullptr ? std::string{p} : std::string{};
+  const char* p_col = column_cstr(stmt, idx);
+  return p_col != nullptr ? std::string{p_col} : std::string{};
 }
 
 }  // namespace
@@ -163,8 +164,8 @@ void DependencyDatabase::initialize()
 {
   std::filesystem::create_directories(db_path_.parent_path());
 
-  const int rc = sqlite3_open(db_path_.string().c_str(), &db_);
-  CPPUP_CHECK(rc == SQLITE_OK,
+  const int result_code = sqlite3_open(db_path_.string().c_str(), &db_);
+  CPPUP_CHECK(result_code == SQLITE_OK,
               std::string{"sqlite3_open failed: "} + (db_ ? sqlite3_errmsg(db_) : "null db"));
 
   execute_sql("PRAGMA foreign_keys = ON");
@@ -206,9 +207,10 @@ void DependencyDatabase::install_package(const PackageInfo& package)
   sqlite3_bind_int64(stmt, 11, package.install_time);
   sqlite3_bind_int(stmt, 12, package.is_dev_dependency ? 1 : 0);
 
-  const auto rc = sqlite3_step(stmt);
+  const auto result_code = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"insert package failed: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE,
+              std::string{"insert package failed: "} + sqlite3_errmsg(db_));
 
   for (const auto& dep : package.dependencies)
   {
@@ -238,13 +240,13 @@ std::optional<PackageInfo> DependencyDatabase::get_package(const std::string& na
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, version.c_str(), -1, SQLITE_STATIC);
 
-  const auto rc = sqlite3_step(stmt);
-  if (rc == SQLITE_DONE)
+  const auto result_code = sqlite3_step(stmt);
+  if (result_code == SQLITE_DONE)
   {
     sqlite3_finalize(stmt);
     return std::nullopt;
   }
-  CPPUP_CHECK(rc == SQLITE_ROW, std::string{"step get_package: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_ROW, std::string{"step get_package: "} + sqlite3_errmsg(db_));
 
   PackageInfo package;
   package.name              = column_text(stmt, 0);
@@ -289,8 +291,8 @@ std::vector<PackageInfo> DependencyDatabase::list_installed_packages() const
               std::string{"prepare list_installed_packages failed: "} + sqlite3_errmsg(db_));
 
   std::vector<PackageInfo> packages;
-  int                      rc{};
-  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+  int                      result_code{};
+  while ((result_code = sqlite3_step(stmt)) == SQLITE_ROW)
   {
     const std::string name    = column_text(stmt, 0);
     const std::string version = column_text(stmt, 1);
@@ -300,7 +302,7 @@ std::vector<PackageInfo> DependencyDatabase::list_installed_packages() const
     }
   }
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE,
+  CPPUP_CHECK(result_code == SQLITE_DONE,
               std::string{"step list_installed_packages: "} + sqlite3_errmsg(db_));
 
   return packages;
@@ -324,9 +326,9 @@ void DependencyDatabase::add_dependency(const DependencyRelation& relation)
   sqlite3_bind_text(stmt, 4, relation.version_constraint.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 5, relation.dependency_type.c_str(), -1, SQLITE_STATIC);
 
-  const auto rc = sqlite3_step(stmt);
+  const auto result_code = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"insert dependency: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE, std::string{"insert dependency: "} + sqlite3_errmsg(db_));
 }
 
 std::vector<DependencyRelation> DependencyDatabase::get_dependencies(
@@ -346,8 +348,8 @@ std::vector<DependencyRelation> DependencyDatabase::get_dependencies(
   sqlite3_bind_text(stmt, 2, package_version.c_str(), -1, SQLITE_STATIC);
 
   std::vector<DependencyRelation> dependencies;
-  int                             rc{};
-  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+  int                             result_code{};
+  while ((result_code = sqlite3_step(stmt)) == SQLITE_ROW)
   {
     DependencyRelation relation;
     relation.package_name       = column_text(stmt, 0);
@@ -358,7 +360,8 @@ std::vector<DependencyRelation> DependencyDatabase::get_dependencies(
     dependencies.push_back(relation);
   }
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step get_dependencies: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE,
+              std::string{"step get_dependencies: "} + sqlite3_errmsg(db_));
 
   return dependencies;
 }
@@ -382,9 +385,9 @@ void DependencyDatabase::create_tables()
 
 void DependencyDatabase::execute_sql(const std::string& sql)
 {
-  char*     error_msg = nullptr;
-  const int rc        = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
-  if (rc != SQLITE_OK)
+  char*     error_msg   = nullptr;
+  const int result_code = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error_msg);
+  if (result_code != SQLITE_OK)
   {
     std::string const msg = error_msg != nullptr ? error_msg : "unknown sqlite error";
     sqlite3_free(error_msg);
@@ -394,9 +397,9 @@ void DependencyDatabase::execute_sql(const std::string& sql)
 
 std::unique_ptr<DependencyDatabase> create_dependency_database(const std::filesystem::path& db_path)
 {
-  auto db = std::make_unique<DependencyDatabase>(db_path);
-  db->initialize();
-  return db;
+  auto database = std::make_unique<DependencyDatabase>(db_path);
+  database->initialize();
+  return database;
 }
 
 void DependencyDatabase::remove_package(const std::string& name, const std::string& version)
@@ -410,9 +413,9 @@ void DependencyDatabase::remove_package(const std::string& name, const std::stri
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, version.c_str(), -1, SQLITE_STATIC);
 
-  const auto rc = sqlite3_step(stmt);
+  const auto result_code = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"delete package: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE, std::string{"delete package: "} + sqlite3_errmsg(db_));
 }
 
 std::vector<std::string> DependencyDatabase::get_package_versions(const std::string& name) const
@@ -426,16 +429,17 @@ std::vector<std::string> DependencyDatabase::get_package_versions(const std::str
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
 
   std::vector<std::string> versions;
-  int                      rc = SQLITE_OK;
-  while ((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+  int                      result_code = SQLITE_OK;
+  while ((result_code = sqlite3_step(stmt)) == SQLITE_ROW)
   {
-    if (const char* v = column_cstr(stmt, 0))
+    if (const char* version = column_cstr(stmt, 0))
     {
-      versions.emplace_back(v);
+      versions.emplace_back(version);
     }
   }
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step get_package_versions: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE,
+              std::string{"step get_package_versions: "} + sqlite3_errmsg(db_));
 
   return versions;
 }
@@ -452,14 +456,14 @@ bool DependencyDatabase::is_package_installed(const std::string& name,
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_STATIC);
   sqlite3_bind_text(stmt, 2, version.c_str(), -1, SQLITE_STATIC);
 
-  const auto rc        = sqlite3_step(stmt);
-  bool       installed = false;
-  if (rc == SQLITE_ROW)
+  const auto result_code = sqlite3_step(stmt);
+  bool       installed   = false;
+  if (result_code == SQLITE_ROW)
   {
     installed = sqlite3_column_int(stmt, 0) > 0;
   }
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_ROW || rc == SQLITE_DONE,
+  CPPUP_CHECK(result_code == SQLITE_ROW || result_code == SQLITE_DONE,
               std::string{"step is_package_installed: "} + sqlite3_errmsg(db_));
 
   return installed;
@@ -473,14 +477,14 @@ size_t DependencyDatabase::get_package_count() const
   CPPUP_CHECK(sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK,
               std::string{"prepare get_package_count: "} + sqlite3_errmsg(db_));
 
-  const auto rc    = sqlite3_step(stmt);
-  size_t     count = 0;
-  if (rc == SQLITE_ROW)
+  const auto result_code = sqlite3_step(stmt);
+  size_t     count       = 0;
+  if (result_code == SQLITE_ROW)
   {
     count = static_cast<size_t>(sqlite3_column_int64(stmt, 0));
   }
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_ROW || rc == SQLITE_DONE,
+  CPPUP_CHECK(result_code == SQLITE_ROW || result_code == SQLITE_DONE,
               std::string{"step get_package_count: "} + sqlite3_errmsg(db_));
 
   return count;
@@ -514,9 +518,10 @@ void DependencyDatabase::update_registry_entry(const RegistryEntry& entry)
   sqlite3_bind_text(stmt, 5, versions_str.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 6, entry.last_updated.c_str(), -1, SQLITE_TRANSIENT);
 
-  const auto rc = sqlite3_step(stmt);
+  const auto result_code = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step update_registry_entry: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_DONE,
+              std::string{"step update_registry_entry: "} + sqlite3_errmsg(db_));
 }
 
 std::optional<RegistryEntry> DependencyDatabase::get_registry_entry(const std::string& name) const
@@ -532,13 +537,14 @@ std::optional<RegistryEntry> DependencyDatabase::get_registry_entry(const std::s
 
   sqlite3_bind_text(stmt, 1, name.c_str(), -1, SQLITE_TRANSIENT);
 
-  const auto rc = sqlite3_step(stmt);
-  if (rc == SQLITE_DONE)
+  const auto result_code = sqlite3_step(stmt);
+  if (result_code == SQLITE_DONE)
   {
     sqlite3_finalize(stmt);
     return std::nullopt;
   }
-  CPPUP_CHECK(rc == SQLITE_ROW, std::string{"step get_registry_entry: "} + sqlite3_errmsg(db_));
+  CPPUP_CHECK(result_code == SQLITE_ROW,
+              std::string{"step get_registry_entry: "} + sqlite3_errmsg(db_));
 
   RegistryEntry entry;
   entry.name           = column_text(stmt, 0);
@@ -548,9 +554,9 @@ std::optional<RegistryEntry> DependencyDatabase::get_registry_entry(const std::s
 
   if (const char* versions_str = column_cstr(stmt, 4))
   {
-    std::stringstream ss(versions_str);
+    std::stringstream version_ss(versions_str);
     std::string       version;
-    while (std::getline(ss, version, ','))
+    while (std::getline(version_ss, version, ','))
     {
       entry.available_versions.push_back(version);
     }
@@ -586,9 +592,9 @@ std::vector<RegistryEntry> DependencyDatabase::search_registry(const std::string
     entry.repository_url = column_text(stmt, 3);
     if (const char* versions_str = column_cstr(stmt, 4))
     {
-      std::stringstream ss(versions_str);
+      std::stringstream version_ss(versions_str);
       std::string       version;
-      while (std::getline(ss, version, ','))
+      while (std::getline(version_ss, version, ','))
       {
         entry.available_versions.push_back(version);
       }
@@ -624,11 +630,11 @@ std::vector<PackageInfo> DependencyDatabase::resolve_dependencies(
       continue;
     }
     std::string latest_version = versions.front();
-    for (const auto& v : versions)
+    for (const auto& version : versions)
     {
-      if (v > latest_version)
+      if (version > latest_version)
       {
-        latest_version = v;
+        latest_version = version;
       }
     }
 
@@ -705,11 +711,11 @@ bool DependencyDatabase::has_cycle_dfs(const std::string&     package_key,
       continue;
     }
     std::string latest_version = versions.front();
-    for (const auto& v : versions)
+    for (const auto& version : versions)
     {
-      if (v > latest_version)
+      if (version > latest_version)
       {
-        latest_version = v;
+        latest_version = version;
       }
     }
 

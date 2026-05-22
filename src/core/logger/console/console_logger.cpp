@@ -28,10 +28,10 @@ void ConsoleLogger::log(LogLevel level, std::string_view message) const
   std::scoped_lock const lock(logMutex_);
 
   LogLevel min_level = globalConfig_.defaultLevel;
-  if (auto it = globalConfig_.categoryOverrides.find(category_);
-      it != globalConfig_.categoryOverrides.end())
+  if (auto iter = globalConfig_.categoryOverrides.find(category_);
+      iter != globalConfig_.categoryOverrides.end())
   {
-    min_level = it->second;
+    min_level = iter->second;
   }
 
   if (level < min_level)

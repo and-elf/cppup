@@ -11,14 +11,67 @@ namespace cppup
 [[noreturn]] inline void panic(std::string_view     msg,
                                std::source_location loc = std::source_location::current()) noexcept
 {
-  std::fputs("cppup: panic at ", stderr);
-  std::fputs(loc.file_name(), stderr);
-  std::fputc(':', stderr);
-  // NOLINTNEXTLINE(modernize-use-std-print) -- keep panic path non-throwing under noexcept
-  std::fprintf(stderr, "%u", static_cast<unsigned>(loc.line()));
-  std::fputs(": ", stderr);
-  std::fwrite(msg.data(), sizeof(char), msg.size(), stderr);
-  std::fputc('\n', stderr);
+  struct PanicSink
+  {
+    bool write_failed = false;
+
+    void write_literal(const char* text) noexcept
+    {
+      if (write_failed)
+      {
+        return;
+      }
+      if (std::fputs(text, stderr) == EOF)
+      {
+        write_failed = true;
+      }
+    }
+
+    void write_char(char input) noexcept
+    {
+      if (write_failed)
+      {
+        return;
+      }
+      if (std::fputc(input, stderr) == EOF)
+      {
+        write_failed = true;
+      }
+    }
+
+    void write_line(unsigned line) noexcept
+    {
+      if (write_failed)
+      {
+        return;
+      }
+      // NOLINTNEXTLINE(modernize-use-std-print) -- keep panic path non-throwing under noexcept
+      if (std::fprintf(stderr, "%u", line) < 0)
+      {
+        write_failed = true;
+      }
+    }
+
+    void write_message(std::string_view text) noexcept
+    {
+      if (write_failed)
+      {
+        return;
+      }
+      if (std::fwrite(text.data(), sizeof(char), text.size(), stderr) != text.size())
+      {
+        write_failed = true;
+      }
+    }
+  } sink;
+
+  sink.write_literal("cppup: panic at ");
+  sink.write_literal(loc.file_name());
+  sink.write_char(':');
+  sink.write_line(static_cast<unsigned>(loc.line()));
+  sink.write_literal(": ");
+  sink.write_message(msg);
+  sink.write_char('\n');
   std::abort();
 }
 

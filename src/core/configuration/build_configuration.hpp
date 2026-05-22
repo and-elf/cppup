@@ -57,12 +57,13 @@ struct BuildConfiguration
   BuildConfiguration() = default;
 
   // Constructor with initializer list support for common fields
-  BuildConfiguration(std::optional<Toolchain> toolchain, std::vector<Package> packages = {},
-                     std::vector<Module> modules = {}, std::vector<std::string> sources = {},
-                     std::vector<Flag> compile_flags = {}, std::vector<Flag> link_flags = {},
-                     std::vector<std::string> include_paths = {},
-                     std::vector<Definition> definitions = {}, std::vector<Binary> binaries = {},
-                     std::vector<Library> libraries = {}, std::vector<Test> tests = {}) noexcept :
+  explicit BuildConfiguration(
+      std::optional<Toolchain> toolchain, std::vector<Package> packages = {},
+      std::vector<Module> modules = {}, std::vector<std::string> sources = {},
+      std::vector<Flag> compile_flags = {}, std::vector<Flag> link_flags = {},
+      std::vector<std::string> include_paths = {}, std::vector<Definition> definitions = {},
+      std::vector<Binary> binaries = {}, std::vector<Library> libraries = {},
+      std::vector<Test> tests = {}) noexcept :
       toolchain(std::move(toolchain)),
       packages(std::move(packages)),
       modules(std::move(modules)),

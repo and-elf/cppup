@@ -74,14 +74,14 @@ std::expected<void, DescriptorDiagnostic> validate_descriptors(
                  "duplicate descriptor id '" + std::string{id_sv} + "'");
     }
 
-    auto it = by_id.find(id_sv);
-    if (it == by_id.end())
+    auto iter = by_id.find(id_sv);
+    if (iter == by_id.end())
     {
       return err(DescriptorError::EntryIdUnknown,
                  "descriptor id '" + std::string{id_sv} + "' not declared in manifest");
     }
 
-    const ManifestEntry& m_entry = *it->second;
+    const ManifestEntry& m_entry = *iter->second;
     if (from_c_kind(desc->kind) != m_entry.kind)
     {
       return err(DescriptorError::EntryKindMismatch,

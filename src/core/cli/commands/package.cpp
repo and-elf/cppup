@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -29,10 +28,10 @@ struct PackageRecord
   int64_t     installed_at = 0;
 };
 
-std::string build_system_name(cppup::configuration::BuildSystem bs) noexcept
+std::string build_system_name(cppup::configuration::BuildSystem buildsystem) noexcept
 {
   using cppup::configuration::BuildSystem;
-  switch (bs)
+  switch (buildsystem)
   {
     case BuildSystem::Cppup:
       return "cppup";
@@ -75,33 +74,33 @@ class PackageRegistry
     {
       return records;
     }
-    std::ifstream f(registry_file_);
+    std::ifstream ifs(registry_file_);
     std::string   line;
-    while (std::getline(f, line))
+    while (std::getline(ifs, line))
     {
       if (line.empty())
       {
         continue;
       }
       std::istringstream iss(line);
-      PackageRecord      r;
+      PackageRecord      rec{};
       std::string        installed_at_str;
       // Tab-separated: name <TAB> version <TAB> source <TAB> installed_at
       // [<TAB> build_system]. The trailing build_system field is optional so
       // we keep reading entries written before it existed.
-      if (std::getline(iss, r.name, '\t') && std::getline(iss, r.version, '\t') &&
-          std::getline(iss, r.source, '\t') && std::getline(iss, installed_at_str, '\t'))
+      if (std::getline(iss, rec.name, '\t') && std::getline(iss, rec.version, '\t') &&
+          std::getline(iss, rec.source, '\t') && std::getline(iss, installed_at_str, '\t'))
       {
         try
         {
-          r.installed_at = std::stoll(installed_at_str);
+          rec.installed_at = std::stoll(installed_at_str);
         }
         catch (...)
         {
-          r.installed_at = 0;
+          rec.installed_at = 0;
         }
-        std::getline(iss, r.build_system);
-        records.push_back(std::move(r));
+        std::getline(iss, rec.build_system);
+        records.push_back(std::move(rec));
       }
     }
     return records;
@@ -109,15 +108,15 @@ class PackageRegistry
 
   [[nodiscard]] bool save(const std::vector<PackageRecord>& records) const
   {
-    std::ofstream f(registry_file_);
-    if (!f)
+    std::ofstream registry_output(registry_file_);
+    if (!registry_output)
     {
       return false;
     }
-    for (const auto& r : records)
+    for (const auto& rec : records)
     {
-      f << r.name << '\t' << r.version << '\t' << r.source << '\t' << r.installed_at << '\t'
-        << r.build_system << '\n';
+      registry_output << rec.name << '\t' << rec.version << '\t' << rec.source << '\t'
+                      << rec.installed_at << '\t' << rec.build_system << '\n';
     }
     return true;
   }
@@ -156,16 +155,10 @@ std::string describePackageSource(const PackageAddOptions& options)
   return "registry";
 }
 
-bool fetchGitPackage(const std::string& url, const std::filesystem::path& dest,
+bool fetchGitPackage(GitInterface& git, const std::string& url, const std::filesystem::path& dest,
                      const std::optional<std::string>& branch)
 {
-  std::string cmd = "git clone --depth 1";
-  if (branch)
-  {
-    cmd += " --branch \"" + *branch + "\"";
-  }
-  cmd += " \"" + url + "\" \"" + dest.string() + "\"";
-  return std::system(cmd.c_str()) == 0;
+  return git.clone_shallow(url, dest, branch);
 }
 
 bool copyLocalPackage(const std::filesystem::path& src, const std::filesystem::path& dest)
@@ -205,12 +198,12 @@ std::expected<int, std::string> executePackageList(const CommandContext& context
     }
 
     context.logger->info("Installed packages (" + std::to_string(records.size()) + "):");
-    for (const auto& r : records)
+    for (const auto& rec : records)
     {
-      std::string line = "  " + r.name + " " + r.version + " [" + r.source + "]";
-      if (!r.build_system.empty())
+      std::string line = "  " + rec.name + " " + rec.version + " [" + rec.source + "]";
+      if (!rec.build_system.empty())
       {
-        line += " (" + r.build_system + ")";
+        line += " (" + rec.build_system + ")";
       }
       context.logger->info(line);
     }
@@ -248,7 +241,7 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
 
     auto records = registry.load();
     if (std::ranges::any_of(
-            records, [&](const PackageRecord& r) noexcept { return r.name == options.name; }))
+            records, [&](const PackageRecord& rec) noexcept { return rec.name == options.name; }))
     {
       return std::unexpected("Package already installed: " + options.name);
     }
@@ -259,8 +252,12 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
     bool fetched = false;
     if (options.git)
     {
+      if (context.git == nullptr)
+      {
+        return std::unexpected("No git interface configured");
+      }
       context.logger->info("Cloning from: " + *options.git);
-      fetched = fetchGitPackage(*options.git, install_path, options.branch);
+      fetched = fetchGitPackage(*context.git, *options.git, install_path, options.branch);
     }
     else if (options.dir)
     {
@@ -353,9 +350,9 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
     }
 
     auto       records = registry.load();
-    const auto it      = std::ranges::find_if(
-        records, [&](const PackageRecord& r) noexcept { return r.name == package_name; });
-    if (it == records.end())
+    const auto iter    = std::ranges::find_if(
+        records, [&](const PackageRecord& rec) noexcept { return rec.name == package_name; });
+    if (iter == records.end())
     {
       return std::unexpected("Package not found: " + package_name);
     }
@@ -363,16 +360,16 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
     const std::filesystem::path install_path = registry.packages_dir() / package_name;
     if (std::filesystem::exists(install_path))
     {
-      std::error_code ec;
-      std::filesystem::remove_all(install_path, ec);
-      if (ec)
+      std::error_code error_code{};
+      std::filesystem::remove_all(install_path, error_code);
+      if (error_code)
       {
         context.logger->warning("Could not remove files at " + install_path.string() + ": " +
-                                ec.message());
+                                error_code.message());
       }
     }
 
-    records.erase(it);
+    records.erase(iter);
     if (!registry.save(records))
     {
       return std::unexpected("Failed to update package registry");

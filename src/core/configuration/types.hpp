@@ -55,16 +55,18 @@ struct PackageInfo
  * Simplified to focus on core functionality
  */
 template <typename T>
-concept PackageType = requires(T t) {
+concept PackageType = requires(T package) {
   // Must have package info
-  { t.info() } -> std::convertible_to<const PackageInfo&>;
+  { package.info() } -> std::convertible_to<const PackageInfo&>;
 
   // Must be able to resolve source
-  { t.resolve_source() } -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
+  {
+    package.resolve_source()
+  } -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
 
   // Dependency injection
-  { t.set_command_executor(std::shared_ptr<void>{}) } -> std::same_as<void>;
-  { t.set_cache(std::shared_ptr<void>{}) } -> std::same_as<void>;
+  { package.set_command_executor(std::shared_ptr<void>{}) } -> std::same_as<void>;
+  { package.set_cache(std::shared_ptr<void>{}) } -> std::same_as<void>;
 };
 
 /**

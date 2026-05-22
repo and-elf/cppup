@@ -19,15 +19,15 @@ namespace fs = std::filesystem;
 // `cppup clean` on an already-clean tree should be a no-op.
 std::size_t remove_path(const fs::path& path, Logger& logger)
 {
-  std::error_code ec;
-  if (!fs::exists(path, ec))
+  std::error_code error_code{};
+  if (!fs::exists(path, error_code))
   {
     return 0;
   }
-  const auto removed = fs::remove_all(path, ec);
-  if (ec)
+  const auto removed = fs::remove_all(path, error_code);
+  if (error_code)
   {
-    logger.warning("failed to remove " + path.string() + ": " + ec.message());
+    logger.warning("failed to remove " + path.string() + ": " + error_code.message());
     return 0;
   }
   logger.info("removed " + path.string() + " (" + std::to_string(removed) + " entries)");

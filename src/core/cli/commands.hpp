@@ -55,25 +55,25 @@ struct InitOptions
   GitlabCi     gitlab_ci    = GitlabCi::Off;
 };
 
-[[nodiscard]] constexpr bool enabled(Vscode v) noexcept
+[[nodiscard]] constexpr bool enabled(Vscode state) noexcept
 {
-  return v == Vscode::On;
+  return state == Vscode::On;
 }
-[[nodiscard]] constexpr bool enabled(Devcontainer d) noexcept
+[[nodiscard]] constexpr bool enabled(Devcontainer state) noexcept
 {
-  return d == Devcontainer::On;
+  return state == Devcontainer::On;
 }
-[[nodiscard]] constexpr bool enabled(Docker d) noexcept
+[[nodiscard]] constexpr bool enabled(Docker state) noexcept
 {
-  return d == Docker::On;
+  return state == Docker::On;
 }
-[[nodiscard]] constexpr bool enabled(GitlabCi g) noexcept
+[[nodiscard]] constexpr bool enabled(GitlabCi state) noexcept
 {
-  return g == GitlabCi::On;
+  return state == GitlabCi::On;
 }
-[[nodiscard]] constexpr bool enabled(CheckOnly c) noexcept
+[[nodiscard]] constexpr bool enabled(CheckOnly state) noexcept
 {
-  return c == CheckOnly::On;
+  return state == CheckOnly::On;
 }
 
 struct UpdateOptions
@@ -82,6 +82,42 @@ struct UpdateOptions
   std::optional<std::string> version;
   std::filesystem::path      install_dir;
 };
+
+// Discover regular files in `directory` that are executable by the owner.
+// Shared utility for commands that need to enumerate runnable artifacts.
+[[nodiscard]] inline std::vector<std::filesystem::path> discoverExecutableFiles(
+    const std::filesystem::path& directory) noexcept
+{
+  std::vector<std::filesystem::path> files;
+  std::error_code                    error_code;
+  if (!std::filesystem::exists(directory, error_code) || error_code)
+  {
+    return files;
+  }
+
+  for (const auto& entry : std::filesystem::directory_iterator(directory, error_code))
+  {
+    if (error_code)
+    {
+      return files;
+    }
+    if (!entry.is_regular_file(error_code) || error_code)
+    {
+      continue;
+    }
+    const auto permissions = entry.status(error_code).permissions();
+    if (error_code)
+    {
+      continue;
+    }
+    if ((permissions & std::filesystem::perms::owner_exec) != std::filesystem::perms::none)
+    {
+      files.push_back(entry.path());
+    }
+  }
+
+  return files;
+}
 
 // Command implementation functions
 

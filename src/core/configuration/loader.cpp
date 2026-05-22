@@ -19,11 +19,11 @@ namespace
 
 using ConfigureFunction = BuildConfiguration (*)();
 
-std::expected<BuildConfiguration, std::string> invoke_configure(ConfigureFunction fn) noexcept
+std::expected<BuildConfiguration, std::string> invoke_configure(ConfigureFunction func) noexcept
 {
   try
   {
-    return fn();
+    return func();
   }
   catch (const std::exception& e)
   {
@@ -77,10 +77,10 @@ std::expected<BuildConfiguration, std::string> load_from_library(
   if (configure_fn == nullptr)
   {
     std::string err = "Configure function not found in shared library";
-    if (const char* dl = dlerror())
+    if (const char* load_error = dlerror())
     {
       err += ": ";
-      err += dl;
+      err += load_error;
     }
     dlclose(handle);
     return std::unexpected(std::move(err));

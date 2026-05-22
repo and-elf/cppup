@@ -45,7 +45,12 @@ struct CacheStats
 class BuildCache
 {
  public:
-  virtual ~BuildCache() = default;
+  virtual ~BuildCache()         = default;
+  BuildCache(const BuildCache&) = delete;
+  BuildCache(BuildCache&&)      = delete;
+
+  virtual BuildCache& operator=(const BuildCache&) = delete;
+  virtual BuildCache& operator=(BuildCache&&)      = delete;
 
   // True when the target must be rebuilt (no entry, signature change, missing
   // dep, or checksum drift). Only a confirmed clean hit returns false.
@@ -73,6 +78,6 @@ struct DependencyScanner
 // proceed without caching in that case.
 std::unique_ptr<BuildCache> create_build_cache(
     const std::filesystem::path&                           cache_dir,
-    std::unique_ptr<cppup::dependency::DependencyDatabase> db = nullptr);
+    std::unique_ptr<cppup::dependency::DependencyDatabase> dependency_database = nullptr);
 
 }  // namespace cppup::build

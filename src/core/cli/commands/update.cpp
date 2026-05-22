@@ -1,8 +1,6 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 
-#include <array>
-#include <cstdio>
 #include <cstdlib>
 #include <expected>
 #include <filesystem>
@@ -12,6 +10,7 @@
 #include <string_view>
 #include <system_error>
 
+#include "../../../SystemProcessRunner.hpp"
 #include "../command_context.hpp"
 #include "../commands.hpp"
 
@@ -58,36 +57,32 @@ constexpr std::string_view k_running_version = CPPUP_UPDATE_STR(CPPUP_VERSION);
 constexpr std::string_view k_running_version = "unknown";
 #endif
 
-std::string capture(const std::string& cmd)
+std::expected<std::string, std::string> capture_with_runner(ProcessRunner&           runner,
+                                                            const ProcessRunRequest& request,
+                                                            const std::string_view   purpose)
 {
-  std::array<char, 4096> buffer{};
-  std::string            result;
-  FILE*                  pipe = popen(cmd.c_str(), "r");
-  if (pipe == nullptr)
+  const auto result = runner.run_capture(request);
+  if (result.exit_code != 0)
   {
-    return {};
+    return std::unexpected(std::string{purpose} + " failed (exit " +
+                           std::to_string(result.exit_code) + ")");
   }
-  while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
-  {
-    result.append(buffer.data());
-  }
-  pclose(pipe);
-  return result;
+  return result.output;
 }
 
-std::string trim(std::string s)
+std::string trim(std::string text)
 {
-  while (!s.empty() &&
-         (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' || s.back() == '\t'))
+  while (!text.empty() &&
+         (text.back() == '\n' || text.back() == '\r' || text.back() == ' ' || text.back() == '\t'))
   {
-    s.pop_back();
+    text.pop_back();
   }
   std::size_t start = 0;
-  while (start < s.size() && (s[start] == ' ' || s[start] == '\t'))
+  while (start < text.size() && (text[start] == ' ' || text[start] == '\t'))
   {
     ++start;
   }
-  return s.substr(start);
+  return text.substr(start);
 }
 
 fs::path home_dir()
@@ -102,8 +97,9 @@ fs::path home_dir()
 
 fs::path make_temp_download_path()
 {
-  std::random_device rd;
-  auto name = std::string{"cppup_download_"} + std::to_string(rd()) + std::to_string(rd());
+  std::random_device random_device;
+  auto               name = std::string{"cppup_download_"} + std::to_string(random_device()) +
+              std::to_string(random_device());
   return fs::temp_directory_path() / name;
 }
 
@@ -129,41 +125,60 @@ bool path_env_contains_dir(std::string_view path_env_value, std::string_view dir
 
 // Default fetch_latest implementation: hits GitHub's /releases/latest
 // (excludes drafts and prereleases) and returns its tag_name.
-std::expected<std::string, std::string> default_fetch_latest_version()
+std::expected<std::string, std::string> default_fetch_latest_version(const CommandContext& context)
 {
+  if (context.processRunner == nullptr)
+  {
+    return std::unexpected("No process runner configured");
+  }
   const std::string url  = "https://api.github.com/repos/" + release_repo() + "/releases/latest";
-  const std::string cmd  = std::string{"curl -fsSL "} + "'" + url + "' 2>/dev/null";
-  const auto        body = capture(cmd);
-  if (body.empty())
+  auto              body = capture_with_runner(
+      *context.processRunner,
+      ProcessRunRequest{.command = "curl", .args = {"-fsSL", url}, .working_dir = ""},
+      "fetch latest release metadata");
+  if (!body || body->empty())
   {
     return std::unexpected("no release available (could not fetch " + url + ")");
   }
-  return update_internal::parse_latest_tag(body);
+  return update_internal::parse_latest_tag(*body);
 }
 
-std::expected<int, std::string> default_download(const std::string& url, const fs::path& dest)
+std::expected<int, std::string> default_download(const CommandContext& context,
+                                                 const std::string& url, const fs::path& dest)
 {
-  const std::string cmd = std::string{"curl -fsSL "} + "'" + url + "' -o '" + dest.string() + "'";
-  const int         rc  = std::system(cmd.c_str());
-  if (rc != 0)
+  if (context.processRunner == nullptr)
   {
-    return std::unexpected("curl failed to download " + url + " (exit " + std::to_string(rc) + ")");
+    return std::unexpected("No process runner configured");
+  }
+  const int curl_exit_code = context.processRunner->run(ProcessRunRequest{
+      .command = "curl", .args = {"-fsSL", url, "-o", dest.string()}, .working_dir = ""});
+  if (curl_exit_code != 0)
+  {
+    return std::unexpected("curl failed to download " + url + " (exit " +
+                           std::to_string(curl_exit_code) + ")");
   }
   return 0;
 }
 
-std::expected<std::string, std::string> default_fetch_sha256(const std::string& url)
+std::expected<std::string, std::string> default_fetch_sha256(const CommandContext& context,
+                                                             const std::string&    url)
 {
-  const std::string cmd  = std::string{"curl -fsSL "} + "'" + url + ".sha256' 2>/dev/null";
-  const auto        body = capture(cmd);
-  if (body.empty())
+  if (context.processRunner == nullptr)
+  {
+    return std::unexpected("No process runner configured");
+  }
+  auto body = capture_with_runner(
+      *context.processRunner,
+      ProcessRunRequest{.command = "curl", .args = {"-fsSL", url + ".sha256"}, .working_dir = ""},
+      "fetch checksum");
+  if (!body || body->empty())
   {
     return std::unexpected("could not fetch sha256 checksum from " + url + ".sha256");
   }
   // .sha256 files are typically "<hex>  filename\n"; take the first token.
-  std::istringstream is(body);
+  std::istringstream input_stream(*body);
   std::string        tok;
-  if (!(is >> tok))
+  if (!(input_stream >> tok))
   {
     return std::unexpected("malformed sha256 file at " + url + ".sha256");
   }
@@ -196,22 +211,25 @@ std::expected<std::string, std::string> sha256_file(const fs::path& path) noexce
 {
   try
   {
-    std::error_code ec;
-    if (!fs::exists(path, ec) || ec)
+    std::error_code error_code;
+    if (!fs::exists(path, error_code) || error_code)
     {
       return std::unexpected("sha256_file: file does not exist: " + path.string());
     }
-    const std::string cmd = std::string{"sha256sum '"} + path.string() + "' 2>/dev/null";
-    const auto        out = capture(cmd);
-    if (out.empty())
+    SystemProcessRunner runner;
+    auto                out = capture_with_runner(
+        runner,
+        ProcessRunRequest{.command = "sha256sum", .args = {path.string()}, .working_dir = ""},
+        "sha256sum");
+    if (!out || out->empty())
     {
       return std::unexpected("sha256sum produced no output for " + path.string());
     }
-    std::istringstream is(out);
+    std::istringstream input_stream(*out);
     std::string        tok;
-    if (!(is >> tok) || tok.size() != 64)
+    if (!(input_stream >> tok) || tok.size() != 64)
     {
-      return std::unexpected("malformed sha256sum output: " + out);
+      return std::unexpected("malformed sha256sum output: " + *out);
     }
     return tok;
   }
@@ -226,29 +244,29 @@ std::expected<int, std::string> install_atomic(const fs::path& staged_binary,
 {
   try
   {
-    std::error_code ec;
-    fs::create_directories(install_dir, ec);
-    if (ec)
+    std::error_code error_code;
+    fs::create_directories(install_dir, error_code);
+    if (error_code)
     {
       return std::unexpected("could not create install dir " + install_dir.string() + ": " +
-                             ec.message());
+                             error_code.message());
     }
 
     const fs::path target = install_dir / "cppup";
     const fs::path backup = install_dir / "cppup.prev";
 
-    if (fs::exists(target, ec))
+    if (fs::exists(target, error_code))
     {
       // Remove any stale backup, then move the current binary aside.
-      if (fs::exists(backup, ec))
+      if (fs::exists(backup, error_code))
       {
-        fs::remove(backup, ec);
+        fs::remove(backup, error_code);
       }
-      fs::rename(target, backup, ec);
-      if (ec)
+      fs::rename(target, backup, error_code);
+      if (error_code)
       {
         return std::unexpected("could not back up existing binary to " + backup.string() + ": " +
-                               ec.message());
+                               error_code.message());
       }
     }
 
@@ -259,18 +277,18 @@ std::expected<int, std::string> install_atomic(const fs::path& staged_binary,
       return std::unexpected("chmod failed on " + staged_binary.string());
     }
 
-    fs::rename(staged_binary, target, ec);
-    if (ec)
+    fs::rename(staged_binary, target, error_code);
+    if (error_code)
     {
       // Cross-filesystem fall-back: copy then remove.
-      ec.clear();
-      fs::copy_file(staged_binary, target, fs::copy_options::overwrite_existing, ec);
-      if (ec)
+      error_code.clear();
+      fs::copy_file(staged_binary, target, fs::copy_options::overwrite_existing, error_code);
+      if (error_code)
       {
         return std::unexpected("could not install binary to " + target.string() + ": " +
-                               ec.message());
+                               error_code.message());
       }
-      fs::remove(staged_binary, ec);
+      fs::remove(staged_binary, error_code);
     }
     return 0;
   }
@@ -290,31 +308,33 @@ std::expected<std::string, std::string> parse_latest_tag(std::string_view releas
   }
   // Skip past "tag_name", optional whitespace, the colon, more whitespace,
   // then the opening quote.
-  auto i = key_pos + key.size();
-  while (i < releases_json.size() && (releases_json[i] == ' ' || releases_json[i] == '\t'))
+  auto cursor = key_pos + key.size();
+  while (cursor < releases_json.size() &&
+         (releases_json[cursor] == ' ' || releases_json[cursor] == '\t'))
   {
-    ++i;
+    ++cursor;
   }
-  if (i >= releases_json.size() || releases_json[i] != ':')
-  {
-    return std::unexpected("malformed tag_name field");
-  }
-  ++i;
-  while (i < releases_json.size() && (releases_json[i] == ' ' || releases_json[i] == '\t'))
-  {
-    ++i;
-  }
-  if (i >= releases_json.size() || releases_json[i] != '"')
+  if (cursor >= releases_json.size() || releases_json[cursor] != ':')
   {
     return std::unexpected("malformed tag_name field");
   }
-  ++i;
-  const auto end = releases_json.find('"', i);
+  ++cursor;
+  while (cursor < releases_json.size() &&
+         (releases_json[cursor] == ' ' || releases_json[cursor] == '\t'))
+  {
+    ++cursor;
+  }
+  if (cursor >= releases_json.size() || releases_json[cursor] != '"')
+  {
+    return std::unexpected("malformed tag_name field");
+  }
+  ++cursor;
+  const auto end = releases_json.find('"', cursor);
   if (end == std::string_view::npos)
   {
     return std::unexpected("unterminated tag_name string");
   }
-  return std::string{releases_json.substr(i, end - i)};
+  return std::string{releases_json.substr(cursor, end - cursor)};
 }
 
 }  // namespace update_internal
@@ -331,6 +351,11 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
 {
   try
   {
+    if (context.processRunner == nullptr)
+    {
+      return std::unexpected("No process runner configured");
+    }
+
     auto& logger = *context.logger;
 
     const auto platform = update_internal::detect_platform();
@@ -346,7 +371,7 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
     }
     else
     {
-      auto latest = default_fetch_latest_version();
+      auto latest = default_fetch_latest_version(context);
       if (!latest)
       {
         return std::unexpected(latest.error());
@@ -375,33 +400,33 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
                                      "/releases/download/" + target_version + "/" +
                                      artifact_name_for(*platform);
 
-    const auto staged = make_temp_download_path();
-    auto       dl     = default_download(artifact_url, staged);
-    if (!dl)
+    const auto staged          = make_temp_download_path();
+    auto       download_result = default_download(context, artifact_url, staged);
+    if (!download_result)
     {
-      return std::unexpected(dl.error());
+      return std::unexpected(download_result.error());
     }
 
-    const auto expected_sha = default_fetch_sha256(artifact_url);
+    const auto expected_sha = default_fetch_sha256(context, artifact_url);
     if (!expected_sha)
     {
-      std::error_code ec;
-      fs::remove(staged, ec);
+      std::error_code error_code;
+      fs::remove(staged, error_code);
       return std::unexpected(expected_sha.error());
     }
 
     const auto actual_sha = update_internal::sha256_file(staged);
     if (!actual_sha)
     {
-      std::error_code ec;
-      fs::remove(staged, ec);
+      std::error_code error_code;
+      fs::remove(staged, error_code);
       return std::unexpected(actual_sha.error());
     }
 
     if (trim(*actual_sha) != trim(*expected_sha))
     {
-      std::error_code ec;
-      fs::remove(staged, ec);
+      std::error_code error_code;
+      fs::remove(staged, error_code);
       return std::unexpected("sha256 mismatch (expected " + *expected_sha + ", got " + *actual_sha +
                              ")");
     }

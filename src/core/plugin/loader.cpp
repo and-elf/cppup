@@ -23,14 +23,14 @@ std::unexpected<LoadDiagnostic> err(LoadError code, std::string detail)
 
 std::expected<std::string, LoadDiagnostic> read_file(const std::filesystem::path& path)
 {
-  std::ifstream in(path, std::ios::binary);
-  if (!in.is_open())
+  std::ifstream ifs(path, std::ios::binary);
+  if (!ifs.is_open())
   {
     return err(LoadError::SidecarReadFailure, "cannot open " + path.string());
   }
   std::ostringstream buf;
-  buf << in.rdbuf();
-  if (!in.good() && !in.eof())
+  buf << ifs.rdbuf();
+  if (!ifs.good() && !ifs.eof())
   {
     return err(LoadError::SidecarReadFailure, "read error on " + path.string());
   }
@@ -42,12 +42,12 @@ std::expected<std::string, LoadDiagnostic> read_file(const std::filesystem::path
 // fields.
 using EntrySig = std::tuple<std::string, EntryKind, std::uint32_t>;
 
-std::set<EntrySig> entries_signature(const Manifest& m)
+std::set<EntrySig> entries_signature(const Manifest& manifest)
 {
   std::set<EntrySig> out;
-  for (const auto& e : m.entries)
+  for (const auto& entry : manifest.entries)
   {
-    out.emplace(e.id, e.kind, e.vtable_version);
+    out.emplace(entry.id, entry.kind, entry.vtable_version);
   }
   return out;
 }

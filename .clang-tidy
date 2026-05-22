@@ -5,6 +5,8 @@
 Checks: >
   -*,
   bugprone-*,
+  cert-*,
+  hicpp-*,
   performance-*,
   portability-*,
   readability-*,
@@ -14,6 +16,11 @@ Checks: >
   clang-analyzer-*,
   -modernize-use-trailing-return-type,
   -modernize-use-default-member-init,
+  -hicpp-avoid-c-arrays,
+  -hicpp-no-array-decay,
+  -hicpp-signed-bitwise,
+  -hicpp-uppercase-literal-suffix,
+  -hicpp-vararg,
   -readability-redundant-member-init,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-non-private-member-variables-in-classes,
@@ -29,8 +36,25 @@ Checks: >
   -performance-avoid-endl,
   -readability-magic-numbers,
   -readability-identifier-length
+  -readability-identifier-naming
+  -readability-identifier-should-be-in-braces
 
 WarningsAsErrors: ''
+
+# Surface implicit/narrowing conversion issues during tidy runs even when the
+# normal build is not compiled with these warnings enabled.
+ExtraArgs:
+  - -Wconversion
+  - -Wsign-conversion
+  - -Wfloat-conversion
+  - -Wimplicit-int-conversion
+  - -Wshorten-64-to-32
+  - -Wshadow
+  - -Wundef
+  - -Wold-style-cast
+  - -Woverloaded-virtual
+  - -Wnon-virtual-dtor
+  - -Wformat=2
 
 # Restrict header diagnostics to our own headers under src/ and include/.
 # Anchored to the project directory (`cppup/`) so that system headers like

@@ -62,22 +62,22 @@ inline std::expected<std::vector<std::string>, std::string> resolve_link_set(
     while (!stack.empty())
     {
       Frame&     frame = stack.back();
-      const auto it    = by_name.find(frame.name);
-      if (it == by_name.end())
+      const auto iter  = by_name.find(frame.name);
+      if (iter == by_name.end())
       {
         return std::unexpected("unknown library reference: " + frame.name);
       }
-      const auto& deps = it->second->libraries;
+      const auto& deps = iter->second->libraries;
 
       if (frame.next_dep < deps.size())
       {
-        const std::string& dep = deps[frame.next_dep++];
-        const auto         c   = color[dep];
-        if (c == Color::Black)
+        const std::string& dep       = deps[frame.next_dep++];
+        const auto         dep_color = color[dep];
+        if (dep_color == Color::Black)
         {
           continue;
         }
-        if (c == Color::Gray)
+        if (dep_color == Color::Gray)
         {
           return std::unexpected("cycle detected through library: " + dep);
         }
@@ -117,17 +117,17 @@ inline std::vector<std::string> aggregate_link_flags(const std::vector<std::stri
   std::unordered_set<std::string> seen;
   for (const auto& name : library_names)
   {
-    const auto it = by_name.find(name);
-    if (it == by_name.end())
+    const auto iter = by_name.find(name);
+    if (iter == by_name.end())
     {
       continue;
     }
-    for (const auto& f : it->second->link_flags)
+    for (const auto& flag : iter->second->link_flags)
     {
-      std::string s{f.flag};
-      if (seen.insert(s).second)
+      std::string flag_string{flag.flag};
+      if (seen.insert(flag_string).second)
       {
-        out.push_back(std::move(s));
+        out.push_back(std::move(flag_string));
       }
     }
   }

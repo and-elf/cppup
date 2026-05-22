@@ -1,8 +1,9 @@
 #include "compiler.hpp"
 
-#include <cstdlib>
 #include <iostream>
 #include <sstream>
+
+#include "../../SystemProcessRunner.hpp"
 
 namespace cppup::configuration
 {
@@ -32,16 +33,22 @@ CompilationResult ConfigurationCompiler::compile(const std::filesystem::path& bu
     return result;
   }
 
-  // Build the compiler command
-  std::string const command = build_compiler_command(build_cpp_path, shared_lib_path);
+  // Build the compiler request
+  const auto request = build_compiler_request(build_cpp_path, shared_lib_path);
 
   if (options_.verbose)
   {
-    std::cout << "Compiling configuration: " << command << std::endl;
+    std::ostringstream cmd;
+    cmd << request.command;
+    for (const auto& arg : request.args)
+    {
+      cmd << ' ' << arg;
+    }
+    std::cout << "Compiling configuration: " << cmd.str() << std::endl;
   }
 
   // Execute the compilation
-  result = execute_command(command);
+  result = execute_command(request);
 
   if (result.success)
   {
@@ -156,33 +163,16 @@ void ConfigurationCompiler::clean(const std::optional<std::filesystem::path>& bu
   }
 }
 
-CompilationResult ConfigurationCompiler::execute_command(const std::string& command)
+CompilationResult ConfigurationCompiler::execute_command(const ProcessRunRequest& request)
 {
   CompilationResult result;
 
-  // Execute the command and capture output
-  FILE* pipe = popen(command.c_str(), "r");
-  if (pipe == nullptr)
-  {
-    result.error_message = "Failed to execute compiler command";
-    result.exit_code     = -1;
-    return result;
-  }
-
-  // Read the output
-  std::array<char, 256> buffer{};
-  std::string           output;
-  while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
-  {
-    output += buffer.data();
-  }
-
-  // Get the exit code
-  int const exit_code = pclose(pipe);
-  result.exit_code    = exit_code;
+  SystemProcessRunner runner;
+  auto const          captured = runner.run_capture(request);
+  result.exit_code             = captured.exit_code;
 
   // Parse the output into lines
-  std::istringstream iss(output);
+  std::istringstream iss(captured.output);
   std::string        line;
   while (std::getline(iss, line))
   {
@@ -190,62 +180,54 @@ CompilationResult ConfigurationCompiler::execute_command(const std::string& comm
   }
 
   // Check if compilation was successful
-  result.success = (exit_code == 0);
+  result.success = (result.exit_code == 0);
 
   if (!result.success)
   {
-    result.error_message = "Compilation failed with exit code " + std::to_string(exit_code);
-    if (!output.empty())
+    result.error_message = "Compilation failed with exit code " + std::to_string(result.exit_code);
+    if (!captured.output.empty())
     {
-      result.error_message += ":\n" + output;
+      result.error_message += ":\n" + captured.output;
     }
   }
 
   return result;
 }
 
-std::string ConfigurationCompiler::build_compiler_command(
+ProcessRunRequest ConfigurationCompiler::build_compiler_request(
     const std::filesystem::path& build_cpp_path, const std::filesystem::path& output_path) const
 {
-  std::ostringstream cmd;
+  ProcessRunRequest request;
+  request.command = options_.compiler;
+  request.args.emplace_back("-std=" + options_.cpp_standard);
 
-  // Compiler
-  cmd << options_.compiler;
-
-  // C++ standard
-  cmd << " -std=" << options_.cpp_standard;
-
-  // Include paths
   for (const auto& include_path : options_.include_paths)
   {
-    cmd << " -I" << include_path;
+    request.args.emplace_back("-I" + include_path);
   }
 
-  // Compile flags
   for (const auto& flag : options_.compile_flags)
   {
-    cmd << " " << flag;
+    request.args.push_back(flag);
   }
 
-  // Debug symbols
   if (options_.debug_symbols)
   {
-    cmd << " -g";
+    request.args.emplace_back("-g");
   }
 
-  // Input file
-  cmd << " " << build_cpp_path.string();
+  request.args.push_back(build_cpp_path.string());
 
-  // Link flags
   for (const auto& flag : options_.link_flags)
   {
-    cmd << " " << flag;
+    request.args.push_back(flag);
   }
 
-  // Output file
-  cmd << " -o " << output_path.string();
+  request.args.emplace_back("-o");
+  request.args.push_back(output_path.string());
+  request.working_dir.clear();
 
-  return cmd.str();
+  return request;
 }
 
 void ConfigurationCompiler::ensure_output_directory() const

@@ -44,21 +44,21 @@ struct BuildOptions
   unsigned jobs = 0;
 };
 
-[[nodiscard]] constexpr bool enabled(Asan a) noexcept
+[[nodiscard]] constexpr bool enabled(Asan asan_option) noexcept
 {
-  return a == Asan::On;
+  return asan_option == Asan::On;
 }
-[[nodiscard]] constexpr bool enabled(Coverage c) noexcept
+[[nodiscard]] constexpr bool enabled(Coverage coverage_option) noexcept
 {
-  return c == Coverage::On;
+  return coverage_option == Coverage::On;
 }
-[[nodiscard]] constexpr bool enabled(Verbose v) noexcept
+[[nodiscard]] constexpr bool enabled(Verbose verbose_option) noexcept
 {
-  return v == Verbose::On;
+  return verbose_option == Verbose::On;
 }
-[[nodiscard]] constexpr bool enabled(WithTests w) noexcept
+[[nodiscard]] constexpr bool enabled(WithTests with_tests_option) noexcept
 {
-  return w == WithTests::On;
+  return with_tests_option == WithTests::On;
 }
 
 }  // namespace cppup::configuration

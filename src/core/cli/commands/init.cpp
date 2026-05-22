@@ -25,18 +25,18 @@ std::string substitute(std::string_view content, const std::string& project_name
 {
   std::string out;
   out.reserve(content.size());
-  std::size_t i = 0;
-  while (i < content.size())
+  std::size_t index{};
+  while (index < content.size())
   {
-    const auto pos = content.find(placeholder, i);
+    const auto pos = content.find(placeholder, index);
     if (pos == std::string_view::npos)
     {
-      out.append(content.substr(i));
+      out.append(content.substr(index));
       break;
     }
-    out.append(content.substr(i, pos - i));
+    out.append(content.substr(index, pos - index));
     out.append(project_name);
-    i = pos + placeholder.size();
+    index = pos + placeholder.size();
   }
   return out;
 }
@@ -69,8 +69,8 @@ bool category_enabled(std::string_view category, const InitOptions& options)
 void write_file(const fs::path& path, const std::string& content)
 {
   fs::create_directories(path.parent_path());
-  std::ofstream f(path, std::ios::binary);
-  f << content;
+  std::ofstream ofs(path, std::ios::binary);
+  ofs << content;
 }
 
 }  // namespace

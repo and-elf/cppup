@@ -85,13 +85,13 @@ PackageResolutionResult PackageResolver::merge_package_information(
   std::set<std::pair<std::string, std::string>> seen_definitions;
 
   const auto append_unique = [](std::vector<std::string>& out, std::set<std::string>& seen,
-                                const std::vector<std::string>& in)
+                                const std::vector<std::string>& input)
   {
-    for (const auto& v : in)
+    for (const auto& value : input)
     {
-      if (seen.insert(v).second)
+      if (seen.insert(value).second)
       {
-        out.push_back(v);
+        out.push_back(value);
       }
     }
   };

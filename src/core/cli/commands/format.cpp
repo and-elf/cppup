@@ -1,4 +1,3 @@
-#include <cstdlib>
 #include <expected>
 #include <filesystem>
 #include <string>
@@ -17,6 +16,11 @@ std::expected<int, std::string> executeFormat(bool                            ch
 {
   try
   {
+    if (context.processRunner == nullptr)
+    {
+      return std::unexpected("No process runner configured");
+    }
+
     context.logger->info(check_only ? "Checking code formatting..." : "Formatting code...");
 
     const bool has_clang_format = std::filesystem::exists(context.projectRoot / ".clang-format");
@@ -30,13 +34,13 @@ std::expected<int, std::string> executeFormat(bool                            ch
     const auto                         files =
         select_cpp_files(file_args, context.projectRoot, &skipped_non_cpp, &skipped_missing);
 
-    for (const auto& s : skipped_non_cpp)
+    for (const auto& skipped : skipped_non_cpp)
     {
-      context.logger->warning("Skipped non-C++ file: " + s.string());
+      context.logger->warning("Skipped non-C++ file: " + skipped.string());
     }
-    for (const auto& m : skipped_missing)
+    for (const auto& missing : skipped_missing)
     {
-      context.logger->warning("Skipped missing path: " + m.string());
+      context.logger->warning("Skipped missing path: " + missing.string());
     }
 
     if (files.empty())
@@ -47,21 +51,28 @@ std::expected<int, std::string> executeFormat(bool                            ch
 
     context.logger->info("Processing " + std::to_string(files.size()) + " files");
 
-    const std::string style_arg = has_clang_format ? " --style=file" : " --style=Google";
+    const std::string style_arg = has_clang_format ? "--style=file" : "--style=Google";
     int               issues    = 0;
     int               formatted = 0;
 
     for (const auto& file : files)
     {
-      std::string cmd = "clang-format";
-      cmd += check_only ? " --dry-run --Werror" : " -i";
-      cmd += style_arg;
-      cmd += " \"";
-      cmd += file.string();
-      cmd += "\"";
+      ProcessRunRequest request;
+      request.command = "clang-format";
+      request.args    = {style_arg, file.string()};
+      request.working_dir.clear();
+      if (check_only)
+      {
+        request.args.insert(request.args.begin(), "--Werror");
+        request.args.insert(request.args.begin(), "--dry-run");
+      }
+      else
+      {
+        request.args.insert(request.args.begin(), "-i");
+      }
 
-      const int rc = std::system(cmd.c_str());
-      if (rc != 0)
+      const int result_code = context.processRunner->run(request);
+      if (result_code != 0)
       {
         if (check_only)
         {

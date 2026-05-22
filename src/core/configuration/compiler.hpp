@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstdlib>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "../../ProcessRunner.h"
 
 namespace cppup::configuration
 {
@@ -96,15 +97,15 @@ class ConfigurationCompiler
   CompilerOptions options_;
 
   /**
-   * Execute a shell command and capture output
+   * Execute a compiler process request and capture output
    */
-  [[nodiscard]] static CompilationResult execute_command(const std::string& command);
+  [[nodiscard]] static CompilationResult execute_command(const ProcessRunRequest& request);
 
   /**
-   * Build the compiler command line
+   * Build the compiler process request
    */
-  [[nodiscard]] std::string build_compiler_command(const std::filesystem::path& build_cpp_path,
-                                                   const std::filesystem::path& output_path) const;
+  [[nodiscard]] ProcessRunRequest build_compiler_request(
+      const std::filesystem::path& build_cpp_path, const std::filesystem::path& output_path) const;
 
   /**
    * Ensure output directory exists

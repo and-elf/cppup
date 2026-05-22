@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -27,23 +28,32 @@ namespace
 // rule-of-five.
 struct SqliteCloser
 {
-  void operator()(sqlite3* db) const noexcept
+  void operator()(sqlite3* database) const noexcept
   {
-    if (db != nullptr)
+    if (database != nullptr)
     {
-      sqlite3_close(db);
+      sqlite3_close(database);
     }
   }
 };
 using SqliteHandle = std::unique_ptr<sqlite3, SqliteCloser>;
 
 // sqlite3_column_text returns const unsigned char* but the SQLite docs treat
-// it as interchangeable with const char* for UTF-8 text. Centralize the cast
-// so the NOLINT lives in one place instead of every column access.
-[[nodiscard]] const char* column_cstr(sqlite3_stmt* stmt, int idx) noexcept
+// it as interchangeable with const char* for UTF-8 text. Centralize cast +
+// null handling so malformed rows are rejected safely instead of causing UB.
+[[nodiscard]] std::optional<std::string> column_text(sqlite3_stmt* stmt, int idx)
 {
+  if (sqlite3_column_type(stmt, idx) == SQLITE_NULL)
+  {
+    return std::nullopt;
+  }
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  return reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
+  const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, idx));
+  if (text_ptr == nullptr)
+  {
+    return std::nullopt;
+  }
+  return std::string{text_ptr};
 }
 
 std::string to_hex(const unsigned char* data, std::size_t len)
@@ -62,8 +72,8 @@ std::string to_hex(const unsigned char* data, std::size_t len)
 // runtime condition.
 std::optional<std::string> sha256_file(const std::filesystem::path& file)
 {
-  std::ifstream in(file, std::ios::binary);
-  if (!in)
+  std::ifstream input(file, std::ios::binary);
+  if (!input)
   {
     return std::nullopt;
   }
@@ -73,13 +83,13 @@ std::optional<std::string> sha256_file(const std::filesystem::path& file)
   CPPUP_CHECK(EVP_DigestInit_ex(ctx, EVP_sha256(), nullptr) == 1, "EVP_DigestInit_ex failed");
 
   std::array<char, 8192> buffer{};
-  while (in)
+  while (input)
   {
-    in.read(buffer.data(), buffer.size());
-    auto n = in.gcount();
-    if (n > 0)
+    input.read(buffer.data(), buffer.size());
+    auto bytes_read = input.gcount();
+    if (bytes_read > 0)
     {
-      CPPUP_CHECK(EVP_DigestUpdate(ctx, buffer.data(), static_cast<std::size_t>(n)) == 1,
+      CPPUP_CHECK(EVP_DigestUpdate(ctx, buffer.data(), static_cast<std::size_t>(bytes_read)) == 1,
                   "EVP_DigestUpdate failed");
     }
   }
@@ -93,16 +103,16 @@ std::optional<std::string> sha256_file(const std::filesystem::path& file)
   return to_hex(digest.data(), digest_len);
 }
 
-std::string serialize_string_vector(const std::vector<std::string>& v)
+std::string serialize_string_vector(const std::vector<std::string>& values)
 {
   std::ostringstream oss;
-  for (std::size_t i = 0; i < v.size(); ++i)
+  for (std::size_t i = 0; i < values.size(); ++i)
   {
     if (i > 0)
     {
       oss << '\x1f';
     }
-    oss << v[i];
+    oss << values[i];
   }
   return oss.str();
 }
@@ -114,13 +124,13 @@ std::string target_signature(const BuildTarget& target)
       << serialize_string_vector(target.compile_flags) << '\x1e'
       << serialize_string_vector(target.link_flags) << '\x1e'
       << serialize_string_vector(target.definitions);
-  for (const auto& p : target.include_paths)
+  for (const auto& include_path : target.include_paths)
   {
-    oss << '\x1f' << p.string();
+    oss << '\x1f' << include_path.string();
   }
-  for (const auto& p : target.source_files)
+  for (const auto& source_file : target.source_files)
   {
-    oss << '\x1f' << p.string();
+    oss << '\x1f' << source_file.string();
   }
   return oss.str();
 }
@@ -128,13 +138,18 @@ std::string target_signature(const BuildTarget& target)
 class SqliteBuildCache final : public BuildCache
 {
  public:
-  SqliteBuildCache(SqliteHandle db, std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db) :
-      db_(std::move(db)), dep_db_(std::move(dep_db))
+  using BuildCache::operator=;
+
+  SqliteBuildCache(SqliteHandle                                           database,
+                   std::unique_ptr<cppup::dependency::DependencyDatabase> dependency_database) :
+      db_(std::move(database)), dep_db_(std::move(dependency_database))
   {
   }
 
   bool needs_rebuild(const BuildTarget& target) override
   {
+    const std::scoped_lock lock(mu_);
+
     if (!std::filesystem::exists(target.output_path))
     {
       record_miss();
@@ -148,7 +163,14 @@ class SqliteBuildCache final : public BuildCache
       return true;
     }
 
-    for (const auto& dep : load_dependencies(target.name))
+    auto dependencies = load_dependencies(target.name);
+    if (!dependencies)
+    {
+      record_miss();
+      return true;
+    }
+
+    for (const auto& dep : *dependencies)
     {
       if (!std::filesystem::exists(dep.file_path))
       {
@@ -175,6 +197,8 @@ class SqliteBuildCache final : public BuildCache
   void cache_build_result(const BuildTarget&                 target,
                           const std::vector<FileDependency>& dependencies) override
   {
+    const std::scoped_lock lock(mu_);
+
     exec("BEGIN IMMEDIATE");
 
     const char*   sql  = R"(
@@ -242,6 +266,8 @@ class SqliteBuildCache final : public BuildCache
 
   CacheStats get_stats() override
   {
+    const std::scoped_lock lock(mu_);
+
     CacheStats stats;
     stats.hits       = hits_;
     stats.misses     = misses_;
@@ -269,9 +295,16 @@ class SqliteBuildCache final : public BuildCache
     std::optional<StoredEntry> result;
     if (sqlite3_step(stmt) == SQLITE_ROW)
     {
+      auto output_path = column_text(stmt, 0);
+      auto signature   = column_text(stmt, 1);
+      if (!output_path || !signature)
+      {
+        sqlite3_finalize(stmt);
+        return std::nullopt;
+      }
       StoredEntry entry;
-      entry.output_path = column_cstr(stmt, 0);
-      entry.signature   = column_cstr(stmt, 1);
+      entry.output_path = *output_path;
+      entry.signature   = *signature;
       entry.build_time  = sqlite3_column_int64(stmt, 2);
       result            = std::move(entry);
     }
@@ -279,7 +312,7 @@ class SqliteBuildCache final : public BuildCache
     return result;
   }
 
-  std::vector<FileDependency> load_dependencies(const std::string& name)
+  std::optional<std::vector<FileDependency>> load_dependencies(const std::string& name)
   {
     const char*   sql  = "SELECT file_path, checksum FROM file_dependencies WHERE target_name = ?";
     sqlite3_stmt* stmt = nullptr;
@@ -289,9 +322,16 @@ class SqliteBuildCache final : public BuildCache
     std::vector<FileDependency> deps;
     while (sqlite3_step(stmt) == SQLITE_ROW)
     {
+      auto file_path = column_text(stmt, 0);
+      auto checksum  = column_text(stmt, 1);
+      if (!file_path || !checksum)
+      {
+        sqlite3_finalize(stmt);
+        return std::nullopt;
+      }
       FileDependency dep;
-      dep.file_path = column_cstr(stmt, 0);
-      dep.checksum  = column_cstr(stmt, 1);
+      dep.file_path = *file_path;
+      dep.checksum  = *checksum;
       deps.push_back(std::move(dep));
     }
     sqlite3_finalize(stmt);
@@ -315,9 +355,10 @@ class SqliteBuildCache final : public BuildCache
     CPPUP_CHECK(sqlite3_prepare_v2(db_.get(), sql, -1, &stmt, nullptr) == SQLITE_OK,
                 std::string{"prepare failed: "} + sqlite3_errmsg(db_.get()));
     sqlite3_bind_text(stmt, 1, arg.c_str(), -1, SQLITE_TRANSIENT);
-    const auto rc = sqlite3_step(stmt);
+    const auto result_code = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    CPPUP_CHECK(rc == SQLITE_DONE, std::string{"step failed: "} + sqlite3_errmsg(db_.get()));
+    CPPUP_CHECK(result_code == SQLITE_DONE,
+                std::string{"step failed: "} + sqlite3_errmsg(db_.get()));
   }
 
   void record_hit()
@@ -331,6 +372,7 @@ class SqliteBuildCache final : public BuildCache
 
   SqliteHandle                                           db_;
   std::unique_ptr<cppup::dependency::DependencyDatabase> dep_db_;
+  std::mutex                                             mu_;
   std::size_t                                            hits_   = 0;
   std::size_t                                            misses_ = 0;
 };
@@ -341,10 +383,10 @@ class SqliteBuildCache final : public BuildCache
 // corruption or disk-full).
 sqlite3* open_cache_db(const std::filesystem::path& db_path)
 {
-  sqlite3* db = nullptr;
-  if (sqlite3_open(db_path.string().c_str(), &db) != SQLITE_OK)
+  sqlite3* database = nullptr;
+  if (sqlite3_open(db_path.string().c_str(), &database) != SQLITE_OK)
   {
-    sqlite3_close(db);
+    sqlite3_close(database);
     return nullptr;
   }
 
@@ -366,22 +408,22 @@ sqlite3* open_cache_db(const std::filesystem::path& db_path)
   )";
 
   char* err = nullptr;
-  if (sqlite3_exec(db, schema, nullptr, nullptr, &err) != SQLITE_OK)
+  if (sqlite3_exec(database, schema, nullptr, nullptr, &err) != SQLITE_OK)
   {
     sqlite3_free(err);
-    sqlite3_close(db);
+    sqlite3_close(database);
     return nullptr;
   }
 
-  return db;
+  return database;
 }
 
 }  // namespace
 
 std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem::path& source_file)
 {
-  std::ifstream in(source_file);
-  if (!in)
+  std::ifstream input(source_file);
+  if (!input)
   {
     return {};
   }
@@ -389,12 +431,12 @@ std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem:
   static const std::regex  include_re(R"(^\s*#\s*include\s*[<"]([^>"]+)[>"])");
   std::vector<std::string> includes;
   std::string              line;
-  while (std::getline(in, line))
+  while (std::getline(input, line))
   {
-    std::smatch m;
-    if (std::regex_search(line, m, include_re))
+    std::smatch match_result;
+    if (std::regex_search(line, match_result, include_re))
     {
-      includes.push_back(m[1].str());
+      includes.push_back(match_result[1].str());
     }
   }
   return includes;
@@ -402,11 +444,11 @@ std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem:
 
 std::unique_ptr<BuildCache> create_build_cache(
     const std::filesystem::path&                           cache_dir,
-    std::unique_ptr<cppup::dependency::DependencyDatabase> db)
+    std::unique_ptr<cppup::dependency::DependencyDatabase> dependency_database)
 {
-  std::error_code ec;
-  std::filesystem::create_directories(cache_dir, ec);
-  if (ec)
+  std::error_code error_code;
+  std::filesystem::create_directories(cache_dir, error_code);
+  if (error_code)
   {
     return nullptr;
   }
@@ -417,7 +459,8 @@ std::unique_ptr<BuildCache> create_build_cache(
     return nullptr;
   }
 
-  return std::unique_ptr<BuildCache>(new SqliteBuildCache(SqliteHandle{handle}, std::move(db)));
+  return std::unique_ptr<BuildCache>(
+      new SqliteBuildCache(SqliteHandle{handle}, std::move(dependency_database)));
 }
 
 }  // namespace cppup::build

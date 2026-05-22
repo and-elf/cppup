@@ -6,9 +6,9 @@ namespace cppup::configuration
 namespace
 {
 
-const char* cxx_std_flag(CxxStandard s)
+const char* cxx_std_flag(CxxStandard standard)
 {
-  switch (s)
+  switch (standard)
   {
     case CxxStandard::Cxx17:
       return "-std=c++17";
@@ -54,9 +54,9 @@ std::vector<std::string> dialect_flags(const Toolchain& toolchain)
     out.emplace_back(std_flag);
   }
   append_warning_flags(out, toolchain.warnings);
-  for (const auto& f : toolchain.extra_flags)
+  for (const auto& flag : toolchain.extra_flags)
   {
-    out.emplace_back(f);
+    out.emplace_back(flag);
   }
   return out;
 }

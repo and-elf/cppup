@@ -61,9 +61,9 @@ struct CommandResult
   int  code    = 0;
   bool handled = false;
 
-  void set(int c) noexcept
+  void set(int result_code) noexcept
   {
-    code    = c;
+    code    = result_code;
     handled = true;
   }
 };
@@ -159,9 +159,9 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
 // CLI11 only writes bools; this is the single bridge to the typed
 // BuildOptions / InitOptions enums.
 template <typename E>
-[[nodiscard]] constexpr E to_enum(bool b) noexcept
+[[nodiscard]] constexpr E to_enum(bool bool_value) noexcept
 {
-  return b ? E::On : E::Off;
+  return bool_value ? E::On : E::Off;
 }
 
 #ifndef CPPUP_SLIM

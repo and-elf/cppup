@@ -45,16 +45,16 @@ struct Subproject
 inline std::expected<BuildSystem, std::string> infer_build_system(
     const std::filesystem::path& dir, const std::string& cppup_build_file = "build.cpp")
 {
-  std::error_code ec;
-  if (!std::filesystem::is_directory(dir, ec))
+  std::error_code error_code{};
+  if (!std::filesystem::is_directory(dir, error_code))
   {
     return std::unexpected("not a directory: " + dir.string());
   }
 
-  const bool has_build_cpp  = std::filesystem::exists(dir / cppup_build_file, ec);
-  const bool has_cmakelists = std::filesystem::exists(dir / "CMakeLists.txt", ec);
-  const bool has_makefile   = std::filesystem::exists(dir / "Makefile", ec) ||
-                            std::filesystem::exists(dir / "GNUmakefile", ec);
+  const bool has_build_cpp  = std::filesystem::exists(dir / cppup_build_file, error_code);
+  const bool has_cmakelists = std::filesystem::exists(dir / "CMakeLists.txt", error_code);
+  const bool has_makefile   = std::filesystem::exists(dir / "Makefile", error_code) ||
+                            std::filesystem::exists(dir / "GNUmakefile", error_code);
 
   const int marker_count = static_cast<int>(has_build_cpp) + static_cast<int>(has_cmakelists) +
                            static_cast<int>(has_makefile);
@@ -80,9 +80,9 @@ inline std::expected<BuildSystem, std::string> infer_build_system(
   // headers but no compilable source files.
   bool has_source = false;
   bool has_header = false;
-  for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+  for (const auto& entry : std::filesystem::directory_iterator(dir, error_code))
   {
-    if (!entry.is_regular_file(ec))
+    if (!entry.is_regular_file(error_code))
     {
       continue;
     }

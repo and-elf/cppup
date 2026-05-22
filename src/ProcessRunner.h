@@ -3,6 +3,19 @@
 #include <string>
 #include <vector>
 
+struct ProcessRunRequest
+{
+  std::string              command;
+  std::vector<std::string> args;
+  std::string              working_dir;
+};
+
+struct ProcessCaptureResult
+{
+  int         exit_code = -1;
+  std::string output;
+};
+
 class ProcessRunner
 {
  public:
@@ -13,6 +26,6 @@ class ProcessRunner
   ProcessRunner(ProcessRunner&&)                 = delete;
   ProcessRunner& operator=(ProcessRunner&&)      = delete;
 
-  virtual int run(const std::string& command, const std::vector<std::string>& args,
-                  const std::string& working_dir) = 0;
+  virtual int                  run(const ProcessRunRequest& request)         = 0;
+  virtual ProcessCaptureResult run_capture(const ProcessRunRequest& request) = 0;
 };

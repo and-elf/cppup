@@ -99,10 +99,10 @@ std::vector<DependencyNode> build_dependency_graph(const std::vector<BuildStep>&
   {
     for (const auto& dep_name : steps[i].dependencies)
     {
-      auto it = name_to_index.find(dep_name);
-      if (it != name_to_index.end())
+      auto iter = name_to_index.find(dep_name);
+      if (iter != name_to_index.end())
       {
-        size_t const dep_index = it->second;
+        size_t const dep_index = iter->second;
         graph[i].dependencies.push_back(dep_index);
         graph[dep_index].dependents.push_back(i);
         graph[i].indegree++;
@@ -332,7 +332,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
   }
 
   // Wait for all workers to complete
-  std::ranges::for_each(workers, [](std::thread& t) { t.join(); });
+  std::ranges::for_each(workers, [](std::thread& thread) { thread.join(); });
 
   // Check final results
   for (const auto& step_result : result.step_results)

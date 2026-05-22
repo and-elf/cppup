@@ -4,6 +4,7 @@
 
 #include "SystemProcessRunner.hpp"
 #include "core/cli/cli_application.hpp"
+#include "core/cli/process_runner_git_interface.hpp"
 #include "core/logger/console/console_logger.hpp"
 
 int main(int argc, char* argv[])
@@ -21,6 +22,8 @@ int main(int argc, char* argv[])
 
     // Create process runner
     context.processRunner = std::make_unique<SystemProcessRunner>();
+    context.git =
+        std::make_unique<cppup::cli::ProcessRunnerGitInterface>(context.processRunner.get());
 
     // Create and run CLI application
     cppup::cli::CLIApplication app(std::move(context));

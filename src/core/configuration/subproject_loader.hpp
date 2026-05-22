@@ -30,12 +30,12 @@ inline BuildConfiguration rebase_subproject_outputs(const BuildConfiguration& ch
 
   const auto rebase = [&](const std::string& src) -> std::string
   {
-    const std::filesystem::path p{src};
-    if (p.is_absolute() || subproject_path.empty())
+    const std::filesystem::path path{src};
+    if (path.is_absolute() || subproject_path.empty())
     {
       return src;
     }
-    auto joined = (prefix / p).lexically_normal().generic_string();
+    auto joined = (prefix / path).lexically_normal().generic_string();
     while (joined.size() > 1 && joined.back() == '/')
     {
       joined.pop_back();
@@ -49,9 +49,9 @@ inline BuildConfiguration rebase_subproject_outputs(const BuildConfiguration& ch
   for (const auto& lib : child.libraries)
   {
     Library rebased = lib;
-    for (auto& s : rebased.sources)
+    for (auto& src : rebased.sources)
     {
-      s = rebase(s);
+      src = rebase(src);
     }
     out.libraries.push_back(std::move(rebased));
   }
@@ -60,9 +60,9 @@ inline BuildConfiguration rebase_subproject_outputs(const BuildConfiguration& ch
   for (const auto& bin : child.binaries)
   {
     Binary rebased = bin;
-    for (auto& s : rebased.sources)
+    for (auto& src : rebased.sources)
     {
-      s = rebase(s);
+      src = rebase(src);
     }
     out.binaries.push_back(std::move(rebased));
   }
@@ -71,9 +71,9 @@ inline BuildConfiguration rebase_subproject_outputs(const BuildConfiguration& ch
   for (const auto& test : child.tests)
   {
     Test rebased = test;
-    for (auto& s : rebased.sources)
+    for (auto& src : rebased.sources)
     {
-      s = rebase(s);
+      src = rebase(src);
     }
     out.tests.push_back(std::move(rebased));
   }
@@ -91,13 +91,13 @@ namespace detail
 {
 
 inline std::expected<BuildSystem, std::string> resolve_build_system(
-    const Subproject& sp, const std::filesystem::path& sp_dir)
+    const Subproject& sub_project, const std::filesystem::path& sp_dir)
 {
-  if (sp.build_system)
+  if (sub_project.build_system)
   {
-    return *sp.build_system;
+    return *sub_project.build_system;
   }
-  return infer_build_system(sp_dir, sp.build_file);
+  return infer_build_system(sp_dir, sub_project.build_file);
 }
 
 inline std::expected<BuildConfiguration, std::string> compile_and_load(
@@ -179,9 +179,9 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
   };
   std::vector<Entry> worklist;
   worklist.reserve(root_subs.size());
-  for (auto& sp : root_subs)
+  for (auto& sub_project : root_subs)
   {
-    worklist.push_back({std::move(sp), ""});
+    worklist.push_back({std::move(sub_project), ""});
   }
 
   while (!worklist.empty())
@@ -193,16 +193,16 @@ inline std::expected<BuildConfiguration, std::string> load_with_subprojects(
         entry.parent_rel.empty() ? entry.sp.path : entry.parent_rel + "/" + entry.sp.path;
     const auto sp_dir = root_dir / sp_rel;
 
-    auto bs = detail::resolve_build_system(entry.sp, sp_dir);
-    if (!bs)
+    auto build_system = detail::resolve_build_system(entry.sp, sp_dir);
+    if (!build_system)
     {
-      return std::unexpected("subproject " + sp_rel + ": " + bs.error());
+      return std::unexpected("subproject " + sp_rel + ": " + build_system.error());
     }
-    if (*bs != BuildSystem::Cppup)
+    if (*build_system != BuildSystem::Cppup)
     {
       Subproject external   = entry.sp;
       external.path         = sp_rel;
-      external.build_system = *bs;
+      external.build_system = *build_system;
       merged.subprojects.push_back(std::move(external));
       continue;
     }

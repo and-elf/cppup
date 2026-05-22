@@ -35,7 +35,19 @@ namespace
 {
 
 namespace conf = cppup::configuration;
-namespace bld  = cppup::build;
+
+namespace bld = cppup::build;
+
+std::string format_command_for_log(const std::string& command, const std::vector<std::string>& args)
+{
+  std::ostringstream cmd;
+  cmd << command;
+  for (const auto& arg : args)
+  {
+    cmd << ' ' << arg;
+  }
+  return cmd.str();
+}
 
 // Project/build directory pair carried through the build pipeline. Bundled
 // so signatures don't end up with two adjacent fs::path parameters that are
@@ -51,9 +63,9 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
 {
   if (config.toolchain)
   {
-    for (auto& f : conf::dialect_flags(*config.toolchain))
+    for (auto& flag : conf::dialect_flags(*config.toolchain))
     {
-      out.emplace_back(std::move(f));
+      out.emplace_back(std::move(flag));
     }
   }
   for (const auto& flag : config.compile_flags)
@@ -62,12 +74,12 @@ void append_common_flags(std::vector<std::string>& out, const conf::BuildConfigu
   }
   for (const auto& def : config.definitions)
   {
-    std::string d = "-D" + std::string(def.name);
+    std::string definition = "-D" + std::string(def.name);
     if (!def.value.empty())
     {
-      d += "=" + std::string(def.value);
+      definition += "=" + std::string(def.value);
     }
-    out.push_back(std::move(d));
+    out.push_back(std::move(definition));
   }
   for (const auto& inc : config.include_paths)
   {
@@ -140,10 +152,10 @@ struct ProgressReporter
   std::size_t              total{0};
   int                      width{1};
 
-  void set_total(std::size_t t) noexcept
+  void set_total(std::size_t total_to_set) noexcept
   {
-    total = t;
-    width = static_cast<int>(std::max<std::size_t>(1, std::to_string(t).size()));
+    total = total_to_set;
+    width = static_cast<int>(std::max<std::size_t>(1, std::to_string(total_to_set).size()));
   }
 
   void step(std::string_view action, std::string_view name)
@@ -152,9 +164,9 @@ struct ProgressReporter
     {
       return;
     }
-    const auto             n = done.fetch_add(1, std::memory_order_relaxed) + 1;
-    const std::scoped_lock lk(print_mu);
-    std::cout << '[' << std::setw(width) << n << '/' << total << "] " << action << ' ' << name
+    const auto             count = done.fetch_add(1, std::memory_order_relaxed) + 1;
+    const std::scoped_lock lock(print_mu);
+    std::cout << '[' << std::setw(width) << count << '/' << total << "] " << action << ' ' << name
               << '\n';
   }
 };
@@ -185,18 +197,18 @@ void run_in_parallel(const std::vector<Item>& items, unsigned jobs, Work work)
   {
     while (!aborted.load(std::memory_order_relaxed))
     {
-      const std::size_t i = next.fetch_add(1, std::memory_order_relaxed);
-      if (i >= items.size())
+      const std::size_t index = next.fetch_add(1, std::memory_order_relaxed);
+      if (index >= items.size())
       {
         return;
       }
       try
       {
-        work(items[i]);
+        work(items[index]);
       }
       catch (const std::exception& e)
       {
-        const std::scoped_lock lk(err_mu);
+        const std::scoped_lock lock(err_mu);
         if (!aborted.exchange(true))
         {
           first_err = e.what();
@@ -212,9 +224,9 @@ void run_in_parallel(const std::vector<Item>& items, unsigned jobs, Work work)
   {
     threads.emplace_back(worker);
   }
-  for (auto& th : threads)
+  for (auto& thread : threads)
   {
-    th.join();
+    thread.join();
   }
 
   if (aborted.load())
@@ -229,8 +241,8 @@ void run_in_parallel(const std::vector<Item>& items, unsigned jobs, Work work)
 // kill child processes). The logger is serialized so debug lines don't
 // interleave. Throws runtime_error with the first failure message after join.
 void compile_objects_parallel(const std::string& compiler, const std::vector<CompileTask>& tasks,
-                              const std::vector<std::string>& flags, unsigned jobs, Logger& logger,
-                              ProgressReporter* progress)
+                              const std::vector<std::string>& flags, unsigned jobs,
+                              ProcessRunner& runner, Logger& logger, ProgressReporter* progress)
 {
   if (tasks.empty())
   {
@@ -250,35 +262,39 @@ void compile_objects_parallel(const std::string& compiler, const std::vector<Com
   {
     while (!aborted.load(std::memory_order_relaxed))
     {
-      const std::size_t i = next.fetch_add(1, std::memory_order_relaxed);
-      if (i >= tasks.size())
+      const std::size_t index = next.fetch_add(1, std::memory_order_relaxed);
+      if (index >= tasks.size())
       {
         return;
       }
-      const auto&        t = tasks[i];
-      std::ostringstream cmd;
-      cmd << compiler << " -c";
-      for (const auto& f : flags)
+      const auto&              task = tasks[index];
+      std::vector<std::string> args;
+      args.reserve(flags.size() + 4);
+      args.emplace_back("-c");
+      for (const auto& flag : flags)
       {
-        cmd << ' ' << f;
+        args.push_back(flag);
       }
-      cmd << ' ' << t.source.string() << " -o " << t.object.string();
+      args.push_back(task.source.string());
+      args.emplace_back("-o");
+      args.push_back(task.object.string());
       {
-        const std::scoped_lock lk(log_mu);
-        logger.debug("compile: " + cmd.str());
+        const std::scoped_lock lock(log_mu);
+        logger.debug("compile: " + format_command_for_log(compiler, args));
       }
-      if (std::system(cmd.str().c_str()) != 0)
+      if (runner.run(ProcessRunRequest{
+              .command = compiler, .args = std::move(args), .working_dir = ""}) != 0)
       {
-        const std::scoped_lock lk(err_mu);
+        const std::scoped_lock lock(err_mu);
         if (!aborted.exchange(true))
         {
-          first_err = "compilation failed: " + t.source.string();
+          first_err = "compilation failed: " + task.source.string();
         }
         return;
       }
       if (progress != nullptr)
       {
-        progress->step("compiling", t.source.string());
+        progress->step("compiling", task.source.string());
       }
     }
   };
@@ -289,9 +305,9 @@ void compile_objects_parallel(const std::string& compiler, const std::vector<Com
   {
     threads.emplace_back(worker);
   }
-  for (auto& th : threads)
+  for (auto& thread : threads)
   {
-    th.join();
+    thread.join();
   }
 
   if (aborted.load())
@@ -312,6 +328,7 @@ struct BuildContext
   const BuildPaths*               paths;
   bld::BuildCache*                cache;
   conf::BuildOptions              options;
+  ProcessRunner*                  process_runner;
   Logger*                         logger;
   ProgressReporter*               progress;
 };
@@ -353,17 +370,20 @@ bool build_library(const conf::Library& library, const BuildContext& ctx)
     lib_tasks.push_back({src, obj});
     objects.push_back(obj);
   }
-  compile_objects_parallel("g++", lib_tasks, target.compile_flags, ctx.options.jobs, *ctx.logger,
-                           ctx.progress);
+  compile_objects_parallel("g++", lib_tasks, target.compile_flags, ctx.options.jobs,
+                           *ctx.process_runner, *ctx.logger, ctx.progress);
 
-  std::ostringstream ar_cmd;
-  ar_cmd << "ar rcs " << target.output_path.string();
+  std::vector<std::string> ar_args;
+  ar_args.reserve(objects.size() + 2);
+  ar_args.emplace_back("rcs");
+  ar_args.push_back(target.output_path.string());
   for (const auto& obj : objects)
   {
-    ar_cmd << ' ' << obj.string();
+    ar_args.push_back(obj.string());
   }
-  ctx.logger->debug("archive: " + ar_cmd.str());
-  if (std::system(ar_cmd.str().c_str()) != 0)
+  ctx.logger->debug("archive: " + format_command_for_log("ar", ar_args));
+  if (ctx.process_runner->run(
+          ProcessRunRequest{.command = "ar", .args = std::move(ar_args), .working_dir = ""}) != 0)
   {
     throw std::runtime_error("archive failed: " + library.name);
   }
@@ -404,17 +424,17 @@ std::vector<std::string> compose_link_flags(const ResolvedLinks&            reso
     }
     link_flags.emplace_back("-Wl,--end-group");
   }
-  for (const auto& f : resolved.library_flags)
+  for (const auto& flag : resolved.library_flags)
   {
-    link_flags.emplace_back(f);
+    link_flags.emplace_back(flag);
   }
-  for (const auto& f : config.link_flags)
+  for (const auto& flag : config.link_flags)
   {
-    link_flags.emplace_back(f.flag);
+    link_flags.emplace_back(flag.flag);
   }
-  for (const auto& f : extra_link_flags)
+  for (const auto& flag : extra_link_flags)
   {
-    link_flags.emplace_back(f);
+    link_flags.emplace_back(flag);
   }
   if (conf::enabled(options.asan))
   {
@@ -517,23 +537,25 @@ bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
     bin_tasks.push_back({src, obj});
     bin_objects.push_back(obj);
   }
-  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, ctx.options.jobs, *ctx.logger,
-                           ctx.progress);
+  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, ctx.options.jobs,
+                           *ctx.process_runner, *ctx.logger, ctx.progress);
 
-  std::ostringstream cmd;
-  cmd << compiler;
+  std::vector<std::string> link_args;
+  link_args.reserve(bin_objects.size() + target.link_flags.size() + 2);
   for (const auto& obj : bin_objects)
   {
-    cmd << ' ' << obj.string();
+    link_args.push_back(obj.string());
   }
-  for (const auto& f : target.link_flags)
+  for (const auto& flag : target.link_flags)
   {
-    cmd << ' ' << f;
+    link_args.push_back(flag);
   }
-  cmd << " -o " << target.output_path.string();
+  link_args.emplace_back("-o");
+  link_args.push_back(target.output_path.string());
 
-  ctx.logger->debug("link: " + cmd.str());
-  if (std::system(cmd.str().c_str()) != 0)
+  ctx.logger->debug("link: " + format_command_for_log(compiler, link_args));
+  if (ctx.process_runner->run(ProcessRunRequest{
+          .command = compiler, .args = std::move(link_args), .working_dir = ""}) != 0)
   {
     throw std::runtime_error(spec.kind + " link failed: " + spec.name);
   }
@@ -547,53 +569,52 @@ bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
 // Hand off a non-Cppup subproject to its native build system. The external
 // build's stdout/stderr flows through directly — we don't wrap it in
 // progress reporting. Throws runtime_error on external-tool failure.
-void run_external_subproject(const conf::Subproject& sp, const std::filesystem::path& sp_dir,
+void run_external_subproject(const conf::Subproject&      sub_project,
+                             const std::filesystem::path& sp_dir, ProcessRunner& runner,
                              Logger& logger)
 {
-  if (!sp.build_system)
+  if (!sub_project.build_system)
   {
     return;
   }
-  switch (*sp.build_system)
+  switch (*sub_project.build_system)
   {
     case conf::BuildSystem::CMake:
     {
-      logger.info("Using CMake for subproject " + sp.path);
-      std::ostringstream cfg;
-      cfg << "cmake -S " << sp_dir.string() << " -B " << (sp_dir / "build").string();
-      for (const auto& a : sp.build_args)
+      logger.info("Using CMake for subproject " + sub_project.path);
+      std::vector<std::string> cfg_args{"-S", sp_dir.string(), "-B", (sp_dir / "build").string()};
+      for (const auto& arg : sub_project.build_args)
       {
-        cfg << ' ' << a;
+        cfg_args.push_back(arg);
       }
-      if (std::system(cfg.str().c_str()) != 0)
+      if (runner.run(ProcessRunRequest{
+              .command = "cmake", .args = std::move(cfg_args), .working_dir = ""}) != 0)
       {
-        throw std::runtime_error("subproject " + sp.path + ": cmake configure failed");
+        throw std::runtime_error("subproject " + sub_project.path + ": cmake configure failed");
       }
-      std::ostringstream bld_cmd;
-      bld_cmd << "cmake --build " << (sp_dir / "build").string();
-      if (std::system(bld_cmd.str().c_str()) != 0)
+      const std::vector<std::string> build_args{"--build", (sp_dir / "build").string()};
+      if (runner.run(
+              ProcessRunRequest{.command = "cmake", .args = build_args, .working_dir = ""}) != 0)
       {
-        throw std::runtime_error("subproject " + sp.path + ": cmake build failed");
+        throw std::runtime_error("subproject " + sub_project.path + ": cmake build failed");
       }
       return;
     }
     case conf::BuildSystem::Make:
     {
-      logger.info("Using Make for subproject " + sp.path);
-      std::ostringstream make_cmd;
-      make_cmd << "make -C " << sp_dir.string();
-      for (const auto& a : sp.build_args)
+      logger.info("Using Make for subproject " + sub_project.path);
+      std::vector<std::string> make_args(sub_project.build_args.begin(),
+                                         sub_project.build_args.end());
+      if (runner.run(ProcessRunRequest{
+              .command = "make", .args = std::move(make_args), .working_dir = sp_dir.string()}) !=
+          0)
       {
-        make_cmd << ' ' << a;
-      }
-      if (std::system(make_cmd.str().c_str()) != 0)
-      {
-        throw std::runtime_error("subproject " + sp.path + ": make failed");
+        throw std::runtime_error("subproject " + sub_project.path + ": make failed");
       }
       return;
     }
     case conf::BuildSystem::HeaderOnly:
-      logger.info("Using header-only subproject " + sp.path);
+      logger.info("Using header-only subproject " + sub_project.path);
       return;
     case conf::BuildSystem::Cppup:
       // Cppup subprojects were already merged in load_with_subprojects;
@@ -652,9 +673,9 @@ std::size_t count_planned_steps(const BuildContext& ctx)
     {
       std::vector<std::string> test_link_flag_strings;
       test_link_flag_strings.reserve(test.link_flags.size());
-      for (const auto& f : test.link_flags)
+      for (const auto& link_flag : test.link_flags)
       {
-        test_link_flag_strings.emplace_back(f.flag);
+        test_link_flag_strings.emplace_back(link_flag.flag);
       }
       total += exec_contribution({
           .kind                 = "test",
@@ -681,9 +702,9 @@ void materialize_configuration_header(const std::filesystem::path& cppup_dir)
 
   if (std::filesystem::exists(header_path))
   {
-    std::ifstream const in(header_path, std::ios::binary);
+    std::ifstream const ifs(header_path, std::ios::binary);
     std::stringstream   buf;
-    buf << in.rdbuf();
+    buf << ifs.rdbuf();
     if (buf.str() == kConfigurationHeader)
     {
       return;
@@ -758,9 +779,9 @@ std::size_t build_tests_parallel(const BuildContext& ctx)
                   {
                     std::vector<std::string> test_link_flag_strings;
                     test_link_flag_strings.reserve(test.link_flags.size());
-                    for (const auto& f : test.link_flags)
+                    for (const auto& flag : test.link_flags)
                     {
-                      test_link_flag_strings.emplace_back(f.flag);
+                      test_link_flag_strings.emplace_back(flag.flag);
                     }
                     const bool cached = build_executable(
                         {
@@ -780,14 +801,14 @@ std::size_t build_tests_parallel(const BuildContext& ctx)
   return total_cached.load();
 }
 
-std::string format_wall_time(long long ms)
+std::string format_wall_time(long long milliseconds)
 {
-  if (ms < 1000)
+  if (milliseconds < 1000)
   {
-    return std::to_string(ms) + "ms";
+    return std::to_string(milliseconds) + "ms";
   }
-  const long long whole_sec = ms / 1000;
-  const long long tenths    = (ms % 1000) / 100;
+  const long long whole_sec = milliseconds / 1000;
+  const long long tenths    = (milliseconds % 1000) / 100;
   if (whole_sec < 60)
   {
     return std::to_string(whole_sec) + "." + std::to_string(tenths) + "s";
@@ -860,19 +881,21 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
         "wrote " +
         conf::emit_compile_commands(config, paths.project_root, paths.build_dir, options).string());
 
-    for (const auto& sp : config.subprojects)
+    for (const auto& sub_project : config.subprojects)
     {
-      run_external_subproject(sp, paths.project_root / sp.path, logger);
+      run_external_subproject(sub_project, paths.project_root / sub_project.path,
+                              *context.processRunner, logger);
     }
 
     ProgressReporter   progress;
     const BuildContext ctx{
-        .config   = &config,
-        .paths    = &paths,
-        .cache    = cache.get(),
-        .options  = options,
-        .logger   = &logger,
-        .progress = &progress,
+        .config         = &config,
+        .paths          = &paths,
+        .cache          = cache.get(),
+        .options        = options,
+        .process_runner = context.processRunner.get(),
+        .logger         = &logger,
+        .progress       = &progress,
     };
     progress.set_total(count_planned_steps(ctx));
 

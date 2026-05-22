@@ -16,13 +16,13 @@ namespace cppup::configuration
 namespace
 {
 
-std::string json_escape(std::string_view s)
+std::string json_escape(std::string_view s_to_escape)
 {
   std::string out;
-  out.reserve(s.size() + 2);
-  for (char const c : s)
+  out.reserve(s_to_escape.size() + 2);
+  for (char const character : s_to_escape)
   {
-    switch (c)
+    switch (character)
     {
       case '"':
         out += "\\\"";
@@ -40,26 +40,26 @@ std::string json_escape(std::string_view s)
         out += "\\t";
         break;
       default:
-        if (static_cast<unsigned char>(c) < 0x20)
+        if (static_cast<unsigned char>(character) < 0x20)
         {
           std::array<char, 8> buf{};
-          std::snprintf(buf.data(), buf.size(), "\\u%04x", c);
-          out += buf.data();
+          const auto          count = std::snprintf(buf.data(), buf.size(), "\\u%04x", character);
+          out.append(buf.data(), static_cast<std::size_t>(count));
         }
         else
         {
-          out += c;
+          out += character;
         }
     }
   }
   return out;
 }
 
-std::filesystem::path normalize(const std::filesystem::path& p)
+std::filesystem::path normalize(const std::filesystem::path& path)
 {
-  std::error_code ec;
-  auto            out = std::filesystem::weakly_canonical(p, ec);
-  return ec ? p : out;
+  std::error_code error_code{};
+  auto            out = std::filesystem::weakly_canonical(path, error_code);
+  return error_code ? path : out;
 }
 
 // Mirrors append_common_flags() in src/core/cli/commands/build.cpp.
@@ -74,25 +74,25 @@ std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
 
   if (config.toolchain)
   {
-    for (auto& f : dialect_flags(*config.toolchain))
+    for (auto& flag : dialect_flags(*config.toolchain))
     {
-      args.emplace_back(std::move(f));
+      args.emplace_back(std::move(flag));
     }
   }
-  for (const auto& f : config.compile_flags)
+  for (const auto& flag : config.compile_flags)
   {
-    args.emplace_back(f.flag);
+    args.emplace_back(flag.flag);
   }
-  for (const auto& d : config.definitions)
+  for (const auto& def : config.definitions)
   {
-    std::string s = "-D";
-    s.append(d.name);
-    if (!d.value.empty())
+    std::string base_def = "-D";
+    base_def.append(def.name);
+    if (!def.value.empty())
     {
-      s += '=';
-      s.append(d.value);
+      base_def += '=';
+      base_def.append(def.value);
     }
-    args.push_back(std::move(s));
+    args.push_back(std::move(base_def));
   }
   for (const auto& inc : config.include_paths)
   {
@@ -110,29 +110,29 @@ std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
   return args;
 }
 
-void emit_entry(std::ostringstream& os, bool& first, const std::string& compiler,
+void emit_entry(std::ostringstream& oss, bool& first, const std::string& compiler,
                 const std::filesystem::path& project_root, const std::filesystem::path& source,
                 const std::vector<std::string>& flags)
 {
   if (!first)
   {
-    os << ",\n";
+    oss << ",\n";
   }
   first = false;
 
-  os << "  {\n";
-  os << R"(    "directory": ")" << json_escape(project_root.string()) << "\",\n";
-  os << R"(    "file": ")" << json_escape(source.string()) << "\",\n";
-  os << "    \"arguments\": [";
-  os << "\"" << json_escape(compiler) << "\"";
-  os << ", \"-c\"";
-  for (const auto& a : flags)
+  oss << "  {\n";
+  oss << R"(    "directory": ")" << json_escape(project_root.string()) << "\",\n";
+  oss << R"(    "file": ")" << json_escape(source.string()) << "\",\n";
+  oss << "    \"arguments\": [";
+  oss << "\"" << json_escape(compiler) << "\"";
+  oss << ", \"-c\"";
+  for (const auto& a_flag : flags)
   {
-    os << ", \"" << json_escape(a) << "\"";
+    oss << ", \"" << json_escape(a_flag) << "\"";
   }
-  os << ", \"" << json_escape(source.string()) << "\"";
-  os << "]\n";
-  os << "  }";
+  oss << ", \"" << json_escape(source.string()) << "\"";
+  oss << "]\n";
+  oss << "  }";
 }
 
 }  // namespace
@@ -146,16 +146,16 @@ std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
   const auto        root     = normalize(project_root);
   const auto        flags    = compile_flags_for(config, root, options);
 
-  std::ostringstream os;
-  os << "[\n";
+  std::ostringstream oss;
+  oss << "[\n";
   bool first = true;
 
   auto emit_sources = [&](const std::vector<std::string>& srcs)
   {
-    for (const auto& s : srcs)
+    for (const auto& src : srcs)
     {
-      auto abs = normalize(root / s);
-      emit_entry(os, first, compiler, root, abs, flags);
+      auto abs = normalize(root / src);
+      emit_entry(oss, first, compiler, root, abs, flags);
     }
   };
 
@@ -167,18 +167,18 @@ std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
   {
     emit_sources(bin.sources);
   }
-  for (const auto& t : config.tests)
+  for (const auto& test : config.tests)
   {
-    emit_sources(t.sources);
+    emit_sources(test.sources);
   }
 
-  os << "\n]\n";
+  oss << "\n]\n";
 
   const auto    out = root / "compile_commands.json";
-  std::ofstream f(out, std::ios::trunc);
-  CPPUP_CHECK(static_cast<bool>(f), "cannot open " + out.string());
-  f << os.str();
-  CPPUP_CHECK(static_cast<bool>(f), "write failed: " + out.string());
+  std::ofstream ofs(out, std::ios::trunc);
+  CPPUP_CHECK(static_cast<bool>(ofs), "cannot open " + out.string());
+  ofs << oss.str();
+  CPPUP_CHECK(static_cast<bool>(ofs), "write failed: " + out.string());
   return out;
 }
 

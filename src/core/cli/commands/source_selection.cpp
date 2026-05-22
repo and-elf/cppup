@@ -50,8 +50,9 @@ struct WalkSpec
 template <typename Sink>
 void walk_cpp_files(const WalkSpec& spec, Sink sink)
 {
-  std::error_code ec;
-  if (!std::filesystem::exists(spec.dir, ec) || !std::filesystem::is_directory(spec.dir, ec))
+  std::error_code error_code{};
+  if (!std::filesystem::exists(spec.dir, error_code) ||
+      !std::filesystem::is_directory(spec.dir, error_code))
   {
     return;
   }
@@ -72,11 +73,11 @@ void walk_cpp_files(const WalkSpec& spec, Sink sink)
   }
 }
 
-std::filesystem::path canonical_or(std::filesystem::path p)
+std::filesystem::path canonical_or(std::filesystem::path path)
 {
-  std::error_code ec;
-  auto            canonical = std::filesystem::weakly_canonical(p, ec);
-  return ec ? std::move(p) : std::move(canonical);
+  std::error_code error_code{};
+  auto            canonical = std::filesystem::weakly_canonical(path, error_code);
+  return error_code ? std::move(path) : std::move(canonical);
 }
 
 }  // namespace
@@ -93,9 +94,9 @@ bool is_excluded_path(const std::filesystem::path& relative_path) noexcept
   return std::ranges::any_of(relative_path,
                              [](const std::filesystem::path& component)
                              {
-                               const std::string s = component.string();
-                               return s == "build" || s == "bootstrap_build" ||
-                                      (s.length() > 1 && s.front() == '.');
+                               const std::string comp_str = component.string();
+                               return comp_str == "build" || comp_str == "bootstrap_build" ||
+                                      (comp_str.length() > 1 && comp_str.front() == '.');
                              });
 }
 
@@ -114,7 +115,7 @@ std::vector<std::filesystem::path> find_cpp_files(const std::filesystem::path& r
 {
   std::vector<std::filesystem::path> files;
   walk_cpp_files({.dir = root, .exclusion_root = root},
-                 [&](std::filesystem::path p) { files.push_back(std::move(p)); });
+                 [&](std::filesystem::path path) { files.push_back(std::move(path)); });
   return files;
 }
 
@@ -124,7 +125,7 @@ std::vector<std::filesystem::path> select_cpp_files(
     std::vector<std::filesystem::path>* skipped_missing)
 {
   std::set<std::filesystem::path> dedup;
-  auto push = [&](std::filesystem::path p) { dedup.insert(canonical_or(std::move(p))); };
+  auto push = [&](std::filesystem::path path) { dedup.insert(canonical_or(std::move(path))); };
 
   if (args.empty())
   {
@@ -134,35 +135,35 @@ std::vector<std::filesystem::path> select_cpp_files(
 
   for (const auto& arg : args)
   {
-    std::filesystem::path p = arg;
-    if (!p.is_absolute())
+    std::filesystem::path path = arg;
+    if (!path.is_absolute())
     {
-      p = project_root / p;
+      path = project_root / path;
     }
 
-    std::error_code ec;
-    if (!std::filesystem::exists(p, ec))
+    std::error_code error_code{};
+    if (!std::filesystem::exists(path, error_code))
     {
       if (skipped_missing != nullptr)
       {
-        skipped_missing->push_back(std::move(p));
+        skipped_missing->push_back(std::move(path));
       }
       continue;
     }
 
-    if (std::filesystem::is_directory(p, ec))
+    if (std::filesystem::is_directory(path, error_code))
     {
-      walk_cpp_files({.dir = p, .exclusion_root = exclusion_root_for(p, project_root)}, push);
+      walk_cpp_files({.dir = path, .exclusion_root = exclusion_root_for(path, project_root)}, push);
       continue;
     }
 
-    if (is_cpp_source_extension(p.extension().string()))
+    if (is_cpp_source_extension(path.extension().string()))
     {
-      push(std::move(p));
+      push(std::move(path));
     }
     else if (skipped_non_cpp != nullptr)
     {
-      skipped_non_cpp->push_back(std::move(p));
+      skipped_non_cpp->push_back(std::move(path));
     }
   }
 

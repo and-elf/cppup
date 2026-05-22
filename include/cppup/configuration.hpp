@@ -229,11 +229,6 @@ struct FixedString
   {
     return chars.data();
   }
-
-  [[nodiscard]] constexpr operator std::string_view() const noexcept
-  {
-    return view();
-  }
 };
 
 consteval std::size_t write_unsigned(char* out, unsigned value)

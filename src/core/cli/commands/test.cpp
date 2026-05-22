@@ -1,11 +1,12 @@
-#include <array>
-#include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <expected>
 #include <filesystem>
+#include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../../configuration/build_options.hpp"
@@ -21,49 +22,133 @@ namespace
 namespace conf = cppup::configuration;
 namespace fs   = std::filesystem;
 
-std::vector<fs::path> discoverTestBinaries(const fs::path& tests_dir)
+std::string trim_ascii(std::string_view text)
 {
-  std::vector<fs::path> binaries;
-  if (!fs::exists(tests_dir))
+  std::size_t begin = 0;
+  while (begin < text.size() && static_cast<unsigned char>(text[begin]) <= 0x20U)
   {
-    return binaries;
+    ++begin;
   }
-  for (const auto& entry : fs::directory_iterator(tests_dir))
+  std::size_t end = text.size();
+  while (end > begin && static_cast<unsigned char>(text[end - 1]) <= 0x20U)
   {
-    if (!entry.is_regular_file())
+    --end;
+  }
+  return std::string(text.substr(begin, end - begin));
+}
+
+std::vector<std::string> path_directories()
+{
+  constexpr char path_separator =
+#ifdef _WIN32
+      ';';
+#else
+      ':';
+#endif
+
+  std::vector<std::string> directories;
+  const char*              raw_path = std::getenv("PATH");
+  if (raw_path == nullptr)
+  {
+    return directories;
+  }
+
+  const std::string path_value(raw_path);
+  std::size_t       begin = 0;
+  while (begin <= path_value.size())
+  {
+    const std::size_t end = path_value.find(path_separator, begin);
+    if (end == std::string::npos)
+    {
+      directories.push_back(path_value.substr(begin));
+      break;
+    }
+    directories.push_back(path_value.substr(begin, end - begin));
+    begin = end + 1;
+  }
+
+  return directories;
+}
+
+#ifdef _WIN32
+std::vector<std::string> windows_pathexts()
+{
+  std::vector<std::string> exts;
+  const char*              raw_ext = std::getenv("PATHEXT");
+  const std::string        ext_value =
+      raw_ext != nullptr ? std::string(raw_ext) : std::string(".COM;.EXE;.BAT;.CMD");
+  std::size_t begin = 0;
+  while (begin <= ext_value.size())
+  {
+    const std::size_t end = ext_value.find(';', begin);
+    if (end == std::string::npos)
+    {
+      exts.push_back(ext_value.substr(begin));
+      break;
+    }
+    exts.push_back(ext_value.substr(begin, end - begin));
+    begin = end + 1;
+  }
+  return exts;
+}
+#endif
+
+bool file_exists(const fs::path& path)
+{
+  std::error_code error_code;
+  return fs::exists(path, error_code) && !error_code;
+}
+
+std::optional<std::string> resolve_tool_on_path(std::string_view name)
+{
+  const fs::path requested{name};
+  if (requested.has_parent_path())
+  {
+    return file_exists(requested) ? std::optional<std::string>(requested.string()) : std::nullopt;
+  }
+
+  const auto dirs = path_directories();
+#ifdef _WIN32
+  const bool has_extension = requested.has_extension();
+  const auto exts          = windows_pathexts();
+#endif
+  for (const auto& dir : dirs)
+  {
+    if (dir.empty())
     {
       continue;
     }
-    const auto perms = entry.status().permissions();
-    if ((perms & fs::perms::owner_exec) != fs::perms::none)
+    const fs::path base = fs::path(dir) / requested;
+#ifdef _WIN32
+    if (has_extension)
     {
-      binaries.push_back(entry.path());
+      if (file_exists(base))
+      {
+        return base.string();
+      }
+      continue;
     }
+    for (const auto& ext : exts)
+    {
+      if (ext.empty())
+      {
+        continue;
+      }
+      const auto candidate = base.string() + ext;
+      if (file_exists(candidate))
+      {
+        return candidate;
+      }
+    }
+#else
+    if (file_exists(base))
+    {
+      return base.string();
+    }
+#endif
   }
-  return binaries;
-}
 
-bool tool_exists(const std::string& name)
-{
-  const std::string cmd = "command -v " + name + " >/dev/null 2>&1";
-  return std::system(cmd.c_str()) == 0;
-}
-
-std::string capture(const std::string& cmd)
-{
-  std::array<char, 4096> buffer{};
-  std::string            result;
-  FILE*                  pipe = popen(cmd.c_str(), "r");
-  if (pipe == nullptr)
-  {
-    return {};
-  }
-  while (std::fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
-  {
-    result.append(buffer.data());
-  }
-  pclose(pipe);
-  return result;
+  return std::nullopt;
 }
 
 struct CoverageSummary
@@ -72,51 +157,86 @@ struct CoverageSummary
   std::size_t files_seen = 0;
 };
 
-// Parse gcov's "Lines executed:NN.NN% of M" summary line per file and combine
-// into a line-count-weighted percentage. Unrecognised lines are ignored.
-CoverageSummary parse_gcov_summary(const std::string& gcov_output)
+bool is_report_file(const fs::directory_entry& entry, std::error_code& error_code)
 {
-  CoverageSummary    s;
-  std::size_t        weighted_executed = 0;
-  std::size_t        weighted_total    = 0;
-  std::istringstream is(gcov_output);
-  std::string        line;
-  while (std::getline(is, line))
+  return entry.is_regular_file(error_code) && !error_code && entry.path().extension() == ".gcov";
+}
+
+std::pair<std::size_t, std::size_t> parse_gcov_file(const fs::path& file)
+{
+  std::ifstream input(file);
+  if (!input)
   {
-    constexpr std::string_view prefix = "Lines executed:";
-    auto                       pos    = line.find(prefix);
-    if (pos == std::string::npos)
+    return {0, 0};
+  }
+
+  std::size_t file_executed = 0;
+  std::size_t file_total    = 0;
+  std::string line;
+  while (std::getline(input, line))
+  {
+    const auto first_colon = line.find(':');
+    if (first_colon == std::string::npos)
     {
       continue;
     }
-    const auto pct_start = pos + prefix.size();
-    const auto pct_end   = line.find('%', pct_start);
-    const auto of_pos    = line.find(" of ", pct_end);
-    if (pct_end == std::string::npos || of_pos == std::string::npos)
+    const auto second_colon = line.find(':', first_colon + 1);
+    if (second_colon == std::string::npos)
     {
       continue;
     }
-    try
+
+    const std::string exec_count = trim_ascii(line.substr(0, first_colon));
+    const std::string line_no =
+        trim_ascii(line.substr(first_colon + 1, second_colon - first_colon - 1));
+    if (line_no.empty() || line_no == "0" || exec_count == "-")
     {
-      const double      pct   = std::stod(line.substr(pct_start, pct_end - pct_start));
-      const std::size_t total = std::stoul(line.substr(of_pos + 4));
-      const auto        executed =
-          static_cast<std::size_t>(std::lround(pct * static_cast<double>(total) / 100.0));
-      weighted_executed += executed;
-      weighted_total += total;
-      ++s.files_seen;
+      continue;
     }
-    // NOLINTNEXTLINE(bugprone-empty-catch) -- skipping malformed gcov summary lines is intentional
-    catch (const std::exception&)
+
+    ++file_total;
+    if (exec_count != "#####" && exec_count != "=====" && exec_count != "%%%%%")
     {
+      ++file_executed;
     }
   }
+
+  return {file_executed, file_total};
+}
+
+CoverageSummary parse_gcov_reports(const fs::path& coverage_dir)
+{
+  CoverageSummary summary;
+  std::size_t     weighted_executed = 0;
+  std::size_t     weighted_total    = 0;
+
+  std::error_code error_code;
+  for (const auto& entry : fs::directory_iterator(coverage_dir, error_code))
+  {
+    if (error_code)
+    {
+      continue;
+    }
+    if (!is_report_file(entry, error_code))
+    {
+      continue;
+    }
+
+    const auto [file_executed, file_total] = parse_gcov_file(entry.path());
+    if (file_total > 0)
+    {
+      weighted_executed += file_executed;
+      weighted_total += file_total;
+      ++summary.files_seen;
+    }
+  }
+
   if (weighted_total > 0)
   {
-    s.total_pct =
+    summary.total_pct =
         100.0 * static_cast<double>(weighted_executed) / static_cast<double>(weighted_total);
   }
-  return s;
+  return summary;
 }
 
 // build_dir is where .gcda files live; coverage_dir is where gcov writes
@@ -129,23 +249,29 @@ struct CoveragePaths
 };
 
 // Run gcov on every .gcda file under paths.build_dir, drop .gcov text reports
-// in paths.coverage_dir, and return a summary parsed from gcov's stdout.
-std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths& paths,
-                                                             Logger&              logger)
+// in paths.coverage_dir, and return a summary parsed from generated .gcov files.
+std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths&  paths,
+                                                             const CommandContext& context)
 {
-  if (!tool_exists("gcov"))
+  if (context.processRunner == nullptr)
+  {
+    return std::unexpected("No process runner configured");
+  }
+
+  auto gcov = resolve_tool_on_path("gcov");
+  if (!gcov)
   {
     return std::unexpected("gcov not found in PATH; install gcc to get coverage reports");
   }
 
   std::vector<fs::path> gcda_files;
-  std::error_code       ec;
+  std::error_code       error_code;
   for (const auto& entry : fs::recursive_directory_iterator(paths.build_dir))
   {
     if (entry.is_regular_file() && entry.path().extension() == ".gcda")
     {
       // Absolute path so gcov keeps working after we cd into coverage_dir.
-      gcda_files.push_back(fs::absolute(entry.path(), ec));
+      gcda_files.push_back(fs::absolute(entry.path(), error_code));
     }
   }
   if (gcda_files.empty())
@@ -153,24 +279,32 @@ std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths
     return std::unexpected("no .gcda files found; rebuild and run tests with --coverage first");
   }
 
-  fs::create_directories(paths.coverage_dir, ec);
-  const auto coverage_abs = fs::absolute(paths.coverage_dir, ec);
+  fs::create_directories(paths.coverage_dir, error_code);
+  const auto coverage_abs = fs::absolute(paths.coverage_dir, error_code);
 
-  std::ostringstream cmd;
-  cmd << "cd " << coverage_abs.string() << " && gcov -b -p";
+  ProcessRunRequest request;
+  request.command     = *gcov;
+  request.working_dir = coverage_abs.string();
+  request.args        = {"-b", "-p"};
+  request.args.reserve(gcda_files.size() + 2);
   for (const auto& gcda : gcda_files)
   {
-    cmd << ' ' << gcda.string();
+    request.args.push_back(gcda.string());
   }
-  cmd << " 2>&1";
 
-  logger.debug("gcov: " + cmd.str());
-  auto output = capture(cmd.str());
-  if (output.empty())
+  context.logger->debug("gcov: " + request.command + " -b -p <" +
+                        std::to_string(gcda_files.size()) + " file(s)>");
+  if (context.processRunner->run(request) != 0)
   {
-    return std::unexpected("gcov produced no output");
+    return std::unexpected("gcov failed while generating coverage reports");
   }
-  return parse_gcov_summary(output);
+
+  auto summary = parse_gcov_reports(coverage_abs);
+  if (summary.files_seen == 0)
+  {
+    return std::unexpected("gcov produced no parseable .gcov reports");
+  }
+  return summary;
 }
 
 }  // namespace
@@ -180,6 +314,11 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
 {
   try
   {
+    if (context.processRunner == nullptr)
+    {
+      return std::unexpected("No process runner configured");
+    }
+
     auto& logger = *context.logger;
 
     const fs::path build_file = context.projectRoot / "build.cpp";
@@ -195,10 +334,10 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
     {
       conf::BuildOptions build_opts = options;
       build_opts.with_tests         = conf::WithTests::On;
-      auto rc                       = executeBuild(build_opts, context);
-      if (!rc)
+      auto build_result             = executeBuild(build_opts, context);
+      if (!build_result)
       {
-        return std::unexpected(rc.error());
+        return std::unexpected(build_result.error());
       }
     }
 
@@ -206,7 +345,7 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
 
     const fs::path build_dir = context.projectRoot / "build";
     const fs::path tests_dir = build_dir / "tests";
-    const auto     binaries  = discoverTestBinaries(tests_dir);
+    const auto     binaries  = discoverExecutableFiles(tests_dir);
 
     if (binaries.empty())
     {
@@ -230,17 +369,17 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
     {
       logger.info("Running: " + test_bin.filename().string());
 
-      const std::string cmd = "\"" + test_bin.string() + "\"";
-      const int         rc  = std::system(cmd.c_str());
-      if (rc == 0)
+      const int test_exit_code = context.processRunner->run(
+          ProcessRunRequest{.command = test_bin.string(), .args = {}, .working_dir = ""});
+      if (test_exit_code == 0)
       {
         logger.info("  PASS: " + test_bin.filename().string());
         ++passed;
       }
       else
       {
-        logger.error("  FAIL: " + test_bin.filename().string() + " (exit " + std::to_string(rc) +
-                     ")");
+        logger.error("  FAIL: " + test_bin.filename().string() + " (exit " +
+                     std::to_string(test_exit_code) + ")");
         ++failed;
       }
     }
@@ -252,7 +391,7 @@ std::expected<int, std::string> executeTest(conf::BuildOptions    options,
     {
       const fs::path coverage_dir = build_dir / "coverage";
       auto           summary =
-          collect_coverage({.build_dir = build_dir, .coverage_dir = coverage_dir}, logger);
+          collect_coverage({.build_dir = build_dir, .coverage_dir = coverage_dir}, context);
       if (!summary)
       {
         logger.warning("coverage: " + summary.error());
