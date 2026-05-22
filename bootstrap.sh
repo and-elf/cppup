@@ -89,6 +89,22 @@ build_slim() {
     local MAIN_SOURCES=(
         src/main.cpp
         src/core/logger/console/console_logger.cpp
+        src/core/logger/console/console_logger_plugin.cpp
+        src/core/buildsystems/cppup/cppup_plugin.cpp
+        src/core/buildsystems/cppup/cppup_package.cpp
+        src/core/package/package_concept.cpp
+        src/core/package/package_factory.cpp
+        src/core/package/git/git_package.cpp
+        src/core/package/http/http_package.cpp
+        src/core/package/archive/archive_package.cpp
+        src/core/package/directory/directory_package.cpp
+        src/core/package/registry/registry_package.cpp
+        src/core/plugin/static_registry.cpp
+        src/core/plugin/vtable_support.cpp
+        src/core/plugin/package_info_view.cpp
+        src/core/plugin/host_service_adapters.cpp
+        src/core/plugin/manifest.cpp
+        src/core/plugin/descriptor_validation.cpp
         src/core/cli/cli_application.cpp
         src/core/cli/commands.cpp
         src/core/cli/commands/build.cpp

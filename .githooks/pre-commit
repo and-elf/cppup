@@ -8,6 +8,7 @@
 #   CPPUP_SKIP_GITLEAKS=1   skip secret scan
 #   CPPUP_SKIP_FORMAT=1     skip clang-format check
 #   CPPUP_SKIP_TIDY=1       skip clang-tidy
+#   CPPUP_SKIP_BUILD=1      skip build
 #   CPPUP_SKIP_HOOKS=1      skip everything (escape hatch)
 #
 # Install once per clone: scripts/setup-hooks.sh
@@ -55,6 +56,15 @@ if [[ "${CPPUP_SKIP_GITLEAKS:-0}" != "1" ]]; then
     fi
 fi
 
+if [[ ${CPPUP_SKIP_BUILD:-0} != "1" ]]; then
+    echo "[pre-commit] Building cppup (required for format/tidy checks)…"
+    if ! ./bootstrap.sh build >/dev/null; then
+        echo "[pre-commit] failed to build cppup — skipping format/tidy checks."
+        echo "             Fix build issues or set CPPUP_SKIP_BUILD=1 to override."
+        exit 1
+    fi
+fi
+
 # Short-circuit cppup checks if nothing C++ changed.
 if [[ ${#staged[@]} -eq 0 ]]; then
     echo "[pre-commit] No staged C++ files; skipping format/tidy."
@@ -64,7 +74,7 @@ fi
 if [[ -z "$cppup_bin" ]]; then
     echo "[pre-commit] cppup binary not found (looked in PATH, bootstrap_build/, build/)."
     echo "             Skipping format/tidy. Run ./bootstrap.sh build to enable."
-    exit 0
+    exit 1
 fi
 
 # 2. cppup format --check on staged files only.
