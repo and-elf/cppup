@@ -292,7 +292,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
 
   // Track completed steps for termination
   std::atomic<size_t> completed_steps{0};
-  size_t              total_steps = steps.size();
+  const size_t        total_steps = steps.size();
 
   // Queue for steps ready to execute (no dependencies or dependencies completed)
   std::queue<size_t>      ready_queue;

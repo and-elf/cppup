@@ -18,6 +18,15 @@
 namespace cppup::cli
 {
 
+#ifndef CPPUP_VERSION
+#define CPPUP_VERSION "unknown"
+#endif
+
+#define CPPUP_STRINGIFY_IMPL(x) #x
+#define CPPUP_STRINGIFY(x) CPPUP_STRINGIFY_IMPL(x)
+
+constexpr std::string_view k_cppup_version = CPPUP_STRINGIFY(CPPUP_VERSION);
+
 // std::print can throw if stderr/stdout isn't writable; we're already
 // reporting an error/warning so there's no useful recovery — swallow it
 // rather than let the exception escape the noexcept boundary.
@@ -581,19 +590,30 @@ void registerUpdateCommand(const CommandRegistration& reg)
       });
 }
 
+void registerVersionCommand(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& result = *reg.result;
+
+  auto* cmd = app.add_subcommand("version", "Show version information");
+  cmd->callback(
+      [&result]
+      {
+        std::println("cppup version {}", k_cppup_version);
+        result.set(0);
+      });
+}
 }  // anonymous namespace
 
 int CLIApplication::run(int argc, char** argv) noexcept
 {
-  CLI::App app{"cppup - Modern C++ Build System"};
+  CLI::App app{std::format("cppup - Modern C++ Build System (version {})", k_cppup_version)};
   app.require_subcommand(0, 1);
-
-  bool show_version = false;
-  app.add_flag("--version,-v", show_version, "Show version information");
 
   CommandResult             result;
   const CommandRegistration reg{.app = &app, .ctx = &context_, .result = &result};
 
+  registerVersionCommand(reg);
   registerUpdateCommand(reg);
   registerBuildCommand(reg);
 #ifndef CPPUP_SLIM
@@ -611,23 +631,15 @@ int CLIApplication::run(int argc, char** argv) noexcept
 
   try
   {
+    if (argc <= 1)
+    {
+      throw CLI::CallForHelp();
+    }
     app.parse(argc, argv);
   }
   catch (const CLI::ParseError& e)
   {
     return app.exit(e);
-  }
-
-  if (show_version)
-  {
-    std::print("cppup version 0.1.0\n");
-    return 0;
-  }
-
-  if (!result.handled)
-  {
-    std::print("{}", app.help());
-    return 0;
   }
 
   return result.code;

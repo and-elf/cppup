@@ -1,9 +1,22 @@
 #include "http_package.hpp"
 
+#include <algorithm>
+#include <array>
+#include <expected>
 using namespace cppup::configuration;
 
 namespace cppup::package::http
 {
+namespace
+{
+auto is_archive_extension(const std::string& extension) -> bool
+{
+  constexpr std::array<std::string_view, 5> archive_extensions = {".tar", ".gz", ".tgz", ".zip",
+                                                                  ".7z"};
+  return std::ranges::any_of(archive_extensions,
+                             [&](std::string_view ext) { return extension == ext; });
+}
+}  // namespace
 
 HttpPackage::HttpPackage(PackageInfo info) : info_(std::move(info)) {}
 
@@ -63,20 +76,11 @@ std::expected<std::filesystem::path, std::string> HttpPackage::download_resource
     std::filesystem::remove(download_path);
     return cache_path;
   }
-  else
-  {
-    // Single file - move to cache directory
-    std::filesystem::create_directories(cache_path);
-    auto final_path = cache_path / url_path.filename();
-    std::filesystem::rename(download_path, final_path);
-    return cache_path;
-  }
-}
-
-bool HttpPackage::is_archive_extension(const std::string& extension) const
-{
-  return extension == ".tar" || extension == ".gz" || extension == ".tgz" || extension == ".zip" ||
-         extension == ".7z";
+  // Single file - move to cache directory
+  std::filesystem::create_directories(cache_path);
+  auto final_path = cache_path / url_path.filename();
+  std::filesystem::rename(download_path, final_path);
+  return cache_path;
 }
 
 }  // namespace cppup::package::http
