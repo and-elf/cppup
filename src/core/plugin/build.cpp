@@ -14,21 +14,31 @@ extern "C" BuildConfiguration configure()
 
   config.libraries.push_back(Library{
       .name    = "cppup_plugin",
-      .sources = {"manifest.cpp", "vtable_support.cpp", "descriptor_validation.cpp"},
+      .sources = {"manifest.cpp", "vtable_support.cpp", "descriptor_validation.cpp",
+                  "libdl_loader.cpp", "loader.cpp"},
       .type    = LibraryType::Static,
   });
 
+  // libdl is required for the production LibdlLoader. Tests linking
+  // cppup_plugin pick it up transitively via -ldl in link_flags.
+  const std::vector<Flag> test_links = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"},
+                                        Flag{"-ldl"}};
+
   config.tests.push_back(Test{"test_manifest", {"test_manifest.cpp"}});
   config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+  config.tests.back().link_flags = test_links;
 
   config.tests.push_back(Test{"test_vtable_support", {"test_vtable_support.cpp"}});
   config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+  config.tests.back().link_flags = test_links;
 
   config.tests.push_back(Test{"test_descriptor_validation", {"test_descriptor_validation.cpp"}});
   config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_plugin_loader", {"test_plugin_loader.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
 
   return config;
 }
