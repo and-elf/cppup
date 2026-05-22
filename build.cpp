@@ -46,8 +46,9 @@ extern "C" BuildConfiguration configure()
   config.binaries.push_back(
       Binary{.name = "cppup", .sources = {"src/main.cpp"}, .libraries = {"cppup_cli"}});
 
-  config.definitions = {Definition{"CPPUP_VERSION", "0.1.0"},
-                        Definition{"CPPUP_BUILD_TYPE", "Release"}};
+  config.definitions = {
+      Definition{"CPPUP_MAJOR_VERSION", "1"}, Definition{"CPPUP_MINOR_VERSION", "0"},
+      Definition{"CPPUP_PATCH_VERSION", "0"}, Definition{"CPPUP_BUILD_TYPE", "Release"}};
 
   return config;
 }

@@ -75,20 +75,14 @@
  */
 
 // Core configuration types
+#include <array>
+#include <cstddef>
+#include <string_view>
+
 #include "../src/core/configuration/build_configuration.hpp"
 #include "../src/core/configuration/outputs.hpp"
 #include "../src/core/configuration/profile.hpp"
-#include "../src/core/configuration/toolchain_flags.hpp"
 #include "../src/core/configuration/types.hpp"
-
-// Package system
-// #include "../src/core/package/packages.hpp"
-
-// Platform detection and conditional compilation
-#include "../src/core/configuration/platform.hpp"
-
-// Runtime queries for features and environment
-#include "../src/core/configuration/runtime.hpp"
 
 /**
  * @namespace cppup::configuration
@@ -193,19 +187,101 @@ namespace cppup_config = cppup::configuration;
  * }
  * ```
  */
-extern "C"
-{
-  typedef cppup::configuration::BuildConfiguration (*ConfigureFunction)();
-}
+using ConfigureFunction = cppup::configuration::BuildConfiguration (*)();
+
+#ifndef CPPUP_MAJOR_VERSION
+#define CPPUP_MAJOR_VERSION 0
+#endif
+
+#ifndef CPPUP_MINOR_VERSION
+#define CPPUP_MINOR_VERSION 1
+#endif
+
+#ifndef CPPUP_PATCH_VERSION
+#define CPPUP_PATCH_VERSION 0
+#endif
 
 // Common preprocessor definitions that users might find useful
-#define CPPUP_VERSION_MAJOR 1
-#define CPPUP_VERSION_MINOR 0
-#define CPPUP_VERSION_PATCH 0
-#define CPPUP_VERSION "1.0.0"
+namespace cppup_version_detail
+{
+constexpr std::size_t count_digits(unsigned value) noexcept
+{
+  std::size_t digits = 1;
+  while (value >= 10)
+  {
+    value /= 10;
+    ++digits;
+  }
+  return digits;
+}
 
-// Helper macros for common patterns
-#define CPPUP_CONFIGURE() extern "C" cppup::configuration::BuildConfiguration configure()
+template <std::size_t N>
+struct FixedString
+{
+  std::array<char, N> chars{};
+
+  [[nodiscard]] constexpr std::string_view view() const noexcept
+  {
+    return {chars.data(), N - 1};
+  }
+
+  [[nodiscard]] constexpr const char* c_str() const noexcept
+  {
+    return chars.data();
+  }
+
+  [[nodiscard]] constexpr operator std::string_view() const noexcept
+  {
+    return view();
+  }
+};
+
+consteval std::size_t write_unsigned(char* out, unsigned value)
+{
+  std::array<char, 20> buffer{};
+  std::size_t          len = 0;
+  do
+  {
+    buffer[len++] = static_cast<char>('0' + (value % 10));
+    value /= 10;
+  } while (value != 0);
+
+  for (std::size_t i = 0; i < len; ++i)
+  {
+    out[i] = buffer[len - 1 - i];
+  }
+  return len;
+}
+
+template <int Major, int Minor, int Patch>
+consteval auto make_version_string()
+{
+  constexpr std::size_t separator_count = 2;
+  constexpr std::size_t size            = count_digits(static_cast<unsigned>(Major)) +
+                               count_digits(static_cast<unsigned>(Minor)) +
+                               count_digits(static_cast<unsigned>(Patch)) + separator_count + 1;
+
+  FixedString<size> result{};
+  char*             out = result.chars.data();
+  out += write_unsigned(out, static_cast<unsigned>(Major));
+  *out++ = '.';
+  out += write_unsigned(out, static_cast<unsigned>(Minor));
+  *out++ = '.';
+  out += write_unsigned(out, static_cast<unsigned>(Patch));
+  *out = '\0';
+  return result;
+}
+}  // namespace cppup_version_detail
+
+struct CppupVersion
+{
+  static constexpr int  major_ = CPPUP_MAJOR_VERSION;
+  static constexpr int  minor_ = CPPUP_MINOR_VERSION;
+  static constexpr int  patch_ = CPPUP_PATCH_VERSION;
+  static constexpr auto string_ =
+      cppup_version_detail::make_version_string<major_, minor_, patch_>();
+  static constexpr std::string_view string_view_ = string_.view();
+};
 
 /**
  * @brief Helper function for conditional package inclusion
@@ -221,11 +297,11 @@ extern "C"
  */
 inline void cppup_conditional_package(bool                                      condition,
                                       cppup::configuration::BuildConfiguration& config,
-                                      cppup::configuration::Package             package)
+                                      const cppup::configuration::Package&      package)
 {
   if (condition)
   {
-    config.packages.push_back(std::move(package));
+    config.packages.emplace_back(package);
   }
 }
 
@@ -243,11 +319,11 @@ inline void cppup_conditional_package(bool                                      
  */
 template <typename FlagContainer>
 inline void cppup_conditional_flag(bool condition, FlagContainer& flags,
-                                   cppup::configuration::Flag flag)
+                                   const cppup::configuration::Flag& flag)
 {
   if (condition)
   {
-    flags.push_back(std::move(flag));
+    flags.emplace_back(flag);
   }
 }
 
@@ -265,10 +341,10 @@ inline void cppup_conditional_flag(bool condition, FlagContainer& flags,
  */
 inline void cppup_conditional_define(bool                                      condition,
                                      cppup::configuration::BuildConfiguration& config,
-                                     cppup::configuration::Definition          definition)
+                                     const cppup::configuration::Definition&   definition)
 {
   if (condition)
   {
-    config.definitions.push_back(std::move(definition));
+    config.definitions.emplace_back(definition);
   }
 }

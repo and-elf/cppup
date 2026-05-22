@@ -14,18 +14,10 @@
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
 #include "core/logger/console/console_logger.hpp"
+#include "include/cppup/configuration.hpp"
 
 namespace cppup::cli
 {
-
-#ifndef CPPUP_VERSION
-#define CPPUP_VERSION "unknown"
-#endif
-
-#define CPPUP_STRINGIFY_IMPL(x) #x
-#define CPPUP_STRINGIFY(x) CPPUP_STRINGIFY_IMPL(x)
-
-constexpr std::string_view k_cppup_version = CPPUP_STRINGIFY(CPPUP_VERSION);
 
 // std::print can throw if stderr/stdout isn't writable; we're already
 // reporting an error/warning so there's no useful recovery — swallow it
@@ -599,7 +591,7 @@ void registerVersionCommand(const CommandRegistration& reg)
   cmd->callback(
       [&result]
       {
-        std::println("cppup version {}", k_cppup_version);
+        std::println("cppup version {}", CppupVersion::string_view_);
         result.set(0);
       });
 }
@@ -607,42 +599,57 @@ void registerVersionCommand(const CommandRegistration& reg)
 
 int CLIApplication::run(int argc, char** argv) noexcept
 {
-  CLI::App app{std::format("cppup - Modern C++ Build System (version {})", k_cppup_version)};
-  app.require_subcommand(0, 1);
-
-  CommandResult             result;
-  const CommandRegistration reg{.app = &app, .ctx = &context_, .result = &result};
-
-  registerVersionCommand(reg);
-  registerUpdateCommand(reg);
-  registerBuildCommand(reg);
-#ifndef CPPUP_SLIM
-  registerInitCommand(reg);
-  registerCompileCommandsCommand(reg);
-  registerCleanCommand(reg);
-  registerTestCommand(reg);
-  registerFormatCommand(reg);
-  registerTidyCommand(reg);
-  registerPackageCommands(reg);
-  registerToolchainCommands(reg);
-  registerPluginCommands(reg);
-  registerModuleCommands(reg);
-#endif
-
   try
   {
-    if (argc <= 1)
-    {
-      throw CLI::CallForHelp();
-    }
-    app.parse(argc, argv);
-  }
-  catch (const CLI::ParseError& e)
-  {
-    return app.exit(e);
-  }
+    const std::string cli_banner =
+        "cppup - Modern C++ Build System (version " + std::string{CppupVersion::string_view_} + ")";
+    CLI::App app{cli_banner};
+    app.require_subcommand(0, 1);
 
-  return result.code;
+    CommandResult             result;
+    const CommandRegistration reg{.app = &app, .ctx = &context_, .result = &result};
+
+    registerVersionCommand(reg);
+    registerUpdateCommand(reg);
+    registerBuildCommand(reg);
+#ifndef CPPUP_SLIM
+    registerInitCommand(reg);
+    registerCompileCommandsCommand(reg);
+    registerCleanCommand(reg);
+    registerTestCommand(reg);
+    registerFormatCommand(reg);
+    registerTidyCommand(reg);
+    registerPackageCommands(reg);
+    registerToolchainCommands(reg);
+    registerPluginCommands(reg);
+    registerModuleCommands(reg);
+#endif
+
+    try
+    {
+      if (argc <= 1)
+      {
+        throw CLI::CallForHelp();
+      }
+      app.parse(argc, argv);
+    }
+    catch (const CLI::ParseError& e)
+    {
+      return app.exit(e);
+    }
+
+    return result.code;
+  }
+  catch (const std::exception& e)
+  {
+    ErrorHandler::reportError(e.what(), ErrorHandler::ErrorCode::UnknownError);
+    return ErrorHandler::getExitCode(ErrorHandler::ErrorCode::UnknownError);
+  }
+  catch (...)
+  {
+    ErrorHandler::reportError("Unknown CLI failure", ErrorHandler::ErrorCode::UnknownError);
+    return ErrorHandler::getExitCode(ErrorHandler::ErrorCode::UnknownError);
+  }
 }
 
 }  // namespace cppup::cli

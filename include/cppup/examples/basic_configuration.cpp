@@ -7,7 +7,7 @@
 
 using namespace cppup::configuration;
 
-CPPUP_CONFIGURE()
+extern "C" BuildConfiguration configure()
 {
   return BuildConfiguration{
       // Specify toolchain

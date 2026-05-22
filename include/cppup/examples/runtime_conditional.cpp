@@ -7,7 +7,7 @@
 
 using namespace cppup::configuration;
 
-CPPUP_CONFIGURE()
+extern "C" BuildConfiguration configure()
 {
   BuildConfiguration config{.sources  = {"src/*.cpp"},
                             .binaries = {Binary{"myapp", {"src/main.cpp"}}}};
