@@ -19,13 +19,10 @@ namespace
 {
 
 // Thread-safe build step status tracker
-class BuildStepStatusTracker
+class BuildStepTracker
 {
  public:
-  explicit BuildStepStatusTracker(size_t num_steps) :
-      statuses_(num_steps, BuildStepStatus::NotStarted)
-  {
-  }
+  explicit BuildStepTracker(size_t num_steps) : statuses_(num_steps, BuildStepStatus::NotStarted) {}
 
   void set_status(size_t index, BuildStepStatus status)
   {
@@ -165,7 +162,7 @@ std::vector<size_t> topological_sort(const std::vector<DependencyNode>& graph)
 }
 
 // Execute a single build step with status tracking
-void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatusTracker& tracker,
+void execute_build_step(const BuildStep& step, size_t step_index, BuildStepTracker& tracker,
                         std::vector<BuildStepResult>& results, std::mutex& results_mutex)
 {
   try
@@ -196,9 +193,8 @@ void execute_build_step(const BuildStep& step, size_t step_index, BuildStepStatu
 }
 
 void execute_ready_steps_worker(const std::vector<BuildStep>&      steps,
-                                const std::vector<DependencyNode>& graph,
-                                BuildStepStatusTracker&            tracker,
-                                std::vector<BuildStepResult>&      step_results,
+                                const std::vector<DependencyNode>& graph, BuildStepTracker& tracker,
+                                std::vector<BuildStepResult>& step_results,
                                 std::mutex& results_mutex, std::atomic<size_t>& completed_steps,
                                 size_t total_steps, std::queue<size_t>& ready_queue,
                                 std::mutex& queue_mutex, std::condition_variable& queue_cv,
@@ -289,7 +285,7 @@ BuildStepExecutionResult BuildStepExecutor::execute_steps_parallel(
   }
 
   // Status tracker for thread synchronization
-  BuildStepStatusTracker tracker(steps.size());
+  BuildStepTracker tracker(steps.size());
 
   // Results mutex for thread-safe updates
   std::mutex results_mutex;
