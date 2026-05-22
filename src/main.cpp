@@ -6,11 +6,17 @@
 #include "core/cli/cli_application.hpp"
 #include "core/cli/process_runner_git_interface.hpp"
 #include "core/logger/console/console_logger.hpp"
+#include "core/logger/console/console_logger_plugin.hpp"
 
 int main(int argc, char* argv[])
 {
   try
   {
+    // Register built-in plugins with the static-plugin registry
+    // before any plugin lookups happen. Order in this block defines
+    // the order they appear in `cppup plugin list`.
+    cppup::logger::console::register_static_plugin();
+
     // Create command context
     cppup::cli::CommandContext context;
 
