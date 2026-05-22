@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <ranges>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -468,30 +469,58 @@ struct WalkState
   std::set<std::string> stack;
 };
 
-// DFS over the manifest dep graph. Recursion is natural here; cycles are
-// caught explicitly via `state.stack` before the recursive call returns.
-// NOLINTNEXTLINE(misc-no-recursion)
-[[nodiscard]] std::expected<void, std::string> walk_info(const conf::PackageInfo& info,
+// One entry on the explicit DFS stack: a pointer to the PackageInfo being
+// visited plus a flag distinguishing the pre-order phase (push children)
+// from the post-order phase (emit the entry). Pointers into the manifest
+// stay valid because we never mutate `info.dependencies` during the walk.
+struct WalkFrame
+{
+  const conf::PackageInfo* info;
+  bool                     expanded;
+};
+
+// Iterative post-order DFS over the manifest dep graph. Children are
+// pushed in reverse so the leftmost dep is visited first, matching the
+// recursive version's ordering. `state.stack` is the names currently on
+// the DFS path - revisiting one is a cycle.
+[[nodiscard]] std::expected<void, std::string> walk_info(const conf::PackageInfo& root,
                                                          WalkState&               state)
 {
-  if (state.done.contains(info.name))
+  std::vector<WalkFrame> stack;
+  stack.push_back({&root, false});
+  while (!stack.empty())
   {
-    return {};
-  }
-  if (!state.stack.insert(info.name).second)
-  {
-    return std::unexpected("dependency cycle detected at package: " + info.name);
-  }
-  for (const auto& dep : info.dependencies)
-  {
-    if (auto child = walk_info(dep, state); !child)
+    // `frame_ref` becomes dangling once we push to `stack`, so snapshot
+    // what we need from it first and stop touching the reference.
+    WalkFrame&               frame_ref    = stack.back();
+    const conf::PackageInfo* info         = frame_ref.info;
+    const bool               was_expanded = frame_ref.expanded;
+
+    if (!was_expanded)
     {
-      return child;
+      if (state.done.contains(info->name))
+      {
+        stack.pop_back();
+        continue;
+      }
+      if (!state.stack.insert(info->name).second)
+      {
+        return std::unexpected("dependency cycle detected at package: " + info->name);
+      }
+      frame_ref.expanded = true;
+      for (const auto& dep : info->dependencies | std::views::reverse)
+      {
+        stack.push_back({&dep, false});  // invalidates frame_ref
+      }
+    }
+    else
+    {
+      state.stack.erase(info->name);
+      state.done.insert(info->name);
+      state.entries.push_back(entry_from_info(*info));
+      stack.pop_back();
     }
   }
-  state.stack.erase(info.name);
-  state.done.insert(info.name);
-  state.entries.push_back(entry_from_info(info));
   return {};
 }
 
