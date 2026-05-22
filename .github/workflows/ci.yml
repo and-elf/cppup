@@ -26,5 +26,11 @@ jobs:
       - name: Build full cppup
         run: ./bootstrap_build/cppup_bootstrap build
 
-      - name: Run tests
-        run: ./build/cppup test
+      - name: Format code
+        run: ./build/cppup format --check
+
+      - name: Lint code
+        run: ./build/cppup tidy      
+
+      - name: Run tests with coverage
+        run: ./build/cppup test --coverage
