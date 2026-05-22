@@ -7,8 +7,7 @@ namespace cppup::package::registry
 
 RegistryPackage::RegistryPackage(PackageInfo info) : info_(std::move(info)) {}
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static) -- signature matches PackageType
-// concept
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 std::expected<std::filesystem::path, std::string> RegistryPackage::resolve_source() const
 {
   // Registry packages are not yet implemented.

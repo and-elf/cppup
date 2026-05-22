@@ -61,7 +61,7 @@ std::expected<void, std::string> CppupPackage::build(const std::filesystem::path
   return {};
 }
 
-bool CppupPackage::has_build_file(const std::filesystem::path& source_path) const
+bool CppupPackage::has_build_file(const std::filesystem::path& source_path)
 {
   return std::filesystem::exists(source_path / "build.cpp");
 }
@@ -92,6 +92,7 @@ std::expected<void, std::string> CppupPackage::execute_cppup_build(
   return {};
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void CppupPackage::setup_build_flags(const std::filesystem::path& source_path,
                                      const std::filesystem::path& build_path) const
 {

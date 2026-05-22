@@ -3,6 +3,10 @@
 #include <string>
 
 #include "SystemProcessRunner.hpp"
+#include "core/buildsystems/cmake/cmake_plugin.hpp"
+#include "core/buildsystems/cppup/cppup_plugin.hpp"
+#include "core/buildsystems/header_only/header_only_plugin.hpp"
+#include "core/buildsystems/make/make_plugin.hpp"
 #include "core/cli/cli_application.hpp"
 #include "core/cli/process_runner_git_interface.hpp"
 #include "core/logger/console/console_logger.hpp"
@@ -26,6 +30,10 @@ int main(int argc, char* argv[])
     cppup::package::archive::register_static_plugin();
     cppup::package::http::register_static_plugin();
     cppup::package::registry::register_static_plugin();
+    cppup::buildsystems::cmake::register_static_plugin();
+    cppup::buildsystems::make::register_static_plugin();
+    cppup::buildsystems::header_only::register_static_plugin();
+    cppup::buildsystems::cppup_system::register_static_plugin();
 
     // Create command context
     cppup::cli::CommandContext context;

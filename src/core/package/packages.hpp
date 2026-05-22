@@ -17,6 +17,7 @@
  */
 
 // Core concepts and utilities
+#include "../panic.hpp"
 #include "package_concept.hpp"
 #include "package_factory.hpp"
 
@@ -55,29 +56,30 @@ constexpr cppup::configuration::Package make_package(cppup::configuration::Packa
     case SourceType::REGISTRY:
       return Package(registry::RegistryPackage(std::move(info)));
   }
+  ::cppup::panic("make_package: unhandled SourceType");
 }
 
 /**
  * Convenience function to create a package with command executor
  */
-inline cppup::configuration::Package make_package(cppup::configuration::PackageInfo info,
-                                                  std::shared_ptr<CommandExecutor>  executor)
+inline cppup::configuration::Package make_package(cppup::configuration::PackageInfo       info,
+                                                  const std::shared_ptr<CommandExecutor>& executor)
 {
   auto package = PackageFactory::create_package(std::move(info));
-  package.set_command_executor(std::move(executor));
+  package.set_command_executor(executor);
   return package;
 }
 
 /**
  * Convenience function to create a package with command executor and cache
  */
-inline cppup::configuration::Package make_package(cppup::configuration::PackageInfo      info,
-                                                  std::shared_ptr<CommandExecutor>       executor,
-                                                  std::shared_ptr<PackageCacheInterface> cache)
+inline cppup::configuration::Package make_package(
+    cppup::configuration::PackageInfo info, const std::shared_ptr<CommandExecutor>& executor,
+    const std::shared_ptr<PackageCacheInterface>& cache)
 {
   auto package = PackageFactory::create_package(std::move(info));
-  package.set_command_executor(std::move(executor));
-  package.set_cache(std::move(cache));
+  package.set_command_executor(executor);
+  package.set_cache(cache);
   return package;
 }
 

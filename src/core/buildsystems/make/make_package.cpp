@@ -3,55 +3,56 @@
 #include <filesystem>
 #include <sstream>
 
+using cppup::configuration::Package;
+using cppup::configuration::PackageInfo;
+
 namespace cppup::buildsystems::make
 {
 
-MakePackage::MakePackage(cppup::configuration::PackageInfo info) : PackageBase(std::move(info)) {}
+MakePackage::MakePackage(PackageInfo info) : info_(std::move(info)) {}
+
+void MakePackage::ensure_source_package() const
+{
+  if (!source_package_)
+  {
+    source_package_ = std::make_unique<Package>(cppup::package::make_package(info_));
+    if (command_executor_)
+    {
+      source_package_->set_command_executor(command_executor_);
+    }
+  }
+}
 
 std::expected<std::filesystem::path, std::string> MakePackage::resolve_source() const
 {
-  switch (info().source_type)
+  ensure_source_package();
+  if (!source_package_)
   {
-    case configuration::SourceType::GIT:
-      return resolve_source();
-    case configuration::SourceType::DIRECTORY:
-      return resolve_directory_source();
-    case configuration::SourceType::TAR:
-    case configuration::SourceType::ZIP:
-      return resolve_archive_source();
-    case configuration::SourceType::HTTP:
-      return resolve_source();
-    case configuration::SourceType::REGISTRY:
-      return std::unexpected("Registry packages not supported by make build system");
-    default:
-      return std::unexpected("Unknown source type");
+    return std::unexpected("Failed to create source package");
   }
+  return source_package_->resolve_source();
 }
 
 std::expected<void, std::string> MakePackage::build(const std::filesystem::path& source_path) const
 {
-  auto actual_source_path = get_actual_source_path(source_path);
+  auto actual_source_path = cppup::package::utils::get_actual_source_path(source_path, info_);
 
-  // Check for Makefile
   if (!has_makefile(actual_source_path))
   {
     return std::unexpected("No Makefile found in source directory: " + actual_source_path.string());
   }
 
-  // Execute make
   auto make_result = execute_make(actual_source_path);
   if (!make_result)
   {
     return make_result;
   }
 
-  // Setup build flags
   setup_build_flags(actual_source_path);
-
   return {};
 }
 
-bool MakePackage::has_makefile(const std::filesystem::path& source_path) const
+bool MakePackage::has_makefile(const std::filesystem::path& source_path)
 {
   return std::filesystem::exists(source_path / "Makefile") ||
          std::filesystem::exists(source_path / "makefile") ||
@@ -61,79 +62,70 @@ bool MakePackage::has_makefile(const std::filesystem::path& source_path) const
 std::expected<void, std::string> MakePackage::execute_make(
     const std::filesystem::path& source_path) const
 {
+  if (!command_executor_)
+  {
+    return std::unexpected("No command executor available");
+  }
+
   std::string const make_command = get_make_command();
 
-  auto result = execute_command(make_command, source_path);
+  auto result =
+      cppup::package::utils::execute_command(*command_executor_, make_command, source_path);
   if (!result)
   {
     return std::unexpected("Make build failed: " + result.error());
   }
-
   return {};
 }
 
 void MakePackage::setup_build_flags(const std::filesystem::path& source_path) const
 {
-  // Set up include paths
-  std::vector<std::string> include_paths;
-
-  // Common include directories
+  include_paths_.clear();
   if (std::filesystem::exists(source_path / "include"))
   {
-    include_paths.push_back((source_path / "include").string());
+    include_paths_.push_back((source_path / "include").string());
   }
   if (std::filesystem::exists(source_path / "src"))
   {
-    include_paths.push_back((source_path / "src").string());
+    include_paths_.push_back((source_path / "src").string());
   }
 
-  const_cast<MakePackage*>(this)->set_include_paths(std::move(include_paths));
-
-  // Set up library paths
-  std::vector<std::string> library_paths;
-  library_paths.push_back(source_path.string());
-
-  // Common library output directories
+  library_paths_.clear();
+  library_paths_.push_back(source_path.string());
   if (std::filesystem::exists(source_path / "lib"))
   {
-    library_paths.push_back((source_path / "lib").string());
+    library_paths_.push_back((source_path / "lib").string());
   }
   if (std::filesystem::exists(source_path / "build"))
   {
-    library_paths.push_back((source_path / "build").string());
+    library_paths_.push_back((source_path / "build").string());
   }
 
-  const_cast<MakePackage*>(this)->set_library_paths(std::move(library_paths));
-
-  // Set up libraries (scan for built libraries)
-  std::vector<std::string> libraries;
-  for (const auto& lib_path : library_paths)
+  link_flags_.clear();
+  for (const auto& lib_path : library_paths_)
   {
     if (!std::filesystem::exists(lib_path))
     {
       continue;
     }
-
     for (const auto& entry : std::filesystem::directory_iterator(lib_path))
     {
-      if (entry.is_regular_file())
+      if (!entry.is_regular_file())
       {
-        auto extension = entry.path().extension().string();
-        if (extension == ".a" || extension == ".so" || extension == ".dll" || extension == ".lib")
+        continue;
+      }
+      const auto extension = entry.path().extension().string();
+      if (extension == ".a" || extension == ".so" || extension == ".dll" || extension == ".lib")
+      {
+        auto lib_name = entry.path().stem().string();
+        if (lib_name.starts_with("lib"))
         {
-          auto lib_name = entry.path().stem().string();
-          // Remove lib prefix if present
-          if (lib_name.starts_with("lib"))
-          {
-            lib_name = lib_name.substr(3);
-          }
-          libraries.push_back(lib_name);
+          lib_name = lib_name.substr(3);
         }
+        link_flags_.push_back("-l" + lib_name);
       }
     }
   }
-
-  const_cast<MakePackage*>(this)->set_link_flags(std::move(libraries));
 }
 
 std::string MakePackage::get_make_command() const
@@ -141,13 +133,11 @@ std::string MakePackage::get_make_command() const
   std::ostringstream cmd;
   cmd << "make";
 
-  // Add build arguments
   for (const auto& arg : info_.build_args)
   {
     cmd << " " << arg;
   }
 
-  // Add parallel build if not specified
   bool has_parallel = false;
   for (const auto& arg : info_.build_args)
   {
@@ -167,6 +157,3 @@ std::string MakePackage::get_make_command() const
 }
 
 }  // namespace cppup::buildsystems::make
-
-// Register the package type
-REGISTER_PACKAGE_TYPE(cppup::buildsystems::make::MakePackage, "make");

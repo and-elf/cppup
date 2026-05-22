@@ -131,14 +131,14 @@ class Package
 
   // Dependency injection
   template <typename ExecutorType>
-  void set_command_executor(std::shared_ptr<ExecutorType>& executor)
+  void set_command_executor(const std::shared_ptr<ExecutorType>& executor)
   {
     CPPUP_CHECK(impl_ != nullptr, "Package::set_command_executor() called on moved-from Package");
     impl_->set_command_executor(std::static_pointer_cast<void>(executor));
   }
 
   template <typename CacheType>
-  void set_cache(std::shared_ptr<CacheType>& cache)
+  void set_cache(const std::shared_ptr<CacheType>& cache)
   {
     CPPUP_CHECK(impl_ != nullptr, "Package::set_cache() called on moved-from Package");
     impl_->set_cache(std::static_pointer_cast<void>(cache));

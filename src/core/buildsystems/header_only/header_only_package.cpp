@@ -2,107 +2,98 @@
 
 #include <filesystem>
 
+using cppup::configuration::Package;
+using cppup::configuration::PackageInfo;
+
 namespace cppup::buildsystems::header_only
 {
 
-HeaderOnlyPackage::HeaderOnlyPackage(cppup::configuration::PackageInfo info) :
-    PackageBase(std::move(info))
+HeaderOnlyPackage::HeaderOnlyPackage(PackageInfo info) : info_(std::move(info)) {}
+
+void HeaderOnlyPackage::ensure_source_package() const
 {
+  if (!source_package_)
+  {
+    source_package_ = std::make_unique<Package>(cppup::package::make_package(info_));
+    if (command_executor_)
+    {
+      source_package_->set_command_executor(command_executor_);
+    }
+  }
 }
 
 std::expected<std::filesystem::path, std::string> HeaderOnlyPackage::resolve_source() const
 {
-  switch (info().source_type)
+  ensure_source_package();
+  if (!source_package_)
   {
-    case SourceType::GIT:
-      return resolve_git_source();
-    case SourceType::DIRECTORY:
-      return resolve_directory_source();
-    case SourceType::TAR:
-    case SourceType::ZIP:
-      return resolve_archive_source();
-    case SourceType::HTTP:
-      return resolve_http_source();
-    case SourceType::REGISTRY:
-      return std::unexpected("Registry packages not supported by header-only build system");
-    default:
-      return std::unexpected("Unknown source type");
+    return std::unexpected("Failed to create source package");
   }
+  return source_package_->resolve_source();
 }
 
 std::expected<void, std::string> HeaderOnlyPackage::build(
     const std::filesystem::path& source_path) const
 {
-  auto actual_source_path = get_actual_source_path(source_path);
+  const auto actual_source_path = cppup::package::utils::get_actual_source_path(source_path, info_);
 
-  // Header-only libraries don't need building, just setup include paths
-  setup_include_paths(actual_source_path);
+  auto found = find_header_directories(actual_source_path);
+  if (found.empty())
+  {
+    found.push_back(actual_source_path.string());
+  }
+  include_paths_ = std::move(found);
 
+  // Header-only libraries don't have a real build step.
   return {};
 }
 
-void HeaderOnlyPackage::setup_include_paths(const std::filesystem::path& source_path) const
-{
-  auto include_paths = find_header_directories(source_path);
-
-  // If no specific include directories found, use the source path itself
-  if (include_paths.empty())
-  {
-    include_paths.push_back(source_path.string());
-  }
-
-  const_cast<HeaderOnlyPackage*>(this)->set_include_paths(std::move(include_paths));
-}
-
 std::vector<std::string> HeaderOnlyPackage::find_header_directories(
-    const std::filesystem::path& source_path) const
+    const std::filesystem::path& source_path)
 {
-  std::vector<std::string> include_paths;
+  std::vector<std::string> result;
 
-  // Common header directory names
-  std::vector<std::string> possible_dirs = {"include", "src", "headers", "single_include", "."};
+  const std::vector<std::string> candidates = {"include", "src", "headers", "single_include", "."};
 
-  for (const auto& dir : possible_dirs)
+  for (const auto& dir : candidates)
   {
-    auto include_path = source_path / dir;
-    if (std::filesystem::exists(include_path) && std::filesystem::is_directory(include_path))
+    const auto include_path = source_path / dir;
+    if (!std::filesystem::exists(include_path) || !std::filesystem::is_directory(include_path))
     {
-      // Check if directory contains header files
-      bool has_headers = false;
+      continue;
+    }
 
-      try
+    bool has_headers = false;
+    try
+    {
+      for (const auto& entry : std::filesystem::recursive_directory_iterator(include_path))
       {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(include_path))
+        if (!entry.is_regular_file())
         {
-          if (entry.is_regular_file())
-          {
-            auto extension = entry.path().extension().string();
-            if (extension == ".h" || extension == ".hpp" || extension == ".hxx" ||
-                extension == ".h++" || extension == ".hh")
-            {
-              has_headers = true;
-              break;
-            }
-          }
+          continue;
+        }
+        const auto extension = entry.path().extension().string();
+        if (extension == ".h" || extension == ".hpp" || extension == ".hxx" ||
+            extension == ".h++" || extension == ".hh")
+        {
+          has_headers = true;
+          break;
         }
       }
-      catch (const std::filesystem::filesystem_error&)
-      {
-        // Skip directories we can't read
-        continue;
-      }
+    }
+    catch (const std::filesystem::filesystem_error&)
+    {
+      // Skip directories we can't read.
+      continue;
+    }
 
-      if (has_headers)
-      {
-        include_paths.push_back(include_path.string());
-      }
+    if (has_headers)
+    {
+      result.push_back(include_path.string());
     }
   }
 
-  return include_paths;
+  return result;
 }
 
 }  // namespace cppup::buildsystems::header_only
-
-// Register the package type
-REGISTER_PACKAGE_TYPE(cppup::buildsystems::header_only::HeaderOnlyPackage, "header_only");

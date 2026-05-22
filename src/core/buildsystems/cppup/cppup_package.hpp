@@ -17,37 +17,38 @@ class CppupPackage
   explicit CppupPackage(cppup::configuration::PackageInfo info);
 
   // PackageType concept implementation
-  const cppup::configuration::PackageInfo& info() const
+  [[nodiscard]] const cppup::configuration::PackageInfo& info() const
   {
     return info_;
   }
-  std::expected<std::filesystem::path, std::string> resolve_source() const;
-  std::expected<void, std::string> build(const std::filesystem::path& source_path) const;
-  std::string                      build_system_name() const
+  [[nodiscard]] std::expected<std::filesystem::path, std::string> resolve_source() const;
+  [[nodiscard]] std::expected<void, std::string>                  build(
+                       const std::filesystem::path& source_path) const;
+  [[nodiscard]] static std::string build_system_name()
   {
     return "cppup";
   }
-  std::vector<std::string> get_compile_flags() const
+  [[nodiscard]] std::vector<std::string> get_compile_flags() const
   {
     return compile_flags_;
   }
-  std::vector<std::string> get_link_flags() const
+  [[nodiscard]] std::vector<std::string> get_link_flags() const
   {
     return link_flags_;
   }
-  std::vector<std::string> get_include_paths() const
+  [[nodiscard]] std::vector<std::string> get_include_paths() const
   {
     return include_paths_;
   }
-  std::vector<std::string> get_library_paths() const
+  [[nodiscard]] std::vector<std::string> get_library_paths() const
   {
     return library_paths_;
   }
 
   // Dependency injection
-  void set_command_executor(std::shared_ptr<cppup::package::CommandExecutor> executor)
+  void set_command_executor(const std::shared_ptr<cppup::package::CommandExecutor>& executor)
   {
-    command_executor_ = std::move(executor);
+    command_executor_ = executor;
     // Also set it on the source package
     if (source_package_)
     {
@@ -67,9 +68,9 @@ class CppupPackage
   mutable std::vector<std::string> library_paths_;
 
   // Helper methods
-  void                             ensure_source_package() const;
-  bool                             has_build_file(const std::filesystem::path& source_path) const;
-  std::expected<void, std::string> execute_cppup_build(
+  void                      ensure_source_package() const;
+  [[nodiscard]] static bool has_build_file(const std::filesystem::path& source_path);
+  [[nodiscard]] std::expected<void, std::string> execute_cppup_build(
       const std::filesystem::path& source_path) const;
   void setup_build_flags(const std::filesystem::path& source_path,
                          const std::filesystem::path& build_path) const;

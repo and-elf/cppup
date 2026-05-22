@@ -69,7 +69,7 @@ std::expected<void, std::string> CMakePackage::build(const std::filesystem::path
   return {};
 }
 
-bool CMakePackage::has_cmake_file(const std::filesystem::path& source_path) const
+bool CMakePackage::has_cmake_file(const std::filesystem::path& source_path)
 {
   return std::filesystem::exists(source_path / "CMakeLists.txt");
 }
@@ -204,7 +204,7 @@ void CMakePackage::setup_build_flags(const std::filesystem::path& source_path,
 }
 
 std::string CMakePackage::get_cmake_configure_command(
-    const std::filesystem::path& source_path) const
+    const std::filesystem::path& /*source_path*/) const
 {
   std::ostringstream cmd;
   cmd << "cmake -S . -B build";
