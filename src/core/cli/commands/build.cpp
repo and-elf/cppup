@@ -136,8 +136,9 @@ std::vector<bld::FileDependency> collect_dependencies(bld::BuildCache&        ca
 
 struct CompileTask
 {
-  std::filesystem::path source;
-  std::filesystem::path object;
+  std::filesystem::path                           source;
+  std::filesystem::path                           object;
+  std::shared_ptr<const std::vector<std::string>> flags;
 };
 
 // Per-step progress for the user-facing build output. `set_total` is called
@@ -241,8 +242,8 @@ void run_in_parallel(const std::vector<Item>& items, unsigned jobs, Work work)
 // kill child processes). The logger is serialized so debug lines don't
 // interleave. Throws runtime_error with the first failure message after join.
 void compile_objects_parallel(const std::string& compiler, const std::vector<CompileTask>& tasks,
-                              const std::vector<std::string>& flags, unsigned jobs,
-                              ProcessRunner& runner, Logger& logger, ProgressReporter* progress)
+                              unsigned jobs, ProcessRunner& runner, Logger& logger,
+                              ProgressReporter* progress)
 {
   if (tasks.empty())
   {
@@ -267,11 +268,12 @@ void compile_objects_parallel(const std::string& compiler, const std::vector<Com
       {
         return;
       }
-      const auto&              task = tasks[index];
-      std::vector<std::string> args;
-      args.reserve(flags.size() + 4);
+      const auto&                     task       = tasks[index];
+      const std::vector<std::string>& task_flags = *task.flags;
+      std::vector<std::string>        args;
+      args.reserve(task_flags.size() + 4);
       args.emplace_back("-c");
-      for (const auto& flag : flags)
+      for (const auto& flag : task_flags)
       {
         args.push_back(flag);
       }
@@ -349,8 +351,22 @@ struct ExecutableSpec
 
 bld::BuildTarget make_library_target(const conf::Library& library, const BuildContext& ctx);
 
-// Returns true if the library was served from cache (no compile/archive done).
-bool build_library(const conf::Library& library, const BuildContext& ctx)
+// One library that needs a rebuild. Carries everything needed to archive
+// after the flat compile phase finishes: the object list (input to ar)
+// plus the BuildTarget so we can refresh the cache entry.
+struct LibArchivePlan
+{
+  std::string                        name;
+  std::filesystem::path              output_path;
+  std::vector<std::filesystem::path> objects;
+  bld::BuildTarget                   target;
+};
+
+// Cache-check `library` and, if it needs a rebuild, emit (CompileTask*,
+// LibArchivePlan) describing the work. Cached libraries get a single log
+// line and no plan entry. Returns true if the library was cached.
+bool plan_library_build(const conf::Library& library, const BuildContext& ctx,
+                        std::vector<CompileTask>& out_tasks, std::vector<LibArchivePlan>& out_plans)
 {
   auto target = make_library_target(library, ctx);
 
@@ -360,24 +376,34 @@ bool build_library(const conf::Library& library, const BuildContext& ctx)
     return true;
   }
 
-  std::vector<CompileTask>           lib_tasks;
-  std::vector<std::filesystem::path> objects;
-  lib_tasks.reserve(target.source_files.size());
-  objects.reserve(target.source_files.size());
+  auto shared_flags = std::make_shared<std::vector<std::string>>(target.compile_flags);
+
+  LibArchivePlan plan{
+      .name        = library.name,
+      .output_path = target.output_path,
+      .objects     = {},
+      .target      = target,
+  };
+  plan.objects.reserve(target.source_files.size());
   for (const auto& src : target.source_files)
   {
     auto obj = ctx.paths->build_dir / (src.stem().string() + "_" + library.name + ".o");
-    lib_tasks.push_back({src, obj});
-    objects.push_back(obj);
+    out_tasks.push_back(CompileTask{.source = src, .object = obj, .flags = shared_flags});
+    plan.objects.push_back(obj);
   }
-  compile_objects_parallel("g++", lib_tasks, target.compile_flags, ctx.options.jobs,
-                           *ctx.process_runner, *ctx.logger, ctx.progress);
+  out_plans.push_back(std::move(plan));
+  return false;
+}
 
+// Run `ar rcs` over the plan's objects and refresh the cache entry. Called
+// once per non-cached library after the flat compile phase finishes.
+void archive_library(const LibArchivePlan& plan, const BuildContext& ctx)
+{
   std::vector<std::string> ar_args;
-  ar_args.reserve(objects.size() + 2);
+  ar_args.reserve(plan.objects.size() + 2);
   ar_args.emplace_back("rcs");
-  ar_args.push_back(target.output_path.string());
-  for (const auto& obj : objects)
+  ar_args.push_back(plan.output_path.string());
+  for (const auto& obj : plan.objects)
   {
     ar_args.push_back(obj.string());
   }
@@ -385,13 +411,12 @@ bool build_library(const conf::Library& library, const BuildContext& ctx)
   if (ctx.process_runner->run(
           ProcessRunRequest{.command = "ar", .args = std::move(ar_args), .working_dir = ""}) != 0)
   {
-    throw std::runtime_error("archive failed: " + library.name);
+    throw std::runtime_error("archive failed: " + plan.name);
   }
-  ctx.progress->step("archiving", target.output_path.filename().string());
+  ctx.progress->step("archiving", plan.output_path.filename().string());
 
-  auto deps = collect_dependencies(*ctx.cache, target);
-  ctx.cache->cache_build_result(target, deps);
-  return false;
+  auto deps = collect_dependencies(*ctx.cache, plan.target);
+  ctx.cache->cache_build_result(plan.target, deps);
 }
 
 // The two outputs of resolve_link_set + aggregate_link_flags, bundled so they
@@ -530,15 +555,16 @@ bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
   std::vector<std::filesystem::path> bin_objects;
   bin_tasks.reserve(target.source_files.size());
   bin_objects.reserve(target.source_files.size());
+  auto shared_flags = std::make_shared<std::vector<std::string>>(target.compile_flags);
   for (const auto& src : target.source_files)
   {
     auto obj =
         ctx.paths->build_dir / (src.stem().string() + "_" + spec.name + "_" + spec.kind + ".o");
-    bin_tasks.push_back({src, obj});
+    bin_tasks.push_back(CompileTask{.source = src, .object = obj, .flags = shared_flags});
     bin_objects.push_back(obj);
   }
-  compile_objects_parallel(compiler, bin_tasks, target.compile_flags, ctx.options.jobs,
-                           *ctx.process_runner, *ctx.logger, ctx.progress);
+  compile_objects_parallel(compiler, bin_tasks, ctx.options.jobs, *ctx.process_runner, *ctx.logger,
+                           ctx.progress);
 
   std::vector<std::string> link_args;
   link_args.reserve(bin_objects.size() + target.link_flags.size() + 2);
@@ -914,18 +940,46 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
 
     BuildCounters counts;
 
-    for (const auto& library : config.libraries)
+    // Libraries: flat-queue build. Phase A plans every non-cached library
+    // into a single CompileTask list, Phase B compiles all sources at once
+    // (saturating cores even when one library has 16 fat TUs), Phase C
+    // archives each library in parallel since static archives have no
+    // inter-library ordering constraint.
+    //
+    // Between A and B we sort tasks by source size descending (LPT
+    // scheduling). Without it, libraries late in config.libraries (e.g.
+    // cppup_cli with its 16 fat commands TUs) land at the tail of the
+    // queue and only start after the small tasks ahead have drained the
+    // pool — turning a 22-way burst into a long ~2-way tail.
     {
-      if (build_library(library, ctx))
+      std::vector<CompileTask>    lib_tasks;
+      std::vector<LibArchivePlan> archive_plans;
+      for (const auto& library : config.libraries)
       {
-        ++counts.cached;
+        if (plan_library_build(library, ctx, lib_tasks, archive_plans))
+        {
+          ++counts.cached;
+        }
       }
-      ++counts.built;
+      counts.built += config.libraries.size();
+
+      std::ranges::sort(lib_tasks,
+                        [](const CompileTask& lhs, const CompileTask& rhs)
+                        {
+                          std::error_code error;
+                          const auto      lhs_size = std::filesystem::file_size(lhs.source, error);
+                          const auto      rhs_size = std::filesystem::file_size(rhs.source, error);
+                          return lhs_size > rhs_size;
+                        });
+
+      compile_objects_parallel("g++", lib_tasks, ctx.options.jobs, *ctx.process_runner, logger,
+                               &progress);
+      run_in_parallel(archive_plans, ctx.options.jobs,
+                      [&](const LibArchivePlan& plan) { archive_library(plan, ctx); });
     }
 
-    // Tests/binaries are independent and typically one source each — outer
-    // parallelism across targets is a bigger win than inner per-source. Force
-    // inner jobs=1 in the workers so we don't run jobs² g++ processes.
+    // Binaries/tests are still outer-parallel with inner jobs=1 — each
+    // typically has one source, so inner parallelism wouldn't help anyway.
     BuildContext inner_ctx = ctx;
     inner_ctx.options.jobs = 1;
 
