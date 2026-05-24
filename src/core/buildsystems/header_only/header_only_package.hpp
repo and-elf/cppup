@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../package/packages.hpp"
+#include "../../package/package_concept.hpp"
 
 namespace cppup::buildsystems::header_only
 {

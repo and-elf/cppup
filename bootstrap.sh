@@ -94,6 +94,7 @@ build_slim() {
         src/core/buildsystems/cppup/cppup_package.cpp
         src/core/package/package_concept.cpp
         src/core/package/package_factory.cpp
+        src/core/package/packages.cpp
         src/core/package/git/git_package.cpp
         src/core/package/http/http_package.cpp
         src/core/package/archive/archive_package.cpp

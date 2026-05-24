@@ -23,10 +23,11 @@ extern "C" BuildConfiguration configure()
   // system can forward Subproject::build_args into sub-build.cpps.
   config.libraries.push_back(Library{
       .name      = "cppup_packages",
-      .sources   = {"git/git_package.cpp", "git/git_plugin.cpp", "directory/directory_package.cpp",
-                    "directory/directory_plugin.cpp", "archive/archive_package.cpp",
-                    "archive/archive_plugin.cpp", "http/http_package.cpp", "http/http_plugin.cpp",
-                    "registry/registry_package.cpp", "registry/registry_plugin.cpp"},
+      .sources   = {"packages.cpp", "git/git_package.cpp", "git/git_plugin.cpp",
+                    "directory/directory_package.cpp", "directory/directory_plugin.cpp",
+                    "archive/archive_package.cpp", "archive/archive_plugin.cpp",
+                    "http/http_package.cpp", "http/http_plugin.cpp", "registry/registry_package.cpp",
+                    "registry/registry_plugin.cpp"},
       .type      = LibraryType::Static,
       .libraries = {"cppup_plugin", "cppup_package_utils"},
   });

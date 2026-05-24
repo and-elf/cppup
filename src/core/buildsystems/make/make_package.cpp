@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <sstream>
 
+#include "../../package/packages.hpp"
+
 using cppup::configuration::Package;
 using cppup::configuration::PackageInfo;
 

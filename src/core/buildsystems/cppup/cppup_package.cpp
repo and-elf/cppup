@@ -2,6 +2,8 @@
 
 #include <filesystem>
 
+#include "../../package/packages.hpp"
+
 using namespace cppup::configuration;
 
 namespace cppup::buildsystems::cppup_system

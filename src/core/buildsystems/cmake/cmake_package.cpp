@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <sstream>
 
+#include "../../package/packages.hpp"
+
 using namespace cppup::configuration;
 
 namespace cppup::buildsystems::cmake
