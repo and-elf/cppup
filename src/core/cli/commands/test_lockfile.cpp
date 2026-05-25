@@ -340,6 +340,34 @@ TEST(LockfileGraph, LockfileWithDepsRoundtrips)
   EXPECT_EQ(*parsed, *entries);
 }
 
+TEST(LockfileFromConfiguration, IncludesTestFrameworkPackages)
+{
+  using cppup::configuration::SourceType;
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(cppup::configuration::TestFramework{
+      .name    = "gtest",
+      .plugin  = "gtest",
+      .package = make_package("googletest", SourceType::GIT),
+  });
+
+  const auto entries = lockfile::entries_from_configuration(config);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  ASSERT_EQ(entries->size(), 1U);
+  EXPECT_EQ((*entries)[0].name, "googletest");
+  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+}
+
+TEST(LockfileFromConfiguration, FrameworksWithoutPackageAreSkipped)
+{
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(
+      cppup::configuration::TestFramework{.name = "system_gtest", .plugin = "gtest"});
+
+  const auto entries = lockfile::entries_from_configuration(config);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  EXPECT_TRUE(entries->empty());
+}
+
 // Integration-style tests below drive executePackageSync end-to-end against
 // a synthetic cppup.lock + a fake git interface. They cover the acceptance
 // criteria around sync idempotency and metadata/state reconciliation.

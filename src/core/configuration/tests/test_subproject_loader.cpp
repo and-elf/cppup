@@ -75,3 +75,18 @@ TEST(SubprojectLoader, EmptySubprojectPathReturnsUnchanged)
   auto rebased = rebase_subproject_outputs(child, "");
   EXPECT_EQ(rebased.libraries[0].sources[0], "cache.cpp");
 }
+
+TEST(SubprojectLoader, TestFrameworksMergeFromRebasedChild)
+{
+  BuildConfiguration parent;
+  parent.test_frameworks.push_back(TestFramework{.name = "gtest", .plugin = "gtest"});
+
+  BuildConfiguration child;
+  child.test_frameworks.push_back(TestFramework{.name = "catch2", .plugin = "catch2"});
+
+  detail::merge_rebased_into(parent, rebase_subproject_outputs(child, "subproject"));
+
+  ASSERT_EQ(parent.test_frameworks.size(), 2U);
+  EXPECT_EQ(parent.test_frameworks[0].name, "gtest");
+  EXPECT_EQ(parent.test_frameworks[1].name, "catch2");
+}

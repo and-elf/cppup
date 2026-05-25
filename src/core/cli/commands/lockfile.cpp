@@ -629,6 +629,21 @@ std::expected<std::vector<Entry>, std::string> entries_from_configuration(
       return std::unexpected(walked.error());
     }
   }
+  // Test-framework packages roundtrip through the lockfile too so a fresh
+  // `git clone && cppup test` reproduces the framework source state without
+  // an explicit sync. Frameworks with no declared package (e.g. system-
+  // installed) are skipped.
+  for (const auto& framework : config.test_frameworks)
+  {
+    if (!framework.package.has_value())
+    {
+      continue;
+    }
+    if (auto walked = walk_info(framework.package->info(), state); !walked)
+    {
+      return std::unexpected(walked.error());
+    }
+  }
   std::ranges::sort(state.entries,
                     [](const Entry& lhs, const Entry& rhs) { return lhs.name < rhs.name; });
   return std::move(state.entries);
