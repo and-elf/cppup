@@ -25,6 +25,6 @@ namespace cppup::configuration
 std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
                                             const std::filesystem::path& project_root,
                                             const std::filesystem::path& build_dir,
-                                            const BuildOptions&          options);
+                                            const BuildOptions&          options = {});
 
 }  // namespace cppup::configuration

@@ -56,9 +56,10 @@ TEST(CompileCommands, OneEntryPerSource)
 {
   auto               root = make_tmp_dir("one_per_src");
   BuildConfiguration config;
+  BuildOptions       options;
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp", "src/util.cpp"}});
 
-  auto result = emit_compile_commands(config, root, root / "build");
+  auto result = emit_compile_commands(config, root, root / "build", options);
   EXPECT_TRUE(fs::exists(result));
   EXPECT_EQ(result.filename(), "compile_commands.json");
 
@@ -75,13 +76,14 @@ TEST(CompileCommands, OneEntryPerSource)
 TEST(CompileCommands, IncludesDefinesAndFlags)
 {
   auto               root = make_tmp_dir("flags");
+  BuildOptions       options;
   BuildConfiguration config;
   config.compile_flags = {Flag{"-Wall"}, Flag{"-std=c++23"}};
   config.definitions   = {Definition{.name = "FOO", .value = "bar"}, Definition{.name = "NDEBUG"}};
   config.include_paths = {"include", "src"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
 
-  auto json = slurp(emit_compile_commands(config, root, root / "build"));
+  auto json = slurp(emit_compile_commands(config, root, root / "build", options));
   EXPECT_TRUE(contains(json, "\"-Wall\""));
   EXPECT_TRUE(contains(json, "\"-std=c++23\""));
   EXPECT_TRUE(contains(json, "\"-DFOO=bar\""));
@@ -98,14 +100,16 @@ TEST(CompileCommands, ToolchainCompilerUsed)
   BuildConfiguration config;
   config.toolchain = Toolchain{.name = "clang++"};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
+  BuildOptions options{};
 
-  auto json = slurp(emit_compile_commands(config, root, root / "build"));
+  auto json = slurp(emit_compile_commands(config, root, root / "build", options));
   EXPECT_TRUE(contains(json, "\"clang++\""));
 
   BuildConfiguration default_config;
   default_config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
   auto default_root = make_tmp_dir("toolchain_default");
-  auto json2 = slurp(emit_compile_commands(default_config, default_root, default_root / "build"));
+  auto json2 =
+      slurp(emit_compile_commands(default_config, default_root, default_root / "build", options));
   EXPECT_TRUE(contains(json2, "\"g++\""));
 
   fs::remove_all(root);
@@ -116,11 +120,12 @@ TEST(CompileCommands, AllTargetKindsEmitted)
 {
   auto               root = make_tmp_dir("targets");
   BuildConfiguration config;
+  BuildOptions       options;
   config.libraries.push_back(Library{.name = "lib", .sources = {"lib/a.cpp", "lib/b.cpp"}});
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
   config.tests.push_back(cppup::configuration::Test{.name = "unit", .sources = {"tests/t.cpp"}});
 
-  auto json = slurp(emit_compile_commands(config, root, root / "build"));
+  auto json = slurp(emit_compile_commands(config, root, root / "build", options));
   EXPECT_EQ(count_entries(json), 4U);
   EXPECT_TRUE(contains(json, "lib/a.cpp"));
   EXPECT_TRUE(contains(json, "lib/b.cpp"));
@@ -151,12 +156,15 @@ TEST(CompileCommands, CoverageAddsCoverageFlag)
 {
   auto               root = make_tmp_dir("coverage");
   BuildConfiguration config;
+  BuildOptions       options{.coverage = Coverage::Off};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
 
-  EXPECT_FALSE(contains(slurp(emit_compile_commands(config, root, root / "build")), "--coverage"));
-  EXPECT_TRUE(contains(slurp(emit_compile_commands(config, root, root / "build",
-                                                   BuildOptions{.coverage = Coverage::On})),
-                       "--coverage"));
+  EXPECT_FALSE(
+      contains(slurp(emit_compile_commands(config, root, root / "build", options)), "--coverage"));
+
+  options.coverage = Coverage::On;
+  EXPECT_TRUE(
+      contains(slurp(emit_compile_commands(config, root, root / "build", options)), "--coverage"));
 
   fs::remove_all(root);
 }
@@ -166,8 +174,9 @@ TEST(CompileCommands, PathsAreAbsolute)
   auto               root = make_tmp_dir("abs");
   BuildConfiguration config;
   config.binaries.push_back(Binary{.name = "app", .sources = {"src/main.cpp"}});
+  BuildOptions options{};
 
-  auto json     = slurp(emit_compile_commands(config, root, root / "build"));
+  auto json     = slurp(emit_compile_commands(config, root, root / "build", options));
   auto expected = (root / "src" / "main.cpp").string();
   EXPECT_TRUE(contains(json, "\"file\": \"" + expected + "\""));
 
@@ -180,8 +189,9 @@ TEST(CompileCommands, QuotesInDefinitionValueAreEscaped)
   BuildConfiguration config;
   config.definitions = {Definition{.name = "VERSION", .value = "\"1.2\""}};
   config.binaries.push_back(Binary{.name = "app", .sources = {"main.cpp"}});
+  BuildOptions options{};
 
-  auto json = slurp(emit_compile_commands(config, root, root / "build"));
+  auto json = slurp(emit_compile_commands(config, root, root / "build", options));
   EXPECT_TRUE(contains(json, "\\\"1.2\\\""));
 
   fs::remove_all(root);

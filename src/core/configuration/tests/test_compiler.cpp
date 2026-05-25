@@ -43,7 +43,7 @@ TEST(ConfigurationCompiler, SharedLibraryPathDiffersByInput)
 
 TEST(ConfigurationCompiler, NeedsRecompilationDetectsStaleness)
 {
-  ConfigurationCompiler const compiler;
+  ConfigurationCompiler compiler;
 
   std::filesystem::create_directories("test_temp");
   std::filesystem::create_directories(".cppup/build/config");
