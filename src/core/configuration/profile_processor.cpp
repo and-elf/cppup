@@ -1,167 +1,75 @@
+#include "profile_processor.hpp"
+
 #include <algorithm>
 #include <functional>
 #include <set>
 #include <string>
 #include <vector>
 
-#include "build_configuration.hpp"
-
 namespace cppup::configuration
 {
 
-/**
- * Result of profile processing
- */
-struct ProfileProcessingResult
+namespace
 {
-  bool               success = false;
-  BuildConfiguration processed_config;
-  std::string        active_profile;
-  std::string        error_message;
 
-  [[nodiscard]] bool is_success() const noexcept
-  {
-    return success;
-  }
-  [[nodiscard]] bool is_failure() const noexcept
-  {
-    return !success;
-  }
-};
-
-/**
- * Profile processor class
- */
-class ProfileProcessor
+// Merge `additional` into `base`, deduping by `key`. Items in `additional`
+// whose projected key is already present are skipped. Default projection
+// is std::identity (full-value equality). `key` is invoked via std::invoke,
+// so pointer-to-member projections like `&Flag::flag` work directly.
+template <typename T, typename KeyFn = std::identity>
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+[[nodiscard]] std::vector<T> merge_unique(const std::vector<T>& base,
+                                          const std::vector<T>& additional, KeyFn key = {})
+// NOLINTEND(bugprone-easily-swappable-parameters)
 {
- public:
-  ProfileProcessor() = default;
-
-  /**
-   * Process profiles and merge with base configuration
-   * @param config Base configuration containing profiles
-   * @param profile_name Name of profile to activate (if empty, uses default)
-   * @return ProfileProcessingResult with merged configuration
-   */
-  [[nodiscard]] static ProfileProcessingResult process_profiles(
-      const BuildConfiguration& config, const std::string& profile_name = "");
-
-  /**
-   * Get the effective profile name (specified or default)
-   * @param config Configuration containing profiles
-   * @param profile_name Requested profile name (if empty, uses default)
-   * @return Effective profile name to use
-   */
-  [[nodiscard]] static std::string get_effective_profile_name(const BuildConfiguration& config,
-                                                              const std::string& profile_name = "");
-
-  /**
-   * Find a profile by name in the configuration
-   * @param config Configuration containing profiles
-   * @param profile_name Name of profile to find
-   * @return Pointer to profile or nullptr if not found
-   */
-  [[nodiscard]] static const Profile* find_profile(const BuildConfiguration& config,
-                                                   const std::string&        profile_name);
-
-  /**
-   * Merge profile settings into base configuration
-   * @param base_config Base configuration
-   * @param profile Profile to merge
-   * @return Merged configuration
-   */
-  [[nodiscard]] static BuildConfiguration merge_profile(const BuildConfiguration& base_config,
-                                                        const Profile&            profile);
-
-  /**
-   * Get default profile name
-   * @return Default profile name ("debug")
-   */
-  [[nodiscard]] static std::string get_default_profile_name()
+  std::vector<T> result = base;
+  for (const auto& item : additional)
   {
-    return "debug";
-  }
-
-  /**
-   * Check if a profile exists in the configuration
-   * @param config Configuration to check
-   * @param profile_name Profile name to look for
-   * @return true if profile exists
-   */
-  [[nodiscard]] static bool has_profile(const BuildConfiguration& config,
-                                        const std::string&        profile_name);
-
-  /**
-   * Get list of available profile names
-   * @param config Configuration containing profiles
-   * @return List of profile names
-   */
-  static std::vector<std::string> get_available_profiles(const BuildConfiguration& config);
-
-  /**
-   * Validate profile configuration
-   * @param config Configuration containing profiles
-   * @return Error message if invalid, empty string if valid
-   */
-  static std::string validate_profiles(const BuildConfiguration& config);
-
- private:
-  // Merge `additional` into `base`, deduping by `key`. Items in `additional`
-  // whose projected key is already present are skipped. Default projection
-  // is std::identity (full-value equality). `key` is invoked via std::invoke,
-  // so pointer-to-member projections like `&Flag::flag` work directly.
-  // base/additional names make the merge direction unambiguous; strong-typing
-  // would propagate ceremony through every caller of this internal helper.
-  // NOLINTBEGIN(bugprone-easily-swappable-parameters)
-  template <typename T, typename KeyFn = std::identity>
-  [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
-                                                   const std::vector<T>& additional, KeyFn key = {})
-  // NOLINTEND(bugprone-easily-swappable-parameters)
-  {
-    std::vector<T> result = base;
-    for (const auto& item : additional)
+    const auto match =
+        std::ranges::find_if(result, [&](const T& existing)
+                             { return std::invoke(key, existing) == std::invoke(key, item); });
+    if (match == result.end())
     {
-      const auto match =
-          std::ranges::find_if(result, [&](const T& existing)
-                               { return std::invoke(key, existing) == std::invoke(key, item); });
-      if (match == result.end())
-      {
-        result.push_back(item);
-      }
+      result.push_back(item);
     }
-    return result;
   }
+  return result;
+}
 
-  // Same as above, but when a key collides on_collide(existing&, new&) is
-  // invoked instead of skipping — for fields like Definition::value where
-  // the additional entry should override the base entry.
-  // NOLINTBEGIN(bugprone-easily-swappable-parameters) -- see overload above
-  template <typename T, typename KeyFn, typename OnCollide>
-  [[nodiscard]] static std::vector<T> merge_unique(const std::vector<T>& base,
-                                                   const std::vector<T>& additional, KeyFn key,
-                                                   OnCollide on_collide)
-  // NOLINTEND(bugprone-easily-swappable-parameters)
+// Same as above, but on a key collision `on_collide(existing&, new&)` is
+// invoked instead of skipping — for fields like Definition::value where
+// the additional entry should override the base entry.
+template <typename T, typename KeyFn, typename OnCollide>
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+[[nodiscard]] std::vector<T> merge_unique(const std::vector<T>& base,
+                                          const std::vector<T>& additional, KeyFn key,
+                                          OnCollide on_collide)
+// NOLINTEND(bugprone-easily-swappable-parameters)
+{
+  std::vector<T> result = base;
+  for (const auto& item : additional)
   {
-    std::vector<T> result = base;
-    for (const auto& item : additional)
+    auto match =
+        std::ranges::find_if(result, [&](const T& existing)
+                             { return std::invoke(key, existing) == std::invoke(key, item); });
+    if (match == result.end())
     {
-      auto match =
-          std::ranges::find_if(result, [&](const T& existing)
-                               { return std::invoke(key, existing) == std::invoke(key, item); });
-      if (match == result.end())
-      {
-        result.push_back(item);
-      }
-      else
-      {
-        on_collide(*match, item);
-      }
+      result.push_back(item);
     }
-    return result;
+    else
+    {
+      on_collide(*match, item);
+    }
   }
-};
+  return result;
+}
 
-// Implementation
+}  // namespace
+
+std::string ProfileProcessor::get_default_profile_name()
+{
+  return "debug";
+}
 
 ProfileProcessingResult ProfileProcessor::process_profiles(const BuildConfiguration& config,
                                                            const std::string&        profile_name)

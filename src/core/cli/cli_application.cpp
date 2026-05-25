@@ -255,11 +255,13 @@ void registerBuildCommand(const CommandRegistration& reg)
   auto& result = *reg.result;
   struct Opts
   {
-    bool     asan       = false;
-    bool     coverage   = false;
-    bool     verbose    = false;
-    bool     with_tests = false;
-    unsigned jobs       = 0;
+    bool        asan       = false;
+    bool        coverage   = false;
+    bool        verbose    = false;
+    bool        with_tests = false;
+    unsigned    jobs       = 0;
+    std::string toolchain;
+    std::string profile;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -271,6 +273,12 @@ void registerBuildCommand(const CommandRegistration& reg)
                 "Also compile test binaries (default: libraries + binaries only)");
   cmd->add_option("-j,--jobs", opts->jobs,
                   "Parallel compile jobs (0 = auto / hardware_concurrency)");
+  cmd->add_option("--toolchain", opts->toolchain,
+                  "Override the active toolchain for this build (takes precedence over "
+                  "`cppup toolchain select`)");
+  cmd->add_option("--profile", opts->profile,
+                  "Override the active build profile for this build (takes precedence over "
+                  "`cppup profile select`)");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -280,14 +288,23 @@ void registerBuildCommand(const CommandRegistration& reg)
           cppup::logger::console::ConsoleLogger::setGlobalConfig(
               {.defaultLevel = cppup::logger::LogLevel::Debug, .categoryOverrides = {}});
         }
-        result.set(handleExpectedResult(
-            executeBuild(BuildOptions{.asan       = to_enum<Asan>(opts->asan),
-                                      .coverage   = to_enum<Coverage>(opts->coverage),
-                                      .verbose    = to_enum<Verbose>(opts->verbose),
-                                      .with_tests = to_enum<WithTests>(opts->with_tests),
-                                      .jobs       = opts->jobs},
-                         ctx),
-            "Build", ErrorHandler::ErrorCode::BuildFailure));
+        BuildOptions build_opts{.asan       = to_enum<Asan>(opts->asan),
+                                .coverage   = to_enum<Coverage>(opts->coverage),
+                                .verbose    = to_enum<Verbose>(opts->verbose),
+                                .with_tests = to_enum<WithTests>(opts->with_tests),
+                                .jobs       = opts->jobs,
+                                .toolchain  = {},
+                                .profile    = {}};
+        if (!opts->toolchain.empty())
+        {
+          build_opts.toolchain = opts->toolchain;
+        }
+        if (!opts->profile.empty())
+        {
+          build_opts.profile = opts->profile;
+        }
+        result.set(handleExpectedResult(executeBuild(std::move(build_opts), ctx), "Build",
+                                        ErrorHandler::ErrorCode::BuildFailure));
       });
 }
 
@@ -299,8 +316,10 @@ void registerCompileCommandsCommand(const CommandRegistration& reg)
   auto& result = *reg.result;
   struct Opts
   {
-    bool asan     = false;
-    bool coverage = false;
+    bool        asan     = false;
+    bool        coverage = false;
+    std::string toolchain;
+    std::string profile;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -308,15 +327,32 @@ void registerCompileCommandsCommand(const CommandRegistration& reg)
       app.add_subcommand("compile-commands", "Emit compile_commands.json for clangd/LSP tooling");
   cmd->add_flag("--asan", opts->asan, "Mirror --asan flags in emitted commands");
   cmd->add_flag("--coverage", opts->coverage, "Mirror --coverage flags in emitted commands");
+  cmd->add_option("--toolchain", opts->toolchain,
+                  "Emit commands for the named toolchain (must match the build's selection so "
+                  "clangd sees what the compiler actually invoked)");
+  cmd->add_option("--profile", opts->profile,
+                  "Emit commands for the named build profile (must match the build's selection)");
 
   cmd->callback(
       [opts, &ctx, &result]
       {
-        result.set(handleExpectedResult(
-            executeCompileCommands(BuildOptions{.asan     = to_enum<Asan>(opts->asan),
-                                                .coverage = to_enum<Coverage>(opts->coverage)},
-                                   ctx),
-            "compile-commands", ErrorHandler::ErrorCode::BuildFailure));
+        BuildOptions cc_opts{.asan       = to_enum<Asan>(opts->asan),
+                             .coverage   = to_enum<Coverage>(opts->coverage),
+                             .verbose    = Verbose::Off,
+                             .with_tests = WithTests::Off,
+                             .jobs       = 0,
+                             .toolchain  = {},
+                             .profile    = {}};
+        if (!opts->toolchain.empty())
+        {
+          cc_opts.toolchain = opts->toolchain;
+        }
+        if (!opts->profile.empty())
+        {
+          cc_opts.profile = opts->profile;
+        }
+        result.set(handleExpectedResult(executeCompileCommands(std::move(cc_opts), ctx),
+                                        "compile-commands", ErrorHandler::ErrorCode::BuildFailure));
       });
 }
 
@@ -345,8 +381,10 @@ void registerTestCommand(const CommandRegistration& reg)
   auto& result = *reg.result;
   struct Opts
   {
-    bool asan     = false;
-    bool coverage = false;
+    bool        asan     = false;
+    bool        coverage = false;
+    std::string toolchain;
+    std::string profile;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -354,15 +392,29 @@ void registerTestCommand(const CommandRegistration& reg)
   cmd->add_flag("--asan", opts->asan, "Enable AddressSanitizer");
   cmd->add_flag("--coverage", opts->coverage,
                 "Collect gcov coverage after tests (build with --coverage first)");
+  cmd->add_option("--toolchain", opts->toolchain, "Override the active toolchain for this build");
+  cmd->add_option("--profile", opts->profile, "Override the active build profile for this build");
 
   cmd->callback(
       [opts, &ctx, &result]
       {
-        result.set(handleExpectedResult(
-            executeTest(BuildOptions{.asan     = to_enum<Asan>(opts->asan),
-                                     .coverage = to_enum<Coverage>(opts->coverage)},
-                        ctx),
-            "Test", ErrorHandler::ErrorCode::TestFailure));
+        BuildOptions test_opts{.asan       = to_enum<Asan>(opts->asan),
+                               .coverage   = to_enum<Coverage>(opts->coverage),
+                               .verbose    = Verbose::Off,
+                               .with_tests = WithTests::Off,
+                               .jobs       = 0,
+                               .toolchain  = {},
+                               .profile    = {}};
+        if (!opts->toolchain.empty())
+        {
+          test_opts.toolchain = opts->toolchain;
+        }
+        if (!opts->profile.empty())
+        {
+          test_opts.profile = opts->profile;
+        }
+        result.set(handleExpectedResult(executeTest(std::move(test_opts), ctx), "Test",
+                                        ErrorHandler::ErrorCode::TestFailure));
       });
 }
 
@@ -532,6 +584,26 @@ void registerToolchainCommands(const CommandRegistration& reg)
       });
 }
 
+void registerProfileCommands(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("profile", "Manage build profiles");
+  group->require_subcommand(1);
+
+  auto  select_name = std::make_shared<std::string>();
+  auto* select_cmd  = group->add_subcommand("select", "Select active build profile");
+  select_cmd->add_option("name", *select_name, "Profile name (must exist in build.cpp)")
+      ->required();
+  select_cmd->callback(
+      [select_name, &ctx, &result]
+      {
+        result.set(handleExpectedResult(executeProfileSelect(*select_name, ctx), "Profile select",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+
 void registerPluginCommands(const CommandRegistration& reg)
 {
   auto& app    = *reg.app;
@@ -671,6 +743,7 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerTidyCommand(reg);
     registerPackageCommands(reg);
     registerToolchainCommands(reg);
+    registerProfileCommands(reg);
     registerPluginCommands(reg);
     registerModuleCommands(reg);
 #endif

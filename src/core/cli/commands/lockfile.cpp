@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <array>
+#include <fstream>
 #include <map>
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <system_error>
 #include <utility>
 
 #include "../../configuration/types.hpp"
@@ -350,6 +352,11 @@ std::expected<SourceKind, std::string> parse_source_kind(std::string_view text) 
 
 std::string serialize(const std::vector<Entry>& entries)
 {
+  return serialize(entries, Selection{});
+}
+
+std::string serialize(const std::vector<Entry>& entries, const Selection& selection)
+{
   std::vector<Entry> sorted = entries;
   std::ranges::sort(sorted, [](const Entry& lhs, const Entry& rhs) { return lhs.name < rhs.name; });
 
@@ -357,12 +364,97 @@ std::string serialize(const std::vector<Entry>& entries)
   output << k_header_line1 << '\n';
   output << k_header_line2 << '\n';
   output << "version = " << k_format_version << '\n';
+  // Empty selection fields are omitted so an unselected lockfile is
+  // byte-identical to the entries-only form.
+  if (selection.toolchain)
+  {
+    output << "selected_toolchain = " << quote(*selection.toolchain) << '\n';
+  }
+  if (selection.profile)
+  {
+    output << "selected_profile = " << quote(*selection.profile) << '\n';
+  }
   for (const auto& entry : sorted)
   {
     output << '\n';
     write_entry(output, entry);
   }
   return output.str();
+}
+
+Selection read_selection(std::string_view content)
+{
+  Selection out;
+  // Walk lines until we hit the first `[[package]]` table — selection
+  // lives strictly in the top-level region. Malformed values silently
+  // leave the field unset so a corrupt lockfile never blocks a build.
+  std::size_t pos = 0;
+  while (pos <= content.size())
+  {
+    const std::size_t      next = content.find('\n', pos);
+    const std::string_view raw =
+        content.substr(pos, next == std::string_view::npos ? content.size() - pos : next - pos);
+    pos             = (next == std::string_view::npos) ? content.size() + 1 : next + 1;
+    const auto line = trim(raw);
+    if (line.empty() || line.front() == '#')
+    {
+      continue;
+    }
+    if (line == "[[package]]")
+    {
+      break;
+    }
+    auto split = split_key_value(line, 0);
+    if (!split)
+    {
+      continue;
+    }
+    if (split->key == "selected_toolchain")
+    {
+      if (auto value = unquote(split->value))
+      {
+        out.toolchain = std::move(*value);
+      }
+    }
+    else if (split->key == "selected_profile")
+    {
+      if (auto value = unquote(split->value))
+      {
+        out.profile = std::move(*value);
+      }
+    }
+  }
+  return out;
+}
+
+std::expected<void, std::string> write_selection(const std::filesystem::path& lockfile_path,
+                                                 const Selection&             selection)
+{
+  std::vector<Entry> entries;
+  if (std::filesystem::exists(lockfile_path))
+  {
+    std::ifstream     in(lockfile_path, std::ios::binary);
+    std::stringstream buf;
+    buf << in.rdbuf();
+    auto parsed = parse(buf.str());
+    if (!parsed)
+    {
+      return std::unexpected(parsed.error());
+    }
+    entries = std::move(*parsed);
+  }
+  const auto    text = serialize(entries, selection);
+  std::ofstream out(lockfile_path, std::ios::binary | std::ios::trunc);
+  if (!out)
+  {
+    return std::unexpected("failed to open lockfile for writing: " + lockfile_path.string());
+  }
+  out << text;
+  if (!out)
+  {
+    return std::unexpected("failed to write lockfile: " + lockfile_path.string());
+  }
+  return {};
 }
 
 std::expected<std::vector<Entry>, std::string> parse(std::string_view content)

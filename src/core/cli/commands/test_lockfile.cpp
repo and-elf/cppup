@@ -158,6 +158,88 @@ TEST(LockfileParse, IgnoresUnknownPerPackageKeys)
   EXPECT_EQ((*result)[0].name, "fmt");
 }
 
+TEST(LockfileSelection, SerializeOmitsUnselected)
+{
+  // No selection set: output must match the entries-only form byte-for-byte
+  // so existing tooling that diffs lockfiles isn't churned by an empty
+  // selection.
+  std::vector<Entry> const entries{make_git_entry("fmt", "https://example.com/fmt.git")};
+  const auto               with_empty = lockfile::serialize(entries, lockfile::Selection{});
+  const auto               without    = lockfile::serialize(entries);
+  EXPECT_EQ(with_empty, without);
+}
+
+TEST(LockfileSelection, RoundtripsToolchainAndProfile)
+{
+  std::vector<Entry> const entries{make_git_entry("fmt", "https://example.com/fmt.git")};
+  lockfile::Selection      sel;
+  sel.toolchain = "clang19";
+  sel.profile   = "release";
+
+  const auto text   = lockfile::serialize(entries, sel);
+  const auto parsed = lockfile::parse(text);
+  ASSERT_TRUE(parsed.has_value()) << parsed.error_or("");
+  ASSERT_EQ(parsed->size(), 1U);
+  EXPECT_EQ((*parsed)[0], entries[0]);
+
+  const auto recovered = lockfile::read_selection(text);
+  EXPECT_EQ(recovered, sel);
+}
+
+TEST(LockfileSelection, ReadSelectionOnEmptyContentIsEmpty)
+{
+  EXPECT_EQ(lockfile::read_selection(""), lockfile::Selection{});
+}
+
+TEST(LockfileSelection, ReadSelectionIgnoresMalformedLines)
+{
+  // A corrupt selection must never block a build; treat it as absent.
+  const std::string text = "version = 1\nselected_toolchain = not-a-string\n";
+  EXPECT_EQ(lockfile::read_selection(text), lockfile::Selection{});
+}
+
+TEST(LockfileSelection, WriteSelectionCreatesFileWhenAbsent)
+{
+  auto                root = make_tmp_root("write_sel_new");
+  lockfile::Selection sel;
+  sel.toolchain = "gcc-14";
+
+  const auto path = root / "cppup.lock";
+  const auto res  = lockfile::write_selection(path, sel);
+  ASSERT_TRUE(res.has_value()) << res.error_or("");
+  ASSERT_TRUE(fs::exists(path));
+
+  std::ifstream     in(path);
+  std::stringstream buf;
+  buf << in.rdbuf();
+  EXPECT_EQ(lockfile::read_selection(buf.str()), sel);
+}
+
+TEST(LockfileSelection, WriteSelectionPreservesPackages)
+{
+  auto                     root = make_tmp_root("write_sel_keep_pkgs");
+  std::vector<Entry> const entries{make_git_entry("fmt", "https://example.com/fmt.git")};
+  const auto               path = root / "cppup.lock";
+  {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out << lockfile::serialize(entries);
+  }
+
+  lockfile::Selection sel;
+  sel.profile      = "debug";
+  const auto wrote = lockfile::write_selection(path, sel);
+  ASSERT_TRUE(wrote.has_value()) << wrote.error_or("");
+
+  std::ifstream     in(path);
+  std::stringstream buf;
+  buf << in.rdbuf();
+  const auto parsed = lockfile::parse(buf.str());
+  ASSERT_TRUE(parsed.has_value()) << parsed.error_or("");
+  ASSERT_EQ(parsed->size(), 1U);
+  EXPECT_EQ((*parsed)[0].name, "fmt");
+  EXPECT_EQ(lockfile::read_selection(buf.str()), sel);
+}
+
 TEST(LockfileParse, DependenciesArrayRoundtrips)
 {
   Entry entry        = make_git_entry("a", "https://example.com/a.git");

@@ -227,6 +227,13 @@ struct ToolchainAddOptions
 [[nodiscard]] std::expected<int, std::string> executeToolchainSelect(
     const std::string& toolchain_name, const CommandContext& context) noexcept;
 
+// Profile commands: profiles are entirely declared in the project's
+// `build.cpp`; the CLI only persists which one is currently selected
+// (in `cppup.lock`). No list/add/remove — `cppup build` discovers what
+// the configuration defines.
+[[nodiscard]] std::expected<int, std::string> executeProfileSelect(
+    const std::string& profile_name, const CommandContext& context) noexcept;
+
 // Plugin commands
 [[nodiscard]] std::expected<int, std::string> executePluginList(
     const CommandContext& context) noexcept;

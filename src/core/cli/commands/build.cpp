@@ -27,6 +27,7 @@
 #include "commands.hpp"
 #include "core/panic.hpp"
 #include "embedded_configuration_header.hpp"
+#include "selection_resolver.hpp"
 
 namespace cppup::cli
 {
@@ -755,6 +756,11 @@ conf::BuildConfiguration load_build_configuration(const std::filesystem::path& p
   return *config_result;
 }
 
+// Selection helpers (read_persisted_selection, migrate_legacy_toolchain_file,
+// resolve_selection, apply_selection) live in selection_resolver.{hpp,cpp}
+// so `cppup compile-commands` can apply the same precedence chain as the
+// build path without duplicating the logic.
+
 std::string format_project_summary(const conf::BuildConfiguration& config)
 {
   const auto plural = [](std::size_t n, std::string_view singular, std::string_view plur)
@@ -912,7 +918,31 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
 
     materialize_configuration_header(cppup_dir);
 
-    const auto config = load_build_configuration(context.projectRoot, cppup_dir);
+    migrate_legacy_toolchain_file(context.projectRoot, logger);
+
+    // Export the resolved selection into the environment BEFORE compiling
+    // and loading build.cpp so its `when_toolchain` / `when_profile` blocks
+    // fire correctly inside configure(). Without this, selection would
+    // only take effect after configure() has already finished and the
+    // when_* lambdas would never have run.
+    const auto persisted = read_persisted_selection(context.projectRoot);
+    const auto early     = resolve_early_selection(options, persisted);
+    export_selection_env(early);
+    logger.debug("active toolchain: " + early.toolchain);
+    if (!early.profile.empty())
+    {
+      logger.debug("active profile: " + early.profile);
+    }
+
+    auto base_config = load_build_configuration(context.projectRoot, cppup_dir);
+
+    const auto selection = resolve_selection(options, persisted, base_config);
+    auto       applied   = apply_selection(std::move(base_config), selection);
+    if (!applied)
+    {
+      return std::unexpected(applied.error());
+    }
+    const auto config = std::move(*applied);
 
     logger.info(format_project_summary(config));
 

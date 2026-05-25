@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <cstdlib>
 #include <functional>
 #include <optional>
 #include <ranges>
@@ -60,6 +61,57 @@ template <std::invocable Func>
 void when_env_exists(const BuildConfiguration& config, const std::string& var, Func&& func)
 {
   if (get_env(config, var).has_value())
+  {
+    std::invoke(std::forward<Func>(func));
+  }
+}
+
+// Read the resolved selection that the cppup CLI exported into the
+// environment before invoking `configure()`. cppup resolves selection
+// (CLI flag > `cppup.lock` > `$CXX`/`$CC` > default) before compiling
+// + loading the build.cpp DSO and exports it as `CPPUP_ACTIVE_TOOLCHAIN`
+// / `CPPUP_ACTIVE_PROFILE`. Returns empty when the variable is unset
+// (a standalone build.cpp run outside cppup).
+//
+// Target arch is deliberately not modeled as a separate selection: the
+// toolchain name already determines it (`aarch64-linux-gnu-g++` →
+// arm64). Use `when_toolchain` for target-arch-specific configuration;
+// `when_x86_64` / `when_arm64` in platform.hpp cover the host arch
+// detected at configure-compile time.
+[[nodiscard]] inline std::string_view active_toolchain() noexcept
+{
+  const char* value = std::getenv("CPPUP_ACTIVE_TOOLCHAIN");
+  return value != nullptr ? std::string_view{value} : std::string_view{};
+}
+[[nodiscard]] inline std::string_view active_profile() noexcept
+{
+  const char* value = std::getenv("CPPUP_ACTIVE_PROFILE");
+  return value != nullptr ? std::string_view{value} : std::string_view{};
+}
+
+// Fires `func` when the *active* toolchain (resolved by the cppup CLI
+// before configure() runs) matches `name`. This is early-binding: by the
+// time configure() executes, selection precedence (CLI > lockfile > env
+// > default) has already produced a name. Inside configure() you can
+// safely customize `config.toolchain` / `config.compile_flags` based on
+// which toolchain will actually drive the build.
+template <std::invocable Func>
+void when_toolchain(std::string_view name, Func&& func)
+{
+  if (active_toolchain() == name)
+  {
+    std::invoke(std::forward<Func>(func));
+  }
+}
+
+// Fires `func` when the active profile (CLI `--profile` or
+// `cppup profile select`) matches `name`. Empty active profile (no
+// selection) never matches — write a separate unguarded block for the
+// no-profile case if you need a default.
+template <std::invocable Func>
+void when_profile(std::string_view name, Func&& func)
+{
+  if (active_profile() == name)
   {
     std::invoke(std::forward<Func>(func));
   }

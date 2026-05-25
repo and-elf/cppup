@@ -112,6 +112,7 @@ build_slim() {
         src/core/cli/commands/update.cpp
         src/core/cli/commands/lockfile.cpp
         src/core/cli/commands/package.cpp
+        src/core/cli/commands/selection_resolver.cpp
         src/core/dependency/database.cpp
         src/core/build/cache.cpp
     )

@@ -18,17 +18,43 @@ extern "C" BuildConfiguration configure()
 
   BuildConfiguration config;
 
-  config.toolchain               = Toolchain{"g++"};
+  // Default toolchain — overridden by `cppup toolchain select <name>` or
+  // `--toolchain` on the CLI. The when_toolchain blocks below customize
+  // dialect/warning/extra flags for the active selection. `when_*`
+  // helpers fire inside configure() because the CLI exports the resolved
+  // selection into the environment before this DSO is loaded.
+  config.toolchain =
+      Toolchain{std::string{active_toolchain().empty() ? "g++" : active_toolchain()}};
+
+  // Language + warning defaults are shared across gcc/clang front-ends;
+  // the toolchain expander emits the right family-specific spelling.
   config.toolchain->cxx_standard = CxxStandard::Cxx26;
   config.toolchain->warnings     = WarningLevel::Werror;
   config.toolchain->extra_flags  = {"-Wno-return-type-c-linkage"};
-  config.compile_flags           = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
-  config.include_paths           = {"include",
-                                    "src",
-                                    "src/cli",
-                                    "src/core/cli",
-                                    "src/core/cli/commands",
-                                    "src/core/configuration"};
+
+  when_toolchain("clang++", [&] { config.toolchain->extra_flags.emplace_back("-stdlib=libc++"); });
+
+  // Defaults match the historical release-style build (-O2, NDEBUG, -fPIC
+  // for the .so config DSO). when_profile blocks below switch them.
+  config.compile_flags = {Flag{"-O2"}, Flag{"-g"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
+
+  when_profile("debug", [&] { config.compile_flags = {Flag{"-O0"}, Flag{"-g"}, Flag{"-fPIC"}}; });
+  when_profile("release",
+               [&]
+               {
+                 // -O3 + stripped (-Wl,-s) gives a slim, optimized binary.
+                 // Drop -g so the strip pass actually saves space rather
+                 // than tossing already-compiled debug sections.
+                 config.compile_flags = {Flag{"-O3"}, Flag{"-DNDEBUG"}, Flag{"-fPIC"}};
+                 config.link_flags.push_back(Flag{"-Wl,-s"});
+               });
+
+  config.include_paths = {"include",
+                          "src",
+                          "src/cli",
+                          "src/core/cli",
+                          "src/core/cli/commands",
+                          "src/core/configuration"};
 
   config.subprojects = {
       Subproject{.path = "src/core/configuration", .build_system = {}, .build_args = {}},

@@ -53,20 +53,39 @@
  * @example Profile-Based Configuration
  * ```cpp
  * extern "C" BuildConfiguration configure() {
- *     return BuildConfiguration{
- *         .sources = {"src/main.cpp"},
+ *     BuildConfiguration config{
+ *         .sources  = {"src/main.cpp"},
  *         .binaries = {Binary{"myapp", {"src/main.cpp"}}},
  *         .profiles = {
- *             Profile{"debug"}{
- *                 .compile_flags = {Flag{"-g"}, Flag{"-O0"}},
- *                 .definitions = {Definition{"DEBUG", "1"}}
- *             },
- *             Profile{"release"}{
- *                 .compile_flags = {Flag{"-O3"}},
- *                 .definitions = {Definition{"NDEBUG"}}
- *             }
- *         }
+ *             Profile{.name = "debug",
+ *                     .compile_flags = {Flag{"-g"}, Flag{"-O0"}},
+ *                     .definitions   = {Definition{"DEBUG", "1"}}},
+ *             Profile{.name = "release",
+ *                     .compile_flags = {Flag{"-O3"}},
+ *                     .definitions   = {Definition{"NDEBUG"}}},
+ *         },
  *     };
+ *     // Dispatches on whatever the build resolved as the active profile.
+ *     // Selection precedence: `cppup build --profile X` >
+ *     // `cppup profile select X` (cppup.lock) > `debug` default.
+ *     when_profile(config, "release", [&]() {
+ *         config.compile_flags.push_back(Flag{"-flto"});
+ *     });
+ *     return config;
+ * }
+ * ```
+ *
+ * @example Toolchain-Specific Configuration
+ * ```cpp
+ * extern "C" BuildConfiguration configure() {
+ *     BuildConfiguration config{.binaries = {Binary{"myapp", {"src/main.cpp"}}}};
+ *     // Matches when the active toolchain (CLI flag or `cppup toolchain
+ *     // select`) names "clang++". `config.toolchain` declares the
+ *     // language-level defaults; the *name* is a developer choice.
+ *     when_toolchain(config, "clang++", [&]() {
+ *         config.compile_flags.push_back(Flag{"-stdlib=libc++"});
+ *     });
+ *     return config;
  * }
  * ```
  *
@@ -81,7 +100,9 @@
 
 #include "../src/core/configuration/build_configuration.hpp"
 #include "../src/core/configuration/outputs.hpp"
+#include "../src/core/configuration/platform.hpp"
 #include "../src/core/configuration/profile.hpp"
+#include "../src/core/configuration/runtime.hpp"
 #include "../src/core/configuration/types.hpp"
 
 /**

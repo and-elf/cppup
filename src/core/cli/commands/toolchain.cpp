@@ -2,11 +2,14 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "command_context.hpp"
 #include "commands.hpp"
+#include "lockfile.hpp"
 
 namespace cppup::cli
 {
@@ -147,21 +150,77 @@ std::expected<int, std::string> executeToolchainSelect(const std::string&    too
 {
   try
   {
+    if (toolchain_name.empty())
+    {
+      return std::unexpected("Toolchain name must not be empty");
+    }
     context.logger->info("Selecting toolchain: " + toolchain_name);
 
-    // Create or update toolchain selection file
-    std::filesystem::path const config_file = context.projectRoot / ".cppup" / "toolchain.txt";
-    std::ofstream               file(config_file);
-    file << toolchain_name << std::endl;
+    const auto lock_path = context.projectRoot / "cppup.lock";
+    auto       current   = std::filesystem::exists(lock_path) ? [&]
+    {
+      std::ifstream     in(lock_path, std::ios::binary);
+      std::stringstream buf;
+      buf << in.rdbuf();
+      return lockfile::read_selection(buf.str());
+    }()
+                                                              : lockfile::Selection{};
+    current.toolchain    = toolchain_name;
 
-    context.logger->info("Toolchain selected successfully");
+    auto wrote = lockfile::write_selection(lock_path, current);
+    if (!wrote)
+    {
+      return std::unexpected("Failed to write selection: " + wrote.error());
+    }
+
+    // Drop the legacy single-file selection so the lockfile is the only
+    // source of truth going forward.
+    std::error_code ec;
+    std::filesystem::remove(context.projectRoot / ".cppup" / "toolchain.txt", ec);
+
     context.logger->info("Default toolchain is now: " + toolchain_name);
-
     return 0;
   }
   catch (const std::exception& e)
   {
     return std::unexpected("Failed to select toolchain: " + std::string(e.what()));
+  }
+}
+
+std::expected<int, std::string> executeProfileSelect(const std::string&    profile_name,
+                                                     const CommandContext& context) noexcept
+{
+  try
+  {
+    if (profile_name.empty())
+    {
+      return std::unexpected("Profile name must not be empty");
+    }
+    context.logger->info("Selecting profile: " + profile_name);
+
+    const auto lock_path = context.projectRoot / "cppup.lock";
+    auto       current   = std::filesystem::exists(lock_path) ? [&]
+    {
+      std::ifstream     in(lock_path, std::ios::binary);
+      std::stringstream buf;
+      buf << in.rdbuf();
+      return lockfile::read_selection(buf.str());
+    }()
+                                                              : lockfile::Selection{};
+    current.profile      = profile_name;
+
+    auto wrote = lockfile::write_selection(lock_path, current);
+    if (!wrote)
+    {
+      return std::unexpected("Failed to write selection: " + wrote.error());
+    }
+
+    context.logger->info("Active profile is now: " + profile_name);
+    return 0;
+  }
+  catch (const std::exception& e)
+  {
+    return std::unexpected("Failed to select profile: " + std::string(e.what()));
   }
 }
 

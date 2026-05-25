@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <expected>
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,6 +17,20 @@ namespace cppup::cli::lockfile
 // format change. Lockfile readers reject versions they do not understand
 // (callers run `cppup package lock` to regenerate).
 constexpr int k_format_version = 1;
+
+// Currently-selected toolchain and profile, persisted as top-level keys
+// (`selected_toolchain`, `selected_profile`) in `cppup.lock`. Either may
+// be empty when the user has not made a selection; the build then falls
+// back to the configuration's default. Stored separately from the
+// per-package list so `cppup toolchain select` / `cppup profile select`
+// can mutate the selection without touching the resolved package graph.
+struct Selection
+{
+  std::optional<std::string> toolchain;
+  std::optional<std::string> profile;
+
+  bool operator==(const Selection&) const = default;
+};
 
 // What kind of source a package was fetched from. Mirrors
 // `cppup::configuration::SourceType` but is serialized as a stable string
@@ -58,10 +74,28 @@ struct Entry
 // the same input yield byte-identical output.
 [[nodiscard]] std::string serialize(const std::vector<Entry>& entries);
 
+// Same as `serialize(entries)` but also emits the active selection as
+// top-level `selected_toolchain` / `selected_profile` keys. Empty
+// selection fields are omitted so an unselected lockfile is byte-identical
+// to the entries-only form.
+[[nodiscard]] std::string serialize(const std::vector<Entry>& entries, const Selection& selection);
+
 // Parse a lockfile produced by `serialize`. Errors include unknown format
 // versions and malformed lines. Unknown keys are ignored so older readers
 // survive forward-compatible additions.
 [[nodiscard]] std::expected<std::vector<Entry>, std::string> parse(std::string_view content);
+
+// Read just the selection state from a serialized lockfile. Returns a
+// default-constructed (all-nullopt) `Selection` when the file has no
+// selection keys; treats malformed selection lines as absent rather than
+// erroring so a corrupt selection can never block a build.
+[[nodiscard]] Selection read_selection(std::string_view content);
+
+// Update the persisted selection at `lockfile_path` while preserving the
+// package list. Creates the file if it does not exist. On read error the
+// existing file is left untouched and the error returned.
+[[nodiscard]] std::expected<void, std::string> write_selection(
+    const std::filesystem::path& lockfile_path, const Selection& selection);
 
 // Build the entries for a lockfile from the project's resolved manifest.
 // Walks `config.packages` plus each package's `PackageInfo::dependencies`
