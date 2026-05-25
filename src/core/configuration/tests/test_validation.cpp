@@ -57,3 +57,63 @@ TEST(ConfigurationValidator, EmptyBuildStepNameIsInvalid)
   EXPECT_FALSE(result.is_valid);
   EXPECT_TRUE(result.has_errors());
 }
+
+TEST(ConfigurationValidator, TestWithEmptyFrameworkIsValid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.tests.push_back(cppup::configuration::Test{.name = "plain", .sources = {"plain.cpp"}});
+
+  auto result = validator.validate(config);
+  EXPECT_TRUE(result.is_valid) << "Tests with no framework should pass validation";
+}
+
+TEST(ConfigurationValidator, TestReferencingDeclaredFrameworkIsValid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.test_frameworks.push_back(TestFramework{.name = "gtest", .plugin = "gtest"});
+  config.tests.push_back(cppup::configuration::Test{
+      .name = "uses_gtest", .sources = {"uses_gtest.cpp"}, .framework = "gtest"});
+
+  auto result = validator.validate(config);
+  EXPECT_TRUE(result.is_valid);
+}
+
+TEST(ConfigurationValidator, TestReferencingUndeclaredFrameworkIsInvalid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.tests.push_back(cppup::configuration::Test{
+      .name = "uses_missing", .sources = {"x.cpp"}, .framework = "missing"});
+
+  auto result = validator.validate(config);
+  EXPECT_FALSE(result.is_valid);
+  ASSERT_TRUE(result.has_errors());
+  EXPECT_EQ(result.errors[0].type, ValidationErrorType::TestFrameworkNotFound);
+  EXPECT_NE(result.errors[0].message.find("uses_missing"), std::string::npos);
+  EXPECT_NE(result.errors[0].message.find("missing"), std::string::npos);
+}
+
+TEST(ConfigurationValidator, TestFrameworkWithEmptyNameIsInvalid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.test_frameworks.push_back(TestFramework{.name = "", .plugin = "gtest"});
+
+  auto result = validator.validate(config);
+  EXPECT_FALSE(result.is_valid);
+  EXPECT_TRUE(result.has_errors());
+}
+
+TEST(ConfigurationValidator, DuplicateTestFrameworkNamesAreInvalid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.test_frameworks.push_back(TestFramework{.name = "gtest", .plugin = "gtest"});
+  config.test_frameworks.push_back(TestFramework{.name = "gtest", .plugin = "gtest"});
+
+  auto result = validator.validate(config);
+  EXPECT_FALSE(result.is_valid);
+  EXPECT_TRUE(result.has_errors());
+}

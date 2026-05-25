@@ -19,6 +19,7 @@ TEST(BuildConfiguration, DefaultConstructionLeavesContainersEmpty)
   EXPECT_TRUE(config.binaries.empty());
   EXPECT_TRUE(config.libraries.empty());
   EXPECT_TRUE(config.tests.empty());
+  EXPECT_TRUE(config.test_frameworks.empty());
   EXPECT_TRUE(config.profiles.empty());
   EXPECT_TRUE(config.build_steps.empty());
   EXPECT_TRUE(config.target_os.empty());

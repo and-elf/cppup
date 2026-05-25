@@ -89,6 +89,41 @@ TEST(TestOutput, ConstructionFromVectorAndInitializerList)
   EXPECT_EQ(test2.sources.size(), 1U);
 }
 
+TEST(TestOutput, FrameworkDefaultsToEmpty)
+{
+  cppup::configuration::Test const plain{.name = "no_framework", .sources = {"plain.cpp"}};
+  EXPECT_TRUE(plain.framework.empty());
+}
+
+TEST(TestOutput, FrameworkSettableViaDesignatedInit)
+{
+  cppup::configuration::Test const t{
+      .name = "uses_gtest", .sources = {"t.cpp"}, .framework = "gtest"};
+  EXPECT_EQ(t.framework, "gtest");
+}
+
+TEST(TestFramework, DefaultConstructionLeavesFieldsEmpty)
+{
+  cppup::configuration::TestFramework const tf;
+  EXPECT_TRUE(tf.name.empty());
+  EXPECT_TRUE(tf.plugin.empty());
+  EXPECT_FALSE(tf.package.has_value());
+}
+
+TEST(TestFramework, FieldsPopulatedViaDesignatedInit)
+{
+  cppup::configuration::TestFramework const tf{
+      .name    = "gtest",
+      .plugin  = "gtest",
+      .package = cppup::configuration::package_helpers::from_git(
+          "googletest", "https://github.com/google/googletest.git", "v1.14.0"),
+  };
+  EXPECT_EQ(tf.name, "gtest");
+  EXPECT_EQ(tf.plugin, "gtest");
+  ASSERT_TRUE(tf.package.has_value());
+  EXPECT_EQ(tf.package->name(), "googletest");
+}
+
 TEST(BuildStep, ConstructionAndDependencies)
 {
   bool callback_called = false;
