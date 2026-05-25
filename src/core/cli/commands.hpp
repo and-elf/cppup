@@ -257,6 +257,13 @@ struct PluginAddOptions
 [[nodiscard]] std::expected<int, std::string> executeModuleAdd(
     const std::string& module_name, const CommandContext& context) noexcept;
 
+// Registry commands. `set` records the active registry source (URL or local
+// directory) under `selected_registry` in `cppup.lock`. URLs pass through
+// verbatim; local paths are resolved against the project root and stored as
+// their canonical absolute form so the lockfile is portable across cwds.
+[[nodiscard]] std::expected<int, std::string> executeRegistrySet(
+    const std::string& location, const CommandContext& context) noexcept;
+
 // Update command — download the latest released cppup binary and install it.
 [[nodiscard]] std::expected<int, std::string> executeUpdate(UpdateOptions         options,
                                                             const CommandContext& context) noexcept;
