@@ -12,7 +12,7 @@ extern "C" BuildConfiguration configure()
                   "commands/format.cpp", "commands/tidy.cpp", "commands/source_selection.cpp",
                   "commands/package.cpp", "commands/lockfile.cpp", "commands/module.cpp",
                   "commands/toolchain.cpp", "commands/plugin.cpp", "commands/update.cpp",
-                  "commands/selection_resolver.cpp"},
+                  "commands/selection_resolver.cpp", "commands/coverage_parser.cpp"},
       .type    = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",
@@ -35,6 +35,11 @@ extern "C" BuildConfiguration configure()
                                     Flag{"-lpthread"}, Flag{"-ldl"}};
 
   config.tests.push_back(Test{"test_lockfile", {"commands/test_lockfile.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(Test{"test_coverage_parser", {"commands/test_coverage_parser.cpp"}});
   config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
   config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
                                     Flag{"-lpthread"}, Flag{"-ldl"}};
