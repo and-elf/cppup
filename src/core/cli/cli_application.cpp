@@ -491,6 +491,10 @@ void registerPackageCommands(const CommandRegistration& reg)
       ->check(CLI::IsMember({"cppup", "cmake", "make", "header-only"}));
   add_cmd->add_option("--subdirectory", add_opts->subdirectory,
                       "Path inside the fetched repo/archive to treat as the package root");
+  add_cmd->add_flag_function(
+      "-u,--user", [add_opts](std::int64_t /*count*/) { add_opts->scope = InstallScope::User; },
+      "Install into the user data dir (XDG_DATA_HOME/cppup or $HOME/.cppup) instead of "
+      ".cppup/");
   add_cmd->callback(
       [add_opts, &ctx, &result]
       {
@@ -548,6 +552,10 @@ void registerToolchainCommands(const CommandRegistration& reg)
   add_cmd->add_option("--tag", add_opts->tag, "Toolchain tag");
   add_cmd->add_option("--url", add_opts->url, "Toolchain URL");
   add_cmd->add_option("--dir", add_opts->dir, "Local directory");
+  add_cmd->add_flag_function(
+      "-u,--user", [add_opts](std::int64_t /*count*/) { add_opts->scope = InstallScope::User; },
+      "Install into the user data dir (XDG_DATA_HOME/cppup or $HOME/.cppup) instead of "
+      ".cppup/");
   add_cmd->callback(
       [add_opts, &ctx, &result]
       {

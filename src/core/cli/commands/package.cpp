@@ -13,6 +13,7 @@
 #include "command_context.hpp"
 #include "commands.hpp"
 #include "embedded_configuration_header.hpp"
+#include "install_paths.hpp"
 #include "lockfile.hpp"
 
 namespace cppup::cli
@@ -52,10 +53,18 @@ std::string build_system_name(cppup::configuration::BuildSystem buildsystem) noe
 class PackageRegistry
 {
  public:
-  explicit PackageRegistry(const std::filesystem::path& project_root) :
-      packages_dir_(project_root / ".cppup" / "packages"),
-      registry_file_(packages_dir_ / "registry.txt")
+  // `data_root` is the `.cppup`-equivalent directory (project or user scope);
+  // the registry creates / reads `<data_root>/packages/` and the manifest at
+  // `<data_root>/packages/registry.txt`.
+  explicit PackageRegistry(const std::filesystem::path& data_root) :
+      packages_dir_(data_root / "packages"), registry_file_(packages_dir_ / "registry.txt")
   {
+  }
+
+  // Convenience: build a project-scoped registry from a project root.
+  [[nodiscard]] static PackageRegistry for_project(const std::filesystem::path& project_root)
+  {
+    return PackageRegistry{project_data_dir(project_root)};
   }
 
   [[nodiscard]] bool ensure_directories() noexcept
@@ -289,27 +298,57 @@ std::expected<int, std::string> executePackageList(const CommandContext& context
 {
   try
   {
-    PackageRegistry registry(context.projectRoot);
-    if (!registry.ensure_directories())
+    struct ScopedRecord
+    {
+      PackageRecord rec;
+      const char*   scope_tag;
+    };
+
+    std::vector<ScopedRecord> all;
+    const auto add_from = [&](const std::filesystem::path& data_root, const char* scope_tag)
+    {
+      const PackageRegistry registry(data_root);
+      if (!std::filesystem::exists(registry.packages_dir()))
+      {
+        return;
+      }
+      for (auto& rec : registry.load())
+      {
+        all.push_back({std::move(rec), scope_tag});
+      }
+    };
+
+    // Always show the project-scoped registry, even when its directory is
+    // absent — the legacy contract `ensure_directories()` honoured.
+    PackageRegistry project_registry(project_data_dir(context.projectRoot));
+    if (!project_registry.ensure_directories())
     {
       return std::unexpected("Could not initialize package directory");
     }
+    for (auto& rec : project_registry.load())
+    {
+      all.push_back({std::move(rec), "project"});
+    }
+    if (auto user_root = user_data_dir())
+    {
+      add_from(*user_root, "user");
+    }
 
-    const auto records = registry.load();
-    if (records.empty())
+    if (all.empty())
     {
       context.logger->info("No packages installed");
       context.logger->info("Add packages with: cppup package add --name <name>");
       return 0;
     }
 
-    context.logger->info("Installed packages (" + std::to_string(records.size()) + "):");
-    for (const auto& rec : records)
+    context.logger->info("Installed packages (" + std::to_string(all.size()) + "):");
+    for (const auto& entry : all)
     {
-      std::string line = "  " + rec.name + " " + rec.version + " [" + rec.source + "]";
-      if (!rec.build_system.empty())
+      std::string line = "  " + entry.rec.name + " " + entry.rec.version + " [" + entry.rec.source +
+                         "] (" + entry.scope_tag + ")";
+      if (!entry.rec.build_system.empty())
       {
-        line += " (" + rec.build_system + ")";
+        line += " {" + entry.rec.build_system + "}";
       }
       context.logger->info(line);
     }
@@ -339,7 +378,13 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
       return std::unexpected("--url and --dir are mutually exclusive");
     }
 
-    PackageRegistry registry(context.projectRoot);
+    const auto install_root = resolve_install_root(options.scope, context.projectRoot);
+    if (!install_root)
+    {
+      return std::unexpected("Cannot resolve user data directory: set HOME or XDG_DATA_HOME");
+    }
+
+    PackageRegistry registry(*install_root);
     if (!registry.ensure_directories())
     {
       return std::unexpected("Could not initialize package directory");
@@ -353,7 +398,8 @@ std::expected<int, std::string> executePackageAdd(const PackageAddOptions& optio
     }
 
     const std::filesystem::path install_path = registry.packages_dir() / options.name;
-    context.logger->info("Installing package: " + options.name);
+    context.logger->info(std::string{"Installing package ("} +
+                         (is_user(options.scope) ? "user" : "project") + "): " + options.name);
 
     bool fetched = false;
     if (options.git)
@@ -449,40 +495,53 @@ std::expected<int, std::string> executePackageRemove(const std::string&    packa
       return std::unexpected("Package name is required");
     }
 
-    PackageRegistry registry(context.projectRoot);
-    if (!registry.ensure_directories())
+    // Search project then user; remove from the first registry that owns the
+    // name. Project wins on name collisions (matches the search order).
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(project_data_dir(context.projectRoot));
+    if (auto user_root = user_data_dir())
     {
-      return std::unexpected("Could not initialize package directory");
+      roots.push_back(std::move(*user_root));
     }
 
-    auto       records = registry.load();
-    const auto iter    = std::ranges::find_if(
-        records, [&](const PackageRecord& rec) noexcept { return rec.name == package_name; });
-    if (iter == records.end())
+    for (const auto& root : roots)
     {
-      return std::unexpected("Package not found: " + package_name);
-    }
-
-    const std::filesystem::path install_path = registry.packages_dir() / package_name;
-    if (std::filesystem::exists(install_path))
-    {
-      std::error_code error_code{};
-      std::filesystem::remove_all(install_path, error_code);
-      if (error_code)
+      const PackageRegistry registry(root);
+      if (!std::filesystem::exists(registry.packages_dir()))
       {
-        context.logger->warning("Could not remove files at " + install_path.string() + ": " +
-                                error_code.message());
+        continue;
       }
+      auto       records = registry.load();
+      const auto iter    = std::ranges::find_if(
+          records, [&](const PackageRecord& rec) noexcept { return rec.name == package_name; });
+      if (iter == records.end())
+      {
+        continue;
+      }
+
+      const std::filesystem::path install_path = registry.packages_dir() / package_name;
+      if (std::filesystem::exists(install_path))
+      {
+        std::error_code error_code{};
+        std::filesystem::remove_all(install_path, error_code);
+        if (error_code)
+        {
+          context.logger->warning("Could not remove files at " + install_path.string() + ": " +
+                                  error_code.message());
+        }
+      }
+
+      records.erase(iter);
+      if (!registry.save(records))
+      {
+        return std::unexpected("Failed to update package registry");
+      }
+
+      context.logger->info("Package removed: " + package_name);
+      return 0;
     }
 
-    records.erase(iter);
-    if (!registry.save(records))
-    {
-      return std::unexpected("Failed to update package registry");
-    }
-
-    context.logger->info("Package removed: " + package_name);
-    return 0;
+    return std::unexpected("Package not found: " + package_name);
   }
   catch (const std::exception& e)
   {
@@ -547,7 +606,7 @@ std::expected<int, std::string> executePackageSync(const CommandContext& context
       return std::unexpected("Failed to parse cppup.lock: " + parsed.error());
     }
 
-    PackageRegistry registry(context.projectRoot);
+    PackageRegistry registry(project_data_dir(context.projectRoot));
     if (!registry.ensure_directories())
     {
       return std::unexpected("Could not initialize package directory");
