@@ -44,13 +44,13 @@ struct BuildOptions
   Verbose   verbose    = Verbose::Off;
   WithTests with_tests = WithTests::Off;
   // 0 = auto (std::thread::hardware_concurrency()); 1 = serial.
-  unsigned jobs = 0;
+  unsigned jobs{};
   // CLI overrides for the active toolchain / profile. When unset, the
   // build resolves them from the persisted selection (cppup.lock) and
   // then from the configuration's defaults. Strings (not enums) because
   // both name spaces are user-defined.
-  std::optional<std::string> toolchain;
-  std::optional<std::string> profile;
+  std::optional<std::string> toolchain = {};
+  std::optional<std::string> profile   = {};
 };
 
 [[nodiscard]] constexpr bool enabled(Asan asan_option) noexcept

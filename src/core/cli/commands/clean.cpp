@@ -36,7 +36,7 @@ std::size_t remove_path(const fs::path& path, Logger& logger)
 
 }  // namespace
 
-std::expected<int, std::string> executeClean(CleanOptions          options,
+std::expected<int, std::string> executeClean(const CleanOptions&   options,
                                              const CommandContext& context) noexcept
 {
   try

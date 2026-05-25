@@ -744,13 +744,13 @@ void materialize_configuration_header(const std::filesystem::path& cppup_dir)
 conf::BuildConfiguration load_build_configuration(const std::filesystem::path& project_root,
                                                   const std::filesystem::path& cppup_dir)
 {
-  conf::CompilerOptions compiler_opts;
+  conf::CompilerOptions compiler_opts{};
   compiler_opts.include_paths.push_back((cppup_dir / "include").string());
   compiler_opts.include_paths.push_back((project_root / "include").string());
   compiler_opts.include_paths.push_back((project_root / "src").string());
   compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
 
-  conf::ConfigurationCompiler compiler(std::move(compiler_opts));
+  conf::ConfigurationCompiler compiler{compiler_opts};
   auto                        config_result = conf::load_with_subprojects(project_root, compiler);
   CPPUP_CHECK(config_result.has_value(), "configuration compilation failed");
   return *config_result;
@@ -874,8 +874,8 @@ std::string build_summary_line(const BuildCounters& counts, long long wall_ms)
 
 }  // namespace
 
-std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
-                                             const CommandContext& context) noexcept
+std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
+                                             const CommandContext&     context) noexcept
 {
   try
   {
@@ -937,12 +937,11 @@ std::expected<int, std::string> executeBuild(conf::BuildOptions    options,
     auto base_config = load_build_configuration(context.projectRoot, cppup_dir);
 
     const auto selection = resolve_selection(options, persisted, base_config);
-    auto       applied   = apply_selection(std::move(base_config), selection);
-    if (!applied)
+    if (auto applied = apply_selection(base_config, selection); !applied)
     {
       return std::unexpected(applied.error());
     }
-    const auto config = std::move(*applied);
+    const auto& config = base_config;
 
     logger.info(format_project_summary(config));
 

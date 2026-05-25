@@ -12,8 +12,8 @@ namespace cppup::cli
 
 namespace conf = cppup::configuration;
 
-std::expected<int, std::string> executeCompileCommands(conf::BuildOptions    options,
-                                                       const CommandContext& context) noexcept
+std::expected<int, std::string> executeCompileCommands(const conf::BuildOptions& options,
+                                                       const CommandContext&     context) noexcept
 {
   try
   {
@@ -42,7 +42,7 @@ std::expected<int, std::string> executeCompileCommands(conf::BuildOptions    opt
     const auto early     = resolve_early_selection(options, persisted);
     export_selection_env(early);
 
-    conf::ConfigurationCompiler compiler(std::move(compiler_opts));
+    conf::ConfigurationCompiler compiler(compiler_opts);
     auto                        compile_result = compiler.compile(build_file);
     if (!compile_result.success)
     {
@@ -56,15 +56,14 @@ std::expected<int, std::string> executeCompileCommands(conf::BuildOptions    opt
     }
 
     const auto selection = resolve_selection(options, persisted, *config_result);
-    auto       applied   = apply_selection(std::move(*config_result), selection);
-    if (!applied)
+    if (auto applied = apply_selection(*config_result, selection); !applied)
     {
       return std::unexpected(applied.error());
     }
 
-    logger.info(
-        "wrote " +
-        conf::emit_compile_commands(*applied, context.projectRoot, build_dir, options).string());
+    logger.info("wrote " +
+                conf::emit_compile_commands(*config_result, context.projectRoot, build_dir, options)
+                    .string());
     return 0;
   }
   catch (const std::exception& e)

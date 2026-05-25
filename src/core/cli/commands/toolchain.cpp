@@ -201,8 +201,8 @@ std::expected<int, std::string> executeProfileSelect(const std::string&    profi
     const auto lock_path = context.projectRoot / "cppup.lock";
     auto       current   = std::filesystem::exists(lock_path) ? [&]
     {
-      std::ifstream     in(lock_path, std::ios::binary);
-      std::stringstream buf;
+      const std::ifstream in(lock_path, std::ios::binary);
+      std::stringstream   buf{};
       buf << in.rdbuf();
       return lockfile::read_selection(buf.str());
     }()

@@ -184,8 +184,8 @@ ResolvedSelection resolve_selection(const conf::BuildOptions&       options,
   return out;
 }
 
-std::expected<conf::BuildConfiguration, std::string> apply_selection(
-    conf::BuildConfiguration config, const ResolvedSelection& selection)
+std::expected<void, std::string> apply_selection(conf::BuildConfiguration& config,
+                                                 const ResolvedSelection&  selection)
 {
   if (!selection.profile.empty() || !config.profiles.empty())
   {
@@ -208,7 +208,7 @@ std::expected<conf::BuildConfiguration, std::string> apply_selection(
       config.toolchain = conf::Toolchain{.name = *selection.toolchain};
     }
   }
-  return config;
+  return {};
 }
 
 }  // namespace cppup::cli

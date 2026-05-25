@@ -309,8 +309,8 @@ std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths
 
 }  // namespace
 
-std::expected<int, std::string> executeTest(conf::BuildOptions    options,
-                                            const CommandContext& context) noexcept
+std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
+                                            const CommandContext&     context) noexcept
 {
   try
   {

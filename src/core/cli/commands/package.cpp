@@ -213,13 +213,13 @@ std::expected<cppup::configuration::BuildConfiguration, std::string> load_projec
               static_cast<std::streamsize>(kConfigurationHeader.size()));
   }
 
-  cppup::configuration::CompilerOptions compiler_opts;
+  cppup::configuration::CompilerOptions compiler_opts{};
   compiler_opts.include_paths.push_back((cppup_dir / "include").string());
   compiler_opts.include_paths.push_back((project_root / "include").string());
   compiler_opts.include_paths.push_back((project_root / "src").string());
   compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
 
-  cppup::configuration::ConfigurationCompiler compiler(std::move(compiler_opts));
+  cppup::configuration::ConfigurationCompiler compiler{compiler_opts};
   auto config = cppup::configuration::load_with_subprojects(project_root, compiler);
   if (!config)
   {

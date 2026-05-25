@@ -125,13 +125,13 @@ struct UpdateOptions
     const std::string& project_name, const std::optional<std::string>& venv_path,
     InitOptions options, const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeBuild(BuildOptions          options,
+[[nodiscard]] std::expected<int, std::string> executeBuild(const BuildOptions&   options,
                                                            const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeCompileCommands(
-    BuildOptions options, const CommandContext& context) noexcept;
+    const BuildOptions& options, const CommandContext& context) noexcept;
 
-[[nodiscard]] std::expected<int, std::string> executeTest(BuildOptions          options,
+[[nodiscard]] std::expected<int, std::string> executeTest(const BuildOptions&   options,
                                                           const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeFormat(
@@ -157,7 +157,7 @@ struct CleanOptions
   CleanScope scope = CleanScope::Build;
 };
 
-[[nodiscard]] std::expected<int, std::string> executeClean(CleanOptions          options,
+[[nodiscard]] std::expected<int, std::string> executeClean(const CleanOptions&   options,
                                                            const CommandContext& context) noexcept;
 
 // Package commands

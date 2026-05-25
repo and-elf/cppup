@@ -64,11 +64,12 @@ void migrate_legacy_toolchain_file(const std::filesystem::path& project_root, Lo
     const cppup::configuration::BuildOptions& options, const lockfile::Selection& persisted,
     const cppup::configuration::BuildConfiguration& config);
 
-// Apply `selection` onto `config`: validate the profile (hard-error on
-// unknown name when the config declares profiles), merge profile
-// flags/definitions, stamp `profile:<name>` into features so
+// Apply `selection` onto `config` in place: validate the profile
+// (hard-error on unknown name when the config declares profiles), merge
+// profile flags/definitions, stamp `profile:<name>` into features so
 // `when_profile()` can match, and override `config.toolchain->name`.
-[[nodiscard]] std::expected<cppup::configuration::BuildConfiguration, std::string> apply_selection(
-    cppup::configuration::BuildConfiguration config, const ResolvedSelection& selection);
+// `config` is left unchanged on failure (no rollback needed).
+[[nodiscard]] std::expected<void, std::string> apply_selection(
+    cppup::configuration::BuildConfiguration& config, const ResolvedSelection& selection);
 
 }  // namespace cppup::cli

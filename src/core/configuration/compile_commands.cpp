@@ -66,7 +66,7 @@ std::filesystem::path normalize(const std::filesystem::path& path)
 // Keep the two in lockstep so clangd sees what the build actually compiles.
 std::vector<std::string> compile_flags_for(const BuildConfiguration&    config,
                                            const std::filesystem::path& project_root,
-                                           BuildOptions                 options)
+                                           const BuildOptions&          options)
 {
   std::vector<std::string> args;
   args.reserve(config.compile_flags.size() + config.definitions.size() +
@@ -140,7 +140,7 @@ void emit_entry(std::ostringstream& oss, bool& first, const std::string& compile
 std::filesystem::path emit_compile_commands(const BuildConfiguration&    config,
                                             const std::filesystem::path& project_root,
                                             const std::filesystem::path& /*build_dir*/,
-                                            BuildOptions options)
+                                            const BuildOptions& options)
 {
   const std::string compiler = config.toolchain ? config.toolchain->name : std::string{"g++"};
   const auto        root     = normalize(project_root);

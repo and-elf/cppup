@@ -341,18 +341,10 @@ void registerCompileCommandsCommand(const CommandRegistration& reg)
                              .verbose    = Verbose::Off,
                              .with_tests = WithTests::Off,
                              .jobs       = 0,
-                             .toolchain  = {},
-                             .profile    = {}};
-        if (!opts->toolchain.empty())
-        {
-          cc_opts.toolchain = opts->toolchain;
-        }
-        if (!opts->profile.empty())
-        {
-          cc_opts.profile = opts->profile;
-        }
-        result.set(handleExpectedResult(executeCompileCommands(std::move(cc_opts), ctx),
-                                        "compile-commands", ErrorHandler::ErrorCode::BuildFailure));
+                             .toolchain  = opts->toolchain,
+                             .profile    = opts->profile};
+        result.set(handleExpectedResult(executeCompileCommands(cc_opts, ctx), "compile-commands",
+                                        ErrorHandler::ErrorCode::BuildFailure));
       });
 }
 
@@ -413,7 +405,7 @@ void registerTestCommand(const CommandRegistration& reg)
         {
           test_opts.profile = opts->profile;
         }
-        result.set(handleExpectedResult(executeTest(std::move(test_opts), ctx), "Test",
+        result.set(handleExpectedResult(executeTest(test_opts, ctx), "Test",
                                         ErrorHandler::ErrorCode::TestFailure));
       });
 }

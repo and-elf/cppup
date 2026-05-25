@@ -61,7 +61,7 @@ struct CompilerOptions
 class ConfigurationCompiler
 {
  public:
-  explicit ConfigurationCompiler(CompilerOptions options = {}) : options_(std::move(options)) {}
+  explicit ConfigurationCompiler(CompilerOptions& options) : options_(options) {}
 
   /**
    * Compile a build.cpp file into a shared library
