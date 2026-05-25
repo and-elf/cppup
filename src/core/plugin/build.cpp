@@ -18,7 +18,7 @@ extern "C" BuildConfiguration configure()
                   "libdl_loader.cpp", "loader.cpp", "plugin_logger.cpp", "package_info_view.cpp",
                   "plugin_host_services.cpp", "plugin_package_source.cpp",
                   "plugin_build_system.cpp", "static_registry.cpp", "plugin_listing.cpp",
-                  "host_service_adapters.cpp"},
+                  "host_service_adapters.cpp", "test_framework_plugin.cpp"},
       .type    = LibraryType::Static,
   });
 
@@ -68,6 +68,10 @@ extern "C" BuildConfiguration configure()
   config.tests.back().link_flags = test_links;
 
   config.tests.push_back(Test{"test_plugin_listing", {"test_plugin_listing.cpp"}});
+  config.tests.back().libraries  = {"cppup_plugin"};
+  config.tests.back().link_flags = test_links;
+
+  config.tests.push_back(Test{"test_test_framework_plugin", {"test_test_framework_plugin.cpp"}});
   config.tests.back().libraries  = {"cppup_plugin"};
   config.tests.back().link_flags = test_links;
 
