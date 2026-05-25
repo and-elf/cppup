@@ -533,9 +533,12 @@ bld::BuildTarget make_executable_target(const ExecutableSpec& spec, const BuildC
     target.include_paths.push_back(paths.project_root / inc);
   }
   // Framework-supplied include paths (e.g. gtest's own `include/`) are
-  // absolute and not project-relative, so they go in verbatim.
+  // absolute and not project-relative. Pushed onto both the compile
+  // flags (so the test's TU sees `<gtest/gtest.h>`) and the include
+  // path list used by collect_dependencies for header scanning.
   for (const auto& inc : spec.extra_include_paths)
   {
+    target.compile_flags.push_back("-I" + inc);
     target.include_paths.emplace_back(inc);
   }
 

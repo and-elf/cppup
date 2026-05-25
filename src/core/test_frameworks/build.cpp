@@ -13,13 +13,9 @@ extern "C" BuildConfiguration configure()
       .type    = LibraryType::Static,
   });
 
-  // Hardcoded -lgtest links here remain until the plugin can dogfood
-  // itself; that's the last slice of this feature.
-  const std::vector<Flag> test_links = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
-
   config.tests.push_back(Test{"test_gtest_plugin", {"test_gtest_plugin.cpp"}});
-  config.tests.back().libraries  = {"cppup_test_frameworks", "cppup_plugin"};
-  config.tests.back().link_flags = test_links;
+  config.tests.back().libraries = {"cppup_test_frameworks", "cppup_plugin"};
+  config.tests.back().framework = "gtest";
 
   return config;
 }

@@ -17,12 +17,10 @@ extern "C" BuildConfiguration configure()
 
   config.compile_flags = {Flag{"-std=c++23"}, Flag{"-Wall"}, Flag{"-Wextra"}};
 
-  const std::vector<Flag> test_links = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"},
-                                        Flag{"-ldl"}};
-
   config.tests.push_back(Test{"test_console_logger_plugin", {"test_console_logger_plugin.cpp"}});
   config.tests.back().libraries  = {"cppup_logger_console", "cppup_plugin"};
-  config.tests.back().link_flags = test_links;
+  config.tests.back().link_flags = {Flag{"-ldl"}};
+  config.tests.back().framework  = "gtest";
 
   return config;
 }

@@ -24,56 +24,26 @@ extern "C" BuildConfiguration configure()
 
   // libdl is required for the production LibdlLoader. Tests linking
   // cppup_plugin pick it up transitively via -ldl in link_flags.
-  const std::vector<Flag> test_links = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"},
-                                        Flag{"-ldl"}};
+  const auto add_test = [&](const char* name, const char* source)
+  {
+    config.tests.push_back(Test{name, {source}});
+    config.tests.back().libraries  = {"cppup_plugin"};
+    config.tests.back().link_flags = {Flag{"-ldl"}};
+    config.tests.back().framework  = "gtest";
+  };
 
-  config.tests.push_back(Test{"test_manifest", {"test_manifest.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_vtable_support", {"test_vtable_support.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_descriptor_validation", {"test_descriptor_validation.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_loader", {"test_plugin_loader.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_logger", {"test_plugin_logger.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_package_info_view", {"test_package_info_view.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_host_services", {"test_plugin_host_services.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_package_source", {"test_plugin_package_source.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_build_system", {"test_plugin_build_system.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_static_registry", {"test_static_registry.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_plugin_listing", {"test_plugin_listing.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
-
-  config.tests.push_back(Test{"test_test_framework_plugin", {"test_test_framework_plugin.cpp"}});
-  config.tests.back().libraries  = {"cppup_plugin"};
-  config.tests.back().link_flags = test_links;
+  add_test("test_manifest", "test_manifest.cpp");
+  add_test("test_vtable_support", "test_vtable_support.cpp");
+  add_test("test_descriptor_validation", "test_descriptor_validation.cpp");
+  add_test("test_plugin_loader", "test_plugin_loader.cpp");
+  add_test("test_plugin_logger", "test_plugin_logger.cpp");
+  add_test("test_package_info_view", "test_package_info_view.cpp");
+  add_test("test_plugin_host_services", "test_plugin_host_services.cpp");
+  add_test("test_plugin_package_source", "test_plugin_package_source.cpp");
+  add_test("test_plugin_build_system", "test_plugin_build_system.cpp");
+  add_test("test_static_registry", "test_static_registry.cpp");
+  add_test("test_plugin_listing", "test_plugin_listing.cpp");
+  add_test("test_test_framework_plugin", "test_test_framework_plugin.cpp");
 
   return config;
 }

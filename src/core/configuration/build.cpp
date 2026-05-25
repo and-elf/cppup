@@ -14,7 +14,7 @@ void add_gtest(BuildConfiguration& config, const std::string& name, const std::s
   {
     config.tests.back().libraries = {"cppup_config"};
   }
-  config.tests.back().link_flags = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+  config.tests.back().framework = "gtest";
 }
 
 }  // namespace

@@ -2,6 +2,7 @@
 #include <cstdlib>
 
 using namespace cppup::configuration;
+using namespace cppup::configuration::package_helpers;
 
 extern "C" BuildConfiguration configure()
 {
@@ -55,6 +56,17 @@ extern "C" BuildConfiguration configure()
                           "src/core/cli",
                           "src/core/cli/commands",
                           "src/core/configuration"};
+
+  // Dogfood: gtest is fetched as a source package and built by the
+  // builtin gtest test-framework plugin. Tests reference this by
+  // `framework = "gtest"` instead of carrying hardcoded `-lgtest`
+  // link flags. The package roundtrips through `cppup.lock` so a fresh
+  // `git clone && cppup build` reproduces.
+  config.test_frameworks.push_back(TestFramework{
+      .name    = "gtest",
+      .plugin  = "gtest",
+      .package = from_git("googletest", "https://github.com/google/googletest.git", "v1.14.0"),
+  });
 
   config.subprojects = {
       Subproject{.path = "src/core/configuration", .build_system = {}, .build_args = {}},
