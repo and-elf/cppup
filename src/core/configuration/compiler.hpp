@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../../ProcessRunner.h"
@@ -61,7 +62,7 @@ struct CompilerOptions
 class ConfigurationCompiler
 {
  public:
-  explicit ConfigurationCompiler(CompilerOptions& options) : options_(options) {}
+  explicit ConfigurationCompiler(CompilerOptions options = {}) : options_(std::move(options)) {}
 
   /**
    * Compile a build.cpp file into a shared library
