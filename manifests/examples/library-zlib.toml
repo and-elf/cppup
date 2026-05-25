@@ -1,0 +1,36 @@
+# Library package: C library fetched from a tarball with a sha256
+# checksum. Exercises non-git source + dependency-with-version-range.
+schema = 1
+
+[package]
+name         = "zlib"
+version      = "1.3.1"
+kind         = "library"
+description  = "A massively spiffy yet delicately unobtrusive compression library"
+license      = "Zlib"
+homepage     = "https://zlib.net"
+cppup_compat = ">=0.5.0"
+
+[source]
+type     = "tar"
+url      = "https://zlib.net/zlib-1.3.1.tar.gz"
+checksum = "sha256:9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
+
+[build]
+system = "cmake"
+args   = ["-DZLIB_BUILD_EXAMPLES=OFF"]
+
+[features]
+shared = { default = true, description = "Build as shared library" }
+
+[[exports]]
+type          = "library"
+name          = "z"
+include_paths = ["include"]
+
+[build-dependencies]
+cmake = ">=3.15"
+
+[platforms]
+os   = ["linux", "macos", "windows"]
+arch = ["x86_64", "arm64"]

@@ -1,0 +1,36 @@
+# Library package: header-or-compiled formatting library fetched from a
+# git tag and built with CMake. Canonical "small dep" example.
+schema = 1
+
+[package]
+name         = "fmt"
+version      = "10.2.1"
+kind         = "library"
+description  = "A modern formatting library"
+license      = "MIT"
+homepage     = "https://fmt.dev"
+repository   = "https://github.com/fmtlib/fmt"
+cppup_compat = ">=0.5.0"
+
+[source]
+type = "git"
+url  = "https://github.com/fmtlib/fmt.git"
+tag  = "10.2.1"
+
+[build]
+system = "cmake"
+args   = ["-DFMT_TEST=OFF", "-DFMT_DOC=OFF"]
+
+[features]
+shared      = { default = false, description = "Build as shared library" }
+header_only = { default = false, description = "Header-only mode" }
+
+[[exports]]
+type          = "library"
+name          = "fmt"
+include_paths = ["include"]
+link_flags    = []
+
+[platforms]
+os   = ["linux", "macos", "windows"]
+arch = ["x86_64", "arm64"]
