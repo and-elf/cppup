@@ -66,13 +66,15 @@ extern "C" BuildConfiguration configure()
       },
       Subproject{.path = "src/core/logger/console", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/plugin", .build_system = {}, .build_args = {}},
+      Subproject{.path = "src/core/test_frameworks", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/package", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/buildsystems", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/cli", .build_system = {}, .build_args = {}},
   };
 
-  config.binaries.push_back(
-      Binary{.name = "cppup", .sources = {"src/main.cpp"}, .libraries = {"cppup_cli"}});
+  config.binaries.push_back(Binary{.name      = "cppup",
+                                   .sources   = {"src/main.cpp"},
+                                   .libraries = {"cppup_cli", "cppup_test_frameworks"}});
 
   config.definitions = {
       Definition{"CPPUP_MAJOR_VERSION", "1"}, Definition{"CPPUP_MINOR_VERSION", "0"},

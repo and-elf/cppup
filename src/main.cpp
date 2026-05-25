@@ -7,6 +7,7 @@
 #include "core/cli/cli_application.hpp"
 #include "core/logger/console/console_logger.hpp"
 #include "core/logger/console/console_logger_plugin.hpp"
+#include "core/plugin/test_framework_plugin.hpp"
 #ifndef CPPUP_SLIM
 #include "core/buildsystems/cmake/cmake_plugin.hpp"
 #include "core/buildsystems/header_only/header_only_plugin.hpp"
@@ -37,6 +38,7 @@ int main(int argc, char* argv[])
     cppup::buildsystems::cmake::register_static_plugin();
     cppup::buildsystems::make::register_static_plugin();
     cppup::buildsystems::header_only::register_static_plugin();
+    cppup::plugin::register_builtin_test_frameworks();
 #endif
 
     // Create command context
