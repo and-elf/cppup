@@ -621,18 +621,15 @@ std::expected<ResolvedTestFrameworks, std::string> resolve_test_frameworks(
       return std::unexpected("test framework '" + framework.name + "': plugin '" +
                              framework.plugin + "' not registered");
     }
-    if (!framework.package.has_value())
-    {
-      return std::unexpected("test framework '" + framework.name +
-                             "': no package declared (system-installed frameworks not "
-                             "yet supported)");
-    }
-    const auto package_root = cppup_dir / "packages" / framework.package->name();
+    const auto package_root = framework.package.has_value()
+                                  ? cppup_dir / "packages" / framework.package->name()
+                                  : cppup_dir / "packages" / framework.name;
     if (!std::filesystem::exists(package_root) || std::filesystem::is_empty(package_root))
     {
-      return std::unexpected("test framework '" + framework.name + "': package '" +
-                             framework.package->name() + "' not synced at " +
-                             package_root.string() + " (run `cppup sync`)");
+      return std::unexpected(
+          "test framework '" + framework.name + "': package '" +
+          (framework.package.has_value() ? framework.package->name() : framework.name) +
+          "' not synced at " + package_root.string() + " (run `cppup sync`)");
     }
     const auto cache_dir = cppup_dir / "test_frameworks" / framework.name;
     logger.info("building test framework: " + framework.name);

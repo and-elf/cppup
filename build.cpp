@@ -63,9 +63,8 @@ extern "C" BuildConfiguration configure()
   // link flags. The package roundtrips through `cppup.lock` so a fresh
   // `git clone && cppup build` reproduces.
   config.test_frameworks.push_back(TestFramework{
-      .name    = "gtest",
-      .plugin  = "gtest",
-      .package = from_git("googletest", "https://github.com/google/googletest.git", "v1.14.0"),
+      .name   = "gtest",
+      .plugin = "gtest",
   });
 
   config.subprojects = {

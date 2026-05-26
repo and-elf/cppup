@@ -5,6 +5,7 @@
 #include "SystemProcessRunner.hpp"
 #include "core/buildsystems/cppup/cppup_plugin.hpp"
 #include "core/cli/cli_application.hpp"
+#include "core/cli/process_runner_git_interface.hpp"
 #include "core/logger/console/console_logger.hpp"
 #include "core/logger/console/console_logger_plugin.hpp"
 #include "core/plugin/test_framework_plugin.hpp"
@@ -12,7 +13,6 @@
 #include "core/buildsystems/cmake/cmake_plugin.hpp"
 #include "core/buildsystems/header_only/header_only_plugin.hpp"
 #include "core/buildsystems/make/make_plugin.hpp"
-#include "core/cli/process_runner_git_interface.hpp"
 #include "core/package/archive/archive_plugin.hpp"
 #include "core/package/directory/directory_plugin.hpp"
 #include "core/package/git/git_plugin.hpp"
@@ -52,10 +52,10 @@ int main(int argc, char* argv[])
 
     // Create process runner
     context.processRunner = std::make_unique<SystemProcessRunner>();
-#ifndef CPPUP_SLIM
+
+    // Initialize git interface for package syncing (needed even in slim builds)
     context.git =
         std::make_unique<cppup::cli::ProcessRunnerGitInterface>(context.processRunner.get());
-#endif
 
     // Create and run CLI application
     cppup::cli::CLIApplication app(std::move(context));

@@ -75,7 +75,12 @@ struct Test
  * Multiple frameworks can coexist in one project — each `Test` selects one by
  * `name`. A test-framework `package` typically carries `purpose =
  * "test-framework"` so plain `cppup build` skips it; only commands that build
- * tests (`cppup test`, `cppup build --tests`) fetch and build it.
+ * tests (`cppup test`, `cppup build --with-tests`) fetch and build it.
+ *
+ * The optional `package` field is only needed when the framework requires a
+ * distinct package identity or when the package is not already captured in
+ * `cppup.lock`. If omitted, `cppup test` expects the resolved package to be
+ * available under `.cppup/packages/<framework.name>`.
  */
 struct TestFramework
 {
