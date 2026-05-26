@@ -26,6 +26,9 @@ class GtestFrameworkPlugin : public TestFrameworkPlugin
 
   [[nodiscard]] int run(const std::filesystem::path& binary, std::string_view filter,
                         ProcessRunner& runner) const override;
+
+  [[nodiscard]] std::optional<TestFrameworkDefaultPackage> default_package()
+      const noexcept override;
 };
 
 }  // namespace cppup::plugin

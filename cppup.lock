@@ -3,7 +3,7 @@
 version = 1
 
 [[package]]
-name = "googletest"
+name = "gtest"
 version = "1.15.0"
 source = "git"
 url = "https://github.com/google/googletest.git"

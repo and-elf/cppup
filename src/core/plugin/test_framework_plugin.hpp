@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -22,6 +23,23 @@ struct TestBuildFlags
   std::vector<std::string> library_paths;
   std::vector<std::string> libraries;
   std::vector<std::string> link_flags;
+};
+
+// Upstream package a test-framework plugin builds against when the user's
+// build.cpp omits an explicit `TestFramework::package`. `cppup package
+// lock` translates this into a lockfile entry so `cppup sync` can fetch
+// the framework source on a fresh clone — no explicit declaration needed
+// for the common case ("I want gtest, give me a sensible default").
+//
+// Plain string fields by design: keeps the plugin layer free of any
+// dependency on the configuration's polymorphic `Package` machinery. The
+// lockfile code adapts this into a `PackageInfo` at call time.
+struct TestFrameworkDefaultPackage
+{
+  std::string name;        // Package name as it appears in cppup.lock
+  std::string url;         // Source URL (git remote for SourceKind::Git)
+  std::string git_branch;  // Branch or tag (e.g. "v1.15.0")
+  std::string version;     // Human-readable version (e.g. "1.15.0")
 };
 
 // Polymorphic interface every test-framework plugin implements. Plugins
@@ -66,6 +84,17 @@ class TestFrameworkPlugin
   // framework-specific spellings.
   [[nodiscard]] virtual int run(const std::filesystem::path& binary, std::string_view filter,
                                 ProcessRunner& runner) const = 0;
+
+  // Upstream package this plugin builds against when a build.cpp declares
+  // `TestFramework{.plugin = name()}` without an explicit `.package`. The
+  // lockfile uses this to synthesize an entry so `cppup sync` can fetch
+  // the framework source. Returning `std::nullopt` means the plugin has
+  // no default — the user must supply `.package` or pre-place sources
+  // under `.cppup/packages/<framework.name>/`.
+  [[nodiscard]] virtual std::optional<TestFrameworkDefaultPackage> default_package() const noexcept
+  {
+    return std::nullopt;
+  }
 };
 
 // Process-global registry of test-framework plugins, keyed by `name()`.

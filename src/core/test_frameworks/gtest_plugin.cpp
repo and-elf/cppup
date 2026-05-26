@@ -186,6 +186,16 @@ int GtestFrameworkPlugin::run(const fs::path& binary, std::string_view filter,
   return runner.run({.command = binary.string(), .args = std::move(args), .working_dir = ""});
 }
 
+std::optional<TestFrameworkDefaultPackage> GtestFrameworkPlugin::default_package() const noexcept
+{
+  return TestFrameworkDefaultPackage{
+      .name       = "gtest",
+      .url        = "https://github.com/google/googletest.git",
+      .git_branch = "v1.15.0",
+      .version    = "1.15.0",
+  };
+}
+
 void register_builtin_test_frameworks()
 {
   static GtestFrameworkPlugin gtest_plugin;

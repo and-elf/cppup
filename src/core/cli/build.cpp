@@ -47,27 +47,10 @@ extern "C" BuildConfiguration configure()
   add_test("test_init", "commands/test_init.cpp");
   add_test("test_update", "commands/test_update.cpp");
   add_test("test_lockfile", "commands/test_lockfile.cpp");
-
-  config.tests.push_back(Test{"test_install_paths", {"commands/test_install_paths.cpp"}});
-  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
-  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
-                                    Flag{"-lpthread"}, Flag{"-ldl"}};
-
-  config.tests.push_back(Test{"test_package_user_scope", {"commands/test_package_user_scope.cpp"}});
-  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
-  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
-                                    Flag{"-lpthread"}, Flag{"-ldl"}};
-
-  config.tests.push_back(
-      Test{"test_toolchain_user_scope", {"commands/test_toolchain_user_scope.cpp"}});
-  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
-  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
-                                    Flag{"-lpthread"}, Flag{"-ldl"}};
-
-  config.tests.push_back(Test{"test_coverage_parser", {"commands/test_coverage_parser.cpp"}});
-  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
-  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
-                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+  add_test("test_install_paths", "commands/test_install_paths.cpp");
+  add_test("test_package_user_scope", "commands/test_package_user_scope.cpp");
+  add_test("test_toolchain_user_scope", "commands/test_toolchain_user_scope.cpp");
+  add_test("test_coverage_parser", "commands/test_coverage_parser.cpp");
 
   return config;
 }
