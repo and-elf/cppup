@@ -1,17 +1,16 @@
 #include <cstdlib>
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include "../../configuration/build_options.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
+#include "coverage_parser.hpp"
 
 namespace cppup::cli
 {
@@ -21,21 +20,6 @@ namespace
 
 namespace conf = cppup::configuration;
 namespace fs   = std::filesystem;
-
-std::string trim_ascii(std::string_view text)
-{
-  std::size_t begin = 0;
-  while (begin < text.size() && static_cast<unsigned char>(text[begin]) <= 0x20U)
-  {
-    ++begin;
-  }
-  std::size_t end = text.size();
-  while (end > begin && static_cast<unsigned char>(text[end - 1]) <= 0x20U)
-  {
-    --end;
-  }
-  return std::string(text.substr(begin, end - begin));
-}
 
 std::vector<std::string> path_directories()
 {
@@ -151,101 +135,15 @@ std::optional<std::string> resolve_tool_on_path(std::string_view name)
   return std::nullopt;
 }
 
-struct CoverageSummary
-{
-  double      total_pct  = 0.0;
-  std::size_t files_seen = 0;
-};
-
-bool is_report_file(const fs::directory_entry& entry, std::error_code& error_code)
-{
-  return entry.is_regular_file(error_code) && !error_code && entry.path().extension() == ".gcov";
-}
-
-std::pair<std::size_t, std::size_t> parse_gcov_file(const fs::path& file)
-{
-  std::ifstream input(file);
-  if (!input)
-  {
-    return {0, 0};
-  }
-
-  std::size_t file_executed = 0;
-  std::size_t file_total    = 0;
-  std::string line;
-  while (std::getline(input, line))
-  {
-    const auto first_colon = line.find(':');
-    if (first_colon == std::string::npos)
-    {
-      continue;
-    }
-    const auto second_colon = line.find(':', first_colon + 1);
-    if (second_colon == std::string::npos)
-    {
-      continue;
-    }
-
-    const std::string exec_count = trim_ascii(line.substr(0, first_colon));
-    const std::string line_no =
-        trim_ascii(line.substr(first_colon + 1, second_colon - first_colon - 1));
-    if (line_no.empty() || line_no == "0" || exec_count == "-")
-    {
-      continue;
-    }
-
-    ++file_total;
-    if (exec_count != "#####" && exec_count != "=====" && exec_count != "%%%%%")
-    {
-      ++file_executed;
-    }
-  }
-
-  return {file_executed, file_total};
-}
-
-CoverageSummary parse_gcov_reports(const fs::path& coverage_dir)
-{
-  CoverageSummary summary;
-  std::size_t     weighted_executed = 0;
-  std::size_t     weighted_total    = 0;
-
-  std::error_code error_code;
-  for (const auto& entry : fs::directory_iterator(coverage_dir, error_code))
-  {
-    if (error_code)
-    {
-      continue;
-    }
-    if (!is_report_file(entry, error_code))
-    {
-      continue;
-    }
-
-    const auto [file_executed, file_total] = parse_gcov_file(entry.path());
-    if (file_total > 0)
-    {
-      weighted_executed += file_executed;
-      weighted_total += file_total;
-      ++summary.files_seen;
-    }
-  }
-
-  if (weighted_total > 0)
-  {
-    summary.total_pct =
-        100.0 * static_cast<double>(weighted_executed) / static_cast<double>(weighted_total);
-  }
-  return summary;
-}
-
 // build_dir is where .gcda files live; coverage_dir is where gcov writes
-// the per-source .gcov reports. Bundled so the two adjacent paths can't be
-// transposed at the call site.
+// the per-source .gcov reports. project_root anchors the source-path filter
+// so /usr/include/c++/* reports don't dilute the percentage. Bundled so the
+// adjacent path parameters can't be transposed at the call site.
 struct CoveragePaths
 {
   fs::path build_dir;
   fs::path coverage_dir;
+  fs::path project_root;
 };
 
 // Run gcov on every .gcda file under paths.build_dir, drop .gcov text reports
@@ -281,25 +179,45 @@ std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths
 
   fs::create_directories(paths.coverage_dir, error_code);
   const auto coverage_abs = fs::absolute(paths.coverage_dir, error_code);
+  const auto project_abs  = fs::absolute(paths.project_root, error_code);
 
+  // gcov must run from the project root so the `./src/...`-style source paths
+  // baked into .gcno files (compiler was invoked with relative sources) resolve
+  // correctly; otherwise gcov writes a header-only stub for every project TU.
+  // -r drops absolute sources (i.e. /usr/include/c++/*) so STL headers don't
+  // get reports written at all.
   ProcessRunRequest request;
   request.command     = *gcov;
-  request.working_dir = coverage_abs.string();
-  request.args        = {"-b", "-p"};
-  request.args.reserve(gcda_files.size() + 2);
+  request.working_dir = project_abs.string();
+  request.args        = {"-b", "-p", "-r"};
+  request.args.reserve(gcda_files.size() + 3);
   for (const auto& gcda : gcda_files)
   {
     request.args.push_back(gcda.string());
   }
 
-  context.logger->debug("gcov: " + request.command + " -b -p <" +
+  context.logger->debug("gcov: " + request.command + " -b -p -r <" +
                         std::to_string(gcda_files.size()) + " file(s)>");
   if (context.processRunner->run(request) != 0)
   {
     return std::unexpected("gcov failed while generating coverage reports");
   }
 
-  auto summary = parse_gcov_reports(coverage_abs);
+  // Move the .gcov files gcov dropped in the project root into coverage_dir,
+  // keeping the project tree tidy and matching the path we log to the user.
+  std::error_code move_ec;
+  for (const auto& entry : fs::directory_iterator(project_abs, move_ec))
+  {
+    if (entry.path().extension() != ".gcov")
+    {
+      continue;
+    }
+    std::error_code rename_ec;
+    fs::rename(entry.path(), coverage_abs / entry.path().filename(), rename_ec);
+  }
+
+  auto summary =
+      parse_gcov_reports({.coverage_dir = coverage_abs, .project_root = paths.project_root});
   if (summary.files_seen == 0)
   {
     return std::unexpected("gcov produced no parseable .gcov reports");
@@ -390,8 +308,10 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
     if (conf::enabled(options.coverage))
     {
       const fs::path coverage_dir = build_dir / "coverage";
-      auto           summary =
-          collect_coverage({.build_dir = build_dir, .coverage_dir = coverage_dir}, context);
+      auto           summary      = collect_coverage({.build_dir    = build_dir,
+                                                      .coverage_dir = coverage_dir,
+                                                      .project_root = context.projectRoot},
+                                                     context);
       if (!summary)
       {
         logger.warning("coverage: " + summary.error());
