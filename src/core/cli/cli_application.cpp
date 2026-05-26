@@ -645,6 +645,27 @@ void registerPluginCommands(const CommandRegistration& reg)
       });
 }
 
+void registerRegistryCommands(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("registry", "Manage the project's package registry");
+  group->require_subcommand(1);
+
+  auto  location = std::make_shared<std::string>();
+  auto* set_cmd  = group->add_subcommand(
+      "set", "Set the active registry to a URL or local directory (recorded in cppup.lock)");
+  set_cmd->add_option("location", *location, "Registry URL (http(s)://...) or local directory")
+      ->required();
+  set_cmd->callback(
+      [location, &ctx, &result]
+      {
+        result.set(handleExpectedResult(executeRegistrySet(*location, ctx), "Registry set",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+
 void registerModuleCommands(const CommandRegistration& reg)
 {
   auto& app    = *reg.app;
@@ -745,6 +766,7 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerToolchainCommands(reg);
     registerProfileCommands(reg);
     registerPluginCommands(reg);
+    registerRegistryCommands(reg);
     registerModuleCommands(reg);
 #endif
 
