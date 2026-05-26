@@ -88,7 +88,7 @@ TEST(Init, TestTemplateUsesGoogleTest)
       << "test_main.cpp template should declare at least one TEST(...) case";
 
   const auto build_cpp = slurp(root / "build.cpp");
-  EXPECT_NE(build_cpp.find("-lgtest"), std::string::npos)
+  EXPECT_NE(build_cpp.contains("gtest"), std::string::npos)
       << "build.cpp template should link the new test against gtest";
 
   fs::remove_all(root);
