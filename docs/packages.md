@@ -63,6 +63,37 @@ installs; it does not currently mutate `build.cpp` or `cppup.lock`. The
 `cppup package lock` / `cppup package sync` subcommands also still
 exist for scripts that already invoke them.
 
+### Install scope: project vs user
+
+Both `cppup package add` and `cppup toolchain add` accept `-u` /
+`--user` to install into a per-user data directory shared across
+projects, instead of the project-local `.cppup/`:
+
+```bash
+# Project-local (default) — lands in <repo>/.cppup/{packages,toolchains}/
+cppup package add --name fmt --git https://github.com/fmtlib/fmt.git
+cppup toolchain add --name clang-19
+
+# User-wide — lands in $XDG_DATA_HOME/cppup/ (if set), else $HOME/.cppup/
+cppup package add --name fmt --git https://github.com/fmtlib/fmt.git --user
+cppup toolchain add --name clang-19 -u
+```
+
+`cppup package list` and `cppup toolchain list` enumerate both scopes
+and tag each entry with `(project)` or `(user)`. `cppup package remove`
+and `cppup toolchain remove` search both scopes; if the same name
+exists in both, the project copy is removed first.
+
+User scope follows the XDG Base Directory Specification: it uses
+`$XDG_DATA_HOME/cppup/` when `XDG_DATA_HOME` is set and non-empty, and
+falls back to `$HOME/.cppup/` otherwise. `--user` errors out when
+neither environment variable is available.
+
+The auto-sync from `cppup.lock` is project-scoped — packages declared
+in `build.cpp` always materialize into the project's `.cppup/`. User
+scope is for ad-hoc, cross-project installs (e.g., a custom toolchain
+you reuse from many repos) and is independent of the lockfile.
+
 ## Declaring transitive dependencies
 
 Every `from_*` helper takes a final `dependencies` parameter listing
@@ -293,3 +324,7 @@ build on this layer model:
   behaviour of `package add`).
 - `cppup update` install location split: system-wide `/usr/local/` by
   default, `--user` for `$XDG_DATA_HOME` plus env setup.
+- Build-time resolution from the user data dir. Today the build still
+  drives compilation through the project lockfile + PATH; the user
+  install dir is consulted only by `package add`/`list`/`remove` and
+  `toolchain add`/`list`/`remove`.

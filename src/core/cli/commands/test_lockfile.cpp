@@ -215,6 +215,24 @@ TEST(LockfileSelection, WriteSelectionCreatesFileWhenAbsent)
   EXPECT_EQ(lockfile::read_selection(buf.str()), sel);
 }
 
+TEST(LockfileSelection, RoundtripsRegistry)
+{
+  std::vector<Entry> const entries{make_git_entry("fmt", "https://example.com/fmt.git")};
+  lockfile::Selection      sel;
+  sel.registry = "https://registry.example.com/index.toml";
+
+  const auto text      = lockfile::serialize(entries, sel);
+  const auto recovered = lockfile::read_selection(text);
+  EXPECT_EQ(recovered, sel);
+}
+
+TEST(LockfileSelection, ReadSelectionIgnoresMalformedRegistryLine)
+{
+  // A bare value (not a quoted string) must not crash or set the field.
+  const std::string text = "version = 1\nselected_registry = not-a-string\n";
+  EXPECT_EQ(lockfile::read_selection(text), lockfile::Selection{});
+}
+
 TEST(LockfileSelection, WriteSelectionPreservesPackages)
 {
   auto                     root = make_tmp_root("write_sel_keep_pkgs");
@@ -479,4 +497,74 @@ TEST(PackageSync, FailsWithoutLockfile)
   const auto ctx  = make_ctx(root);
   const auto rc   = cppup::cli::executePackageSync(ctx);
   EXPECT_FALSE(rc.has_value());
+}
+
+TEST(RegistrySet, RejectsEmptyLocation)
+{
+  auto       root = make_tmp_root("registry_empty");
+  const auto ctx  = make_ctx(root);
+  const auto rc   = cppup::cli::executeRegistrySet("", ctx);
+  EXPECT_FALSE(rc.has_value());
+}
+
+TEST(RegistrySet, StoresUrlVerbatimInLockfile)
+{
+  auto              root = make_tmp_root("registry_url");
+  const auto        ctx  = make_ctx(root);
+  const std::string url  = "https://registry.example.com/index.toml";
+
+  ASSERT_TRUE(cppup::cli::executeRegistrySet(url, ctx).has_value());
+
+  std::ifstream     in(root / "cppup.lock");
+  std::stringstream buf;
+  buf << in.rdbuf();
+  const auto sel = lockfile::read_selection(buf.str());
+  ASSERT_TRUE(sel.registry.has_value());
+  EXPECT_EQ(*sel.registry, url);
+}
+
+TEST(RegistrySet, NormalizesDirectoryToAbsolutePath)
+{
+  auto root = make_tmp_root("registry_dir");
+  auto ctx  = make_ctx(root);
+  // A real on-disk directory so canonical() succeeds; relative input should
+  // be resolved against the project root, not the test's cwd.
+  const auto registry_dir = root / "my_registry";
+  fs::create_directories(registry_dir);
+
+  ASSERT_TRUE(cppup::cli::executeRegistrySet("my_registry", ctx).has_value());
+
+  std::ifstream     in(root / "cppup.lock");
+  std::stringstream buf;
+  buf << in.rdbuf();
+  const auto sel = lockfile::read_selection(buf.str());
+  ASSERT_TRUE(sel.registry.has_value());
+  EXPECT_EQ(fs::path(*sel.registry), fs::canonical(registry_dir));
+}
+
+TEST(RegistrySet, OverwritesPreviousRegistryAndPreservesPackages)
+{
+  auto root = make_tmp_root("registry_overwrite");
+  auto ctx  = make_ctx(root);
+
+  std::vector<Entry> const entries{make_git_entry("fmt", "https://example.com/fmt.git")};
+  {
+    std::ofstream out(root / "cppup.lock", std::ios::binary | std::ios::trunc);
+    out << lockfile::serialize(entries);
+  }
+
+  ASSERT_TRUE(cppup::cli::executeRegistrySet("https://r1.example.com/index.toml", ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executeRegistrySet("https://r2.example.com/index.toml", ctx).has_value());
+
+  std::ifstream     in(root / "cppup.lock");
+  std::stringstream buf;
+  buf << in.rdbuf();
+  const auto sel = lockfile::read_selection(buf.str());
+  ASSERT_TRUE(sel.registry.has_value());
+  EXPECT_EQ(*sel.registry, "https://r2.example.com/index.toml");
+
+  const auto parsed = lockfile::parse(buf.str());
+  ASSERT_TRUE(parsed.has_value()) << parsed.error_or("");
+  ASSERT_EQ(parsed->size(), 1U);
+  EXPECT_EQ((*parsed)[0].name, "fmt");
 }

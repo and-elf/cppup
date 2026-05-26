@@ -8,6 +8,7 @@
 
 #include "../configuration/build_options.hpp"
 #include "command_context.hpp"
+#include "commands/install_paths.hpp"
 
 namespace cppup::cli
 {
@@ -188,6 +189,9 @@ struct PackageAddOptions
 
   // Path inside the fetched archive/repo to treat as the package root.
   std::optional<std::string> subdirectory;
+
+  // `--user` / `-u` installs to the user data dir instead of `.cppup/`.
+  InstallScope scope = InstallScope::Project;
 };
 
 [[nodiscard]] std::expected<int, std::string> executePackageAdd(
@@ -216,6 +220,9 @@ struct ToolchainAddOptions
   std::optional<std::string> tag;
   std::optional<std::string> url;
   std::optional<std::string> dir;
+
+  // `--user` / `-u` installs to the user data dir instead of `.cppup/`.
+  InstallScope scope = InstallScope::Project;
 };
 
 [[nodiscard]] std::expected<int, std::string> executeToolchainAdd(
@@ -256,6 +263,13 @@ struct PluginAddOptions
 // Module commands
 [[nodiscard]] std::expected<int, std::string> executeModuleAdd(
     const std::string& module_name, const CommandContext& context) noexcept;
+
+// Registry commands. `set` records the active registry source (URL or local
+// directory) under `selected_registry` in `cppup.lock`. URLs pass through
+// verbatim; local paths are resolved against the project root and stored as
+// their canonical absolute form so the lockfile is portable across cwds.
+[[nodiscard]] std::expected<int, std::string> executeRegistrySet(
+    const std::string& location, const CommandContext& context) noexcept;
 
 // Update command — download the latest released cppup binary and install it.
 [[nodiscard]] std::expected<int, std::string> executeUpdate(UpdateOptions         options,

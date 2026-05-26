@@ -491,6 +491,10 @@ void registerPackageCommands(const CommandRegistration& reg)
       ->check(CLI::IsMember({"cppup", "cmake", "make", "header-only"}));
   add_cmd->add_option("--subdirectory", add_opts->subdirectory,
                       "Path inside the fetched repo/archive to treat as the package root");
+  add_cmd->add_flag_function(
+      "-u,--user", [add_opts](std::int64_t /*count*/) { add_opts->scope = InstallScope::User; },
+      "Install into the user data dir (XDG_DATA_HOME/cppup or $HOME/.cppup) instead of "
+      ".cppup/");
   add_cmd->callback(
       [add_opts, &ctx, &result]
       {
@@ -548,6 +552,10 @@ void registerToolchainCommands(const CommandRegistration& reg)
   add_cmd->add_option("--tag", add_opts->tag, "Toolchain tag");
   add_cmd->add_option("--url", add_opts->url, "Toolchain URL");
   add_cmd->add_option("--dir", add_opts->dir, "Local directory");
+  add_cmd->add_flag_function(
+      "-u,--user", [add_opts](std::int64_t /*count*/) { add_opts->scope = InstallScope::User; },
+      "Install into the user data dir (XDG_DATA_HOME/cppup or $HOME/.cppup) instead of "
+      ".cppup/");
   add_cmd->callback(
       [add_opts, &ctx, &result]
       {
@@ -633,6 +641,27 @@ void registerPluginCommands(const CommandRegistration& reg)
       [remove_name, &ctx, &result]
       {
         result.set(handleExpectedResult(executePluginRemove(*remove_name, ctx), "Plugin remove",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+
+void registerRegistryCommands(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  auto* group  = app.add_subcommand("registry", "Manage the project's package registry");
+  group->require_subcommand(1);
+
+  auto  location = std::make_shared<std::string>();
+  auto* set_cmd  = group->add_subcommand(
+      "set", "Set the active registry to a URL or local directory (recorded in cppup.lock)");
+  set_cmd->add_option("location", *location, "Registry URL (http(s)://...) or local directory")
+      ->required();
+  set_cmd->callback(
+      [location, &ctx, &result]
+      {
+        result.set(handleExpectedResult(executeRegistrySet(*location, ctx), "Registry set",
                                         ErrorHandler::ErrorCode::UnknownError));
       });
 }
@@ -737,6 +766,7 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerToolchainCommands(reg);
     registerProfileCommands(reg);
     registerPluginCommands(reg);
+    registerRegistryCommands(reg);
     registerModuleCommands(reg);
 #endif
 

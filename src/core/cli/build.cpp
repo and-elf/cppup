@@ -6,14 +6,29 @@ extern "C" BuildConfiguration configure()
 {
   BuildConfiguration config;
   config.libraries.push_back(Library{
-      .name    = "cppup_cli",
-      .sources = {"cli_application.cpp", "commands.cpp", "commands/init.cpp", "commands/build.cpp",
-                  "commands/clean.cpp", "commands/compile_commands_cmd.cpp", "commands/test.cpp",
-                  "commands/format.cpp", "commands/tidy.cpp", "commands/source_selection.cpp",
-                  "commands/package.cpp", "commands/lockfile.cpp", "commands/module.cpp",
-                  "commands/toolchain.cpp", "commands/plugin.cpp", "commands/update.cpp",
-                  "commands/selection_resolver.cpp"},
-      .type    = LibraryType::Static,
+      .name       = "cppup_cli",
+      .sources    = {"cli_application.cpp",
+                     "commands.cpp",
+                     "commands/init.cpp",
+                     "commands/build.cpp",
+                     "commands/clean.cpp",
+                     "commands/compile_commands_cmd.cpp",
+                     "commands/test.cpp",
+                     "commands/format.cpp",
+                     "commands/tidy.cpp",
+                     "commands/source_selection.cpp",
+                     "commands/package.cpp",
+                     "commands/lockfile.cpp",
+                     "commands/module.cpp",
+                     "commands/toolchain.cpp",
+                     "commands/plugin.cpp",
+                     "commands/update.cpp",
+                     "commands/selection_resolver.cpp",
+                     "commands/coverage_parser.cpp",
+                     "commands/registry.cpp",
+                     "commands/selection_resolver.cpp",
+                     "commands/install_paths.cpp"},
+      .type       = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",
                      "cppup_plugin", "cppup_packages", "cppup_buildsystems"},
@@ -32,6 +47,27 @@ extern "C" BuildConfiguration configure()
   add_test("test_init", "commands/test_init.cpp");
   add_test("test_update", "commands/test_update.cpp");
   add_test("test_lockfile", "commands/test_lockfile.cpp");
+
+  config.tests.push_back(Test{"test_install_paths", {"commands/test_install_paths.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(Test{"test_package_user_scope", {"commands/test_package_user_scope.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(
+      Test{"test_toolchain_user_scope", {"commands/test_toolchain_user_scope.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(Test{"test_coverage_parser", {"commands/test_coverage_parser.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
 
   return config;
 }

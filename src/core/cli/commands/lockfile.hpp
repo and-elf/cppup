@@ -28,6 +28,9 @@ struct Selection
 {
   std::optional<std::string> toolchain;
   std::optional<std::string> profile;
+  // Project-level registry. Either a URL (http(s)://...) or an absolute
+  // directory path. Stored under `selected_registry` in the lockfile.
+  std::optional<std::string> registry;
 
   bool operator==(const Selection&) const = default;
 };
