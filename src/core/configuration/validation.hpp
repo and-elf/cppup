@@ -19,6 +19,7 @@ enum class ValidationErrorType : uint8_t
   ModuleNotFound,
   InvalidSource,
   InvalidOutput,
+  TestFrameworkNotFound,
   Warning
 };
 
@@ -185,6 +186,13 @@ class ConfigurationValidator
    * Validate build steps
    */
   static void validate_build_steps(const BuildConfiguration& config, ValidationResult& result);
+
+  /**
+   * Validate that every `Test::framework` reference resolves to a declared
+   * `TestFramework`, that frameworks have non-empty names, and that no two
+   * frameworks share a name.
+   */
+  static void validate_test_frameworks(const BuildConfiguration& config, ValidationResult& result);
 };
 
 }  // namespace cppup::configuration

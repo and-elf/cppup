@@ -34,9 +34,10 @@ struct BuildConfiguration
   std::vector<Definition>  definitions;
 
   // Build outputs
-  std::vector<Binary>  binaries;
-  std::vector<Library> libraries;
-  std::vector<Test>    tests;
+  std::vector<Binary>        binaries;
+  std::vector<Library>       libraries;
+  std::vector<Test>          tests;
+  std::vector<TestFramework> test_frameworks;
 
   // Nested projects whose libraries/binaries get merged into this build
   std::vector<Subproject> subprojects;

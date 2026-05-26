@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../../configuration/build_configuration.hpp"
+#include "../../plugin/test_framework_plugin.hpp"
 
 namespace cppup::cli::lockfile
 {
@@ -108,7 +109,15 @@ struct Entry
 // the current DFS stack), and returned in lexicographic order. Each
 // entry's `dependencies` field lists the direct child names declared in
 // the manifest.
+//
+// `registry` resolves test-framework plugins for `TestFramework` entries
+// declared without an explicit `.package` — the plugin's
+// `default_package()` provides the upstream source so the lockfile
+// captures it. Defaults to the process-global registry; tests pass a
+// local registry for isolation.
 [[nodiscard]] std::expected<std::vector<Entry>, std::string> entries_from_configuration(
-    const cppup::configuration::BuildConfiguration& config);
+    const cppup::configuration::BuildConfiguration& config,
+    const cppup::plugin::TestFrameworkRegistry&     registry =
+        cppup::plugin::global_test_framework_registry());
 
 }  // namespace cppup::cli::lockfile

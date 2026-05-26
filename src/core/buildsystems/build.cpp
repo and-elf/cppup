@@ -22,12 +22,10 @@ extern "C" BuildConfiguration configure()
   config.include_paths = {"../../.."};
   config.compile_flags = {Flag{"-std=c++23"}, Flag{"-Wall"}, Flag{"-Wextra"}};
 
-  const std::vector<Flag> test_links = {Flag{"-lgtest"}, Flag{"-lgtest_main"}, Flag{"-lpthread"},
-                                        Flag{"-ldl"}};
-
   config.tests.push_back(Test{"test_buildsystem_plugins", {"test_buildsystem_plugins.cpp"}});
   config.tests.back().libraries  = {"cppup_buildsystems", "cppup_packages", "cppup_plugin"};
-  config.tests.back().link_flags = test_links;
+  config.tests.back().link_flags = {Flag{"-ldl"}};
+  config.tests.back().framework  = "gtest";
 
   return config;
 }

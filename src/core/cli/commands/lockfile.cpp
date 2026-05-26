@@ -629,13 +629,75 @@ struct WalkFrame
 
 }  // namespace
 
+namespace
+{
+
+// Translate a plugin's default-package descriptor into the PackageInfo
+// shape the rest of the lockfile walker expects. Lives in this TU
+// because nothing else needs the adaptation.
+conf::PackageInfo info_from_default(const cppup::plugin::TestFrameworkDefaultPackage& def)
+{
+  conf::PackageInfo info;
+  info.name        = def.name;
+  info.source_type = conf::SourceType::GIT;
+  if (!def.version.empty())
+  {
+    info.version = def.version;
+  }
+  if (!def.url.empty())
+  {
+    info.url = def.url;
+  }
+  if (!def.git_branch.empty())
+  {
+    info.git_branch = def.git_branch;
+  }
+  return info;
+}
+
+}  // namespace
+
 std::expected<std::vector<Entry>, std::string> entries_from_configuration(
-    const conf::BuildConfiguration& config)
+    const conf::BuildConfiguration& config, const cppup::plugin::TestFrameworkRegistry& registry)
 {
   WalkState state;
   for (const auto& pkg : config.packages)
   {
     if (auto walked = walk_info(pkg.info(), state); !walked)
+    {
+      return std::unexpected(walked.error());
+    }
+  }
+  // Test-framework packages roundtrip through the lockfile too so a fresh
+  // `git clone && cppup test` reproduces the framework source state without
+  // an explicit sync. Resolution order for the package source:
+  //   1. `framework.package` if the user set it explicitly in build.cpp;
+  //   2. otherwise the plugin's `default_package()` (the common case —
+  //      "I want gtest, give me a sensible default");
+  //   3. otherwise skip (no plugin registered, or plugin has no default;
+  //      assumed system-installed or pre-placed under
+  //      `.cppup/packages/<framework.name>/`).
+  for (const auto& framework : config.test_frameworks)
+  {
+    if (framework.package.has_value())
+    {
+      if (auto walked = walk_info(framework.package->info(), state); !walked)
+      {
+        return std::unexpected(walked.error());
+      }
+      continue;
+    }
+    const auto* plugin = registry.find(framework.plugin);
+    if (plugin == nullptr)
+    {
+      continue;
+    }
+    auto default_pkg = plugin->default_package();
+    if (!default_pkg.has_value())
+    {
+      continue;
+    }
+    if (auto walked = walk_info(info_from_default(*default_pkg), state); !walked)
     {
       return std::unexpected(walked.error());
     }

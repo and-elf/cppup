@@ -2,6 +2,7 @@
 #include <cstdlib>
 
 using namespace cppup::configuration;
+using namespace cppup::configuration::package_helpers;
 
 extern "C" BuildConfiguration configure()
 {
@@ -56,6 +57,16 @@ extern "C" BuildConfiguration configure()
                           "src/core/cli/commands",
                           "src/core/configuration"};
 
+  // Dogfood: gtest is fetched as a source package and built by the
+  // builtin gtest test-framework plugin. Tests reference this by
+  // `framework = "gtest"` instead of carrying hardcoded `-lgtest`
+  // link flags. The package roundtrips through `cppup.lock` so a fresh
+  // `git clone && cppup build` reproduces.
+  config.test_frameworks.push_back(TestFramework{
+      .name   = "gtest",
+      .plugin = "gtest",
+  });
+
   config.subprojects = {
       Subproject{.path = "src/core/configuration", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/dependency", .build_system = {}, .build_args = {}},
@@ -66,13 +77,15 @@ extern "C" BuildConfiguration configure()
       },
       Subproject{.path = "src/core/logger/console", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/plugin", .build_system = {}, .build_args = {}},
+      Subproject{.path = "src/core/test_frameworks", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/package", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/buildsystems", .build_system = {}, .build_args = {}},
       Subproject{.path = "src/core/cli", .build_system = {}, .build_args = {}},
   };
 
-  config.binaries.push_back(
-      Binary{.name = "cppup", .sources = {"src/main.cpp"}, .libraries = {"cppup_cli"}});
+  config.binaries.push_back(Binary{.name      = "cppup",
+                                   .sources   = {"src/main.cpp"},
+                                   .libraries = {"cppup_cli", "cppup_test_frameworks"}});
 
   config.definitions = {
       Definition{"CPPUP_MAJOR_VERSION", "1"}, Definition{"CPPUP_MINOR_VERSION", "0"},

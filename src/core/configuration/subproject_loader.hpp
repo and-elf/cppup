@@ -84,6 +84,11 @@ inline BuildConfiguration rebase_subproject_outputs(const BuildConfiguration& ch
     out.include_paths.push_back(rebase(inc));
   }
 
+  // TestFramework declarations carry no path-based state, so they pass
+  // through the rebase unchanged. Forwarding them here lets a subproject
+  // declare its own framework that gets merged into the parent.
+  out.test_frameworks = child.test_frameworks;
+
   return out;
 }
 
@@ -134,6 +139,10 @@ inline void merge_rebased_into(BuildConfiguration& merged, const BuildConfigurat
   for (const auto& test : rebased.tests)
   {
     merged.tests.push_back(test);
+  }
+  for (const auto& framework : rebased.test_frameworks)
+  {
+    merged.test_frameworks.push_back(framework);
   }
   for (const auto& inc : rebased.include_paths)
   {

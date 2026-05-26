@@ -14,8 +14,8 @@ extern "C" BuildConfiguration configure()
 
   config.tests.push_back(Test{"test_cache", {"test_cache.cpp"}});
   config.tests.back().libraries  = {"cppup_build", "cppup_dependency"};
-  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lcrypto"}, Flag{"-lgtest"},
-                                    Flag{"-lgtest_main"}, Flag{"-lpthread"}};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lcrypto"}};
+  config.tests.back().framework  = "gtest";
 
   return config;
 }

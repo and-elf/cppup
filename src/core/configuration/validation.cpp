@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <iostream>
 #include <regex>
+#include <set>
 
 namespace cppup::configuration
 {
@@ -27,6 +28,9 @@ ValidationResult ConfigurationValidator::validate(const BuildConfiguration&     
 
   // Validate build steps
   validate_build_steps(config, result);
+
+  // Validate test frameworks + every Test::framework reference
+  validate_test_frameworks(config, result);
 
   return result;
 }
@@ -106,6 +110,42 @@ void ConfigurationValidator::validate_build_steps(const BuildConfiguration& conf
     if (step.name.empty())
     {
       result.add_error(ValidationErrorType::InvalidOutput, "Build step with empty name found");
+    }
+  }
+}
+
+void ConfigurationValidator::validate_test_frameworks(const BuildConfiguration& config,
+                                                      ValidationResult&         result)
+{
+  std::set<std::string> declared_names;
+  for (const auto& framework : config.test_frameworks)
+  {
+    if (framework.name.empty())
+    {
+      result.add_error(ValidationErrorType::InvalidOutput, "TestFramework with empty name found",
+                       "Set `name` on the TestFramework entry");
+      continue;
+    }
+    if (!declared_names.insert(framework.name).second)
+    {
+      result.add_error(ValidationErrorType::InvalidOutput,
+                       "Duplicate TestFramework name: '" + framework.name + "'",
+                       "Each entry in config.test_frameworks must have a unique name");
+    }
+  }
+
+  for (const auto& test : config.tests)
+  {
+    if (test.framework.empty())
+    {
+      continue;  // plain binary, no framework expected
+    }
+    if (!declared_names.contains(test.framework))
+    {
+      result.add_error(
+          ValidationErrorType::TestFrameworkNotFound,
+          "Test '" + test.name + "' references undeclared framework '" + test.framework + "'",
+          "Declare it in config.test_frameworks or remove the reference");
     }
   }
 }

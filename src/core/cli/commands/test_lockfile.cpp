@@ -358,6 +358,121 @@ TEST(LockfileGraph, LockfileWithDepsRoundtrips)
   EXPECT_EQ(*parsed, *entries);
 }
 
+TEST(LockfileFromConfiguration, IncludesTestFrameworkPackages)
+{
+  using cppup::configuration::SourceType;
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(cppup::configuration::TestFramework{
+      .name    = "gtest",
+      .plugin  = "gtest",
+      .package = make_package("googletest", SourceType::GIT),
+  });
+
+  const auto entries = lockfile::entries_from_configuration(config);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  ASSERT_EQ(entries->size(), 1U);
+  EXPECT_EQ((*entries)[0].name, "googletest");
+  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+}
+
+// Synthetic plugin used to drive the default_package() fallback without
+// pulling cppup_test_frameworks into this test target. `default_pkg_`
+// being nullopt models a plugin that wants its package source supplied
+// explicitly (e.g. system-installed Catch2 picked up via pkg-config).
+class FakeTestFrameworkPlugin : public cppup::plugin::TestFrameworkPlugin
+{
+ public:
+  FakeTestFrameworkPlugin(std::string                                               plugin_name,
+                          std::optional<cppup::plugin::TestFrameworkDefaultPackage> default_pkg) :
+      plugin_name_(std::move(plugin_name)), default_pkg_(std::move(default_pkg))
+  {
+  }
+
+  [[nodiscard]] std::string_view name() const noexcept override
+  {
+    return plugin_name_;
+  }
+  [[nodiscard]] std::expected<cppup::plugin::TestBuildFlags, std::string> build_and_get_flags(
+      const std::filesystem::path& /*package_root*/, const std::filesystem::path& /*cache_dir*/,
+      ProcessRunner& /*runner*/) const override
+  {
+    return std::unexpected("not implemented in test");
+  }
+  [[nodiscard]] std::expected<std::vector<std::string>, std::string> list_test_cases(
+      const std::filesystem::path& /*binary*/, std::string_view /*filter*/,
+      ProcessRunner& /*runner*/) const override
+  {
+    return std::vector<std::string>{};
+  }
+  [[nodiscard]] int run(const std::filesystem::path& /*binary*/, std::string_view /*filter*/,
+                        ProcessRunner& /*runner*/) const override
+  {
+    return 0;
+  }
+  [[nodiscard]] std::optional<cppup::plugin::TestFrameworkDefaultPackage> default_package()
+      const noexcept override
+  {
+    return default_pkg_;
+  }
+
+ private:
+  std::string                                               plugin_name_;
+  std::optional<cppup::plugin::TestFrameworkDefaultPackage> default_pkg_;
+};
+
+TEST(LockfileFromConfiguration, FrameworksFallBackToPluginDefaultPackage)
+{
+  const FakeTestFrameworkPlugin plugin{
+      "gtest", cppup::plugin::TestFrameworkDefaultPackage{.name = "gtest",
+                                                          .url  = "https://example.test/gt.git",
+                                                          .git_branch = "v9.9.9",
+                                                          .version    = "9.9.9"}};
+  cppup::plugin::TestFrameworkRegistry registry;
+  ASSERT_TRUE(registry.register_plugin(&plugin));
+
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(
+      cppup::configuration::TestFramework{.name = "gtest", .plugin = "gtest"});
+
+  const auto entries = lockfile::entries_from_configuration(config, registry);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  ASSERT_EQ(entries->size(), 1U);
+  EXPECT_EQ((*entries)[0].name, "gtest");
+  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+  EXPECT_EQ((*entries)[0].url, "https://example.test/gt.git");
+  EXPECT_EQ((*entries)[0].git_branch, "v9.9.9");
+  EXPECT_EQ((*entries)[0].version, "9.9.9");
+}
+
+TEST(LockfileFromConfiguration, FrameworksWithUnknownPluginAreSkipped)
+{
+  // Empty registry — nothing resolves "gtest".
+  const cppup::plugin::TestFrameworkRegistry registry;
+
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(
+      cppup::configuration::TestFramework{.name = "system_gtest", .plugin = "gtest"});
+
+  const auto entries = lockfile::entries_from_configuration(config, registry);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  EXPECT_TRUE(entries->empty());
+}
+
+TEST(LockfileFromConfiguration, FrameworksWithPluginButNoDefaultPackageAreSkipped)
+{
+  const FakeTestFrameworkPlugin        plugin{"catch2", std::nullopt};
+  cppup::plugin::TestFrameworkRegistry registry;
+  ASSERT_TRUE(registry.register_plugin(&plugin));
+
+  cppup::configuration::BuildConfiguration config;
+  config.test_frameworks.push_back(
+      cppup::configuration::TestFramework{.name = "catch2", .plugin = "catch2"});
+
+  const auto entries = lockfile::entries_from_configuration(config, registry);
+  ASSERT_TRUE(entries.has_value()) << entries.error_or("");
+  EXPECT_TRUE(entries->empty());
+}
+
 // Integration-style tests below drive executePackageSync end-to-end against
 // a synthetic cppup.lock + a fake git interface. They cover the acceptance
 // criteria around sync idempotency and metadata/state reconciliation.

@@ -1,8 +1,8 @@
 /**
- * Example build.cpp file demonstrating the cppup Configuration API
+ * Example build.cpp demonstrating the cppup configuration API.
  *
- * This file shows how to create a simple build configuration
- * for a C++ project using the cppup Configuration API.
+ * Shows a small project with a static library, an executable that links it,
+ * a plain-binary unit test, and a release profile.
  */
 
 #include <cppup/configuration.hpp>
@@ -13,43 +13,28 @@ extern "C" BuildConfiguration configure()
 {
   BuildConfiguration config;
 
-  // Set the toolchain
-  config.toolchain = Toolchain{"gcc-13"};
+  config.toolchain               = Toolchain{"g++"};
+  config.toolchain->cxx_standard = CxxStandard::Cxx23;
+  config.toolchain->warnings     = WarningLevel::Strict;
 
-  // Add dependencies (commented out for now due to package system issues)
-  // config.packages = {
-  //     Package{"fmt", "10.1.1"},
-  //     Package{"spdlog", "1.12.0"}
-  // };
+  config.compile_flags = {Flag{"-O2"}};
 
-  // Specify source files
-  config.sources = {"src/*.cpp", "include/**/*.hpp"};
+  config.libraries = {
+      Library{
+          .name = "simple_lib", .sources = {"src/lib/simple_lib.cpp"}, .type = LibraryType::Static},
+  };
 
-  // Compiler flags
-  config.compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}};
-  config.compile_flags.push_back(Flag{"-std=c++20"});
-  config.compile_flags.push_back(Flag{"-O2"});
+  config.binaries = {
+      Binary{.name = "simple_app", .sources = {"src/main.cpp"}, .libraries = {"simple_lib"}}};
 
-  // Platform-specific configuration (commented out)
-  // platform::add_platform_packages(config,
-  //     {Package{"winsock2"}},      // Windows networking
-  //     {Package{"pthread"}},       // Linux threading
-  //     {Package{"foundation"}}     // macOS foundation
-  // );
+  config.tests                  = {Test{"unit_tests", {"tests/test_main.cpp"}}};
+  config.tests.back().libraries = {"simple_lib"};
 
-  // Build outputs
-  config.binaries = {Binary{"simple_app", {"src/main.cpp"}}};
-
-  config.libraries = {Library{"simple_lib", {"src/lib/*.cpp"}, LibraryType::Static}};
-
-  config.tests = {Test{"unit_tests", {"tests/*.cpp"}}};
-
-  // Build profiles (commented out)
-  // config.profiles = {
-  //     debug_profile({Flag{"-fsanitize=address"}}),
-  //     release_profile({Flag{"-march=native"}}),
-  //     test_profile("catch2", {Flag{"-coverage"}})
-  // };
+  config.profiles = {
+      Profile{.name          = "release",
+              .compile_flags = {Flag{"-O3"}, Flag{"-march=native"}},
+              .definitions   = {Definition{"NDEBUG"}}},
+  };
 
   return config;
 }

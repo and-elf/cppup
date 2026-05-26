@@ -106,6 +106,7 @@ build_slim() {
         src/core/plugin/host_service_adapters.cpp
         src/core/plugin/manifest.cpp
         src/core/plugin/descriptor_validation.cpp
+        src/core/plugin/test_framework_plugin.cpp
         src/core/cli/cli_application.cpp
         src/core/cli/commands.cpp
         src/core/cli/commands/build.cpp

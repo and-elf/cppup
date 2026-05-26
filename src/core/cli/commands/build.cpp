@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <span>
 #include <sstream>
@@ -22,6 +23,7 @@
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
 #include "../../logger/console/console_logger.hpp"
+#include "../../plugin/test_framework_plugin.hpp"
 #include "build_options.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
@@ -319,6 +321,11 @@ void compile_objects_parallel(const std::string& compiler, const std::vector<Com
   }
 }
 
+// Per-framework resolved compile/link flags, keyed by `TestFramework::name`.
+// Populated once before tests are built and consulted by both the planner
+// and the actual build loop so cache keys stay stable.
+using ResolvedTestFrameworks = std::map<std::string, cppup::plugin::TestBuildFlags>;
+
 // Shared environment for the build pipeline. Non-owning pointers (not refs)
 // so the struct is trivially copyable — the inner-jobs override (force
 // per-source jobs=1 while parallelizing across targets) is done by copying a
@@ -334,6 +341,10 @@ struct BuildContext
   ProcessRunner*                  process_runner;
   Logger*                         logger;
   ProgressReporter*               progress;
+  // Non-null only when tests are being built and `config.test_frameworks`
+  // has been resolved successfully. Reads from build paths key off the
+  // per-test `framework` field; tests with an empty framework ignore this.
+  const ResolvedTestFrameworks* test_framework_flags = nullptr;
 };
 
 // Per-executable build inputs. Spans are non-owning views into vectors that
@@ -346,8 +357,9 @@ struct ExecutableSpec
   std::string                  name;
   std::span<const std::string> sources;
   std::span<const std::string> linked_library_names;
-  std::span<const std::string> extra_link_flags = {};
-  std::filesystem::path        output_dir       = {};
+  std::span<const std::string> extra_link_flags    = {};
+  std::span<const std::string> extra_include_paths = {};
+  std::filesystem::path        output_dir          = {};
 };
 
 bld::BuildTarget make_library_target(const conf::Library& library, const BuildContext& ctx);
@@ -520,6 +532,15 @@ bld::BuildTarget make_executable_target(const ExecutableSpec& spec, const BuildC
   {
     target.include_paths.push_back(paths.project_root / inc);
   }
+  // Framework-supplied include paths (e.g. gtest's own `include/`) are
+  // absolute and not project-relative. Pushed onto both the compile
+  // flags (so the test's TU sees `<gtest/gtest.h>`) and the include
+  // path list used by collect_dependencies for header scanning.
+  for (const auto& inc : spec.extra_include_paths)
+  {
+    target.compile_flags.push_back("-I" + inc);
+    target.include_paths.emplace_back(inc);
+  }
 
   const std::vector<std::string> link_roots(spec.linked_library_names.begin(),
                                             spec.linked_library_names.end());
@@ -533,6 +554,93 @@ bld::BuildTarget make_executable_target(const ExecutableSpec& spec, const BuildC
   target.link_flags =
       compose_link_flags(links, config, spec.extra_link_flags, ctx.options, paths.build_dir);
   return target;
+}
+
+// Per-test compile/link additions sourced from the test's framework
+// (if any) plus the test's own `link_flags`. Held in a struct so the
+// vectors live long enough to back the ExecutableSpec's spans.
+struct TestExecutableInputs
+{
+  std::vector<std::string> extra_link_flags;
+  std::vector<std::string> extra_include_paths;
+};
+
+TestExecutableInputs make_test_executable_inputs(const conf::Test& test, const BuildContext& ctx)
+{
+  TestExecutableInputs inputs;
+  if (ctx.test_framework_flags != nullptr && !test.framework.empty())
+  {
+    const auto it = ctx.test_framework_flags->find(test.framework);
+    CPPUP_CHECK(it != ctx.test_framework_flags->end(),
+                "test framework not resolved (should be caught by validation)");
+    const auto& framework_flags = it->second;
+    inputs.extra_include_paths  = framework_flags.include_paths;
+    for (const auto& path : framework_flags.library_paths)
+    {
+      inputs.extra_link_flags.push_back("-L" + path);
+    }
+    for (const auto& lib : framework_flags.libraries)
+    {
+      inputs.extra_link_flags.push_back("-l" + lib);
+    }
+    for (const auto& flag : framework_flags.link_flags)
+    {
+      inputs.extra_link_flags.push_back(flag);
+    }
+  }
+  for (const auto& flag : test.link_flags)
+  {
+    inputs.extra_link_flags.emplace_back(flag.flag);
+  }
+  return inputs;
+}
+
+// Resolve every TestFramework in the project: locate its synced package,
+// invoke the matching test-framework plugin's `build_and_get_flags` to
+// materialize the framework's runtime artifacts, and remember the
+// resulting flags keyed by `TestFramework::name`. Called once before any
+// tests are built. Returns an error mentioning the offending framework
+// when the plugin is missing, the package isn't synced, or the build
+// step fails.
+std::expected<ResolvedTestFrameworks, std::string> resolve_test_frameworks(
+    const conf::BuildConfiguration& config, const std::filesystem::path& cppup_dir,
+    ProcessRunner& runner, Logger& logger)
+{
+  ResolvedTestFrameworks resolved;
+  if (config.test_frameworks.empty())
+  {
+    return resolved;
+  }
+
+  auto& registry = cppup::plugin::global_test_framework_registry();
+  for (const auto& framework : config.test_frameworks)
+  {
+    const auto* plugin = registry.find(framework.plugin);
+    if (plugin == nullptr)
+    {
+      return std::unexpected("test framework '" + framework.name + "': plugin '" +
+                             framework.plugin + "' not registered");
+    }
+    const auto package_root = framework.package.has_value()
+                                  ? cppup_dir / "packages" / framework.package->name()
+                                  : cppup_dir / "packages" / framework.name;
+    if (!std::filesystem::exists(package_root) || std::filesystem::is_empty(package_root))
+    {
+      return std::unexpected(
+          "test framework '" + framework.name + "': package '" +
+          (framework.package.has_value() ? framework.package->name() : framework.name) +
+          "' not synced at " + package_root.string() + " (run `cppup sync`)");
+    }
+    const auto cache_dir = cppup_dir / "test_frameworks" / framework.name;
+    logger.info("building test framework: " + framework.name);
+    auto flags = plugin->build_and_get_flags(package_root, cache_dir, runner);
+    if (!flags)
+    {
+      return std::unexpected("test framework '" + framework.name + "': " + flags.error());
+    }
+    resolved.emplace(framework.name, std::move(*flags));
+  }
+  return resolved;
 }
 
 // Returns true if the executable was served from cache (no compile/link done).
@@ -698,18 +806,14 @@ std::size_t count_planned_steps(const BuildContext& ctx)
     const auto tests_dir = ctx.paths->build_dir / "tests";
     for (const auto& test : ctx.config->tests)
     {
-      std::vector<std::string> test_link_flag_strings;
-      test_link_flag_strings.reserve(test.link_flags.size());
-      for (const auto& link_flag : test.link_flags)
-      {
-        test_link_flag_strings.emplace_back(link_flag.flag);
-      }
+      const auto inputs = make_test_executable_inputs(test, ctx);
       total += exec_contribution({
           .kind                 = "test",
           .name                 = test.name,
           .sources              = test.sources,
           .linked_library_names = test.libraries,
-          .extra_link_flags     = test_link_flag_strings,
+          .extra_link_flags     = inputs.extra_link_flags,
+          .extra_include_paths  = inputs.extra_include_paths,
           .output_dir           = tests_dir,
       });
     }
@@ -721,6 +825,12 @@ std::size_t count_planned_steps(const BuildContext& ctx)
 // the cppup binary at compile time. Idempotent: skip the write when on-disk
 // contents already match, so `cppup build` doesn't churn the file's mtime
 // on every invocation.
+//
+// When the on-disk header content does change we also wipe
+// `.cppup/build/config/` because the configuration-compiler's freshness
+// check only tracks build.cpp's mtime, not the header it includes — a
+// stale DSO compiled against an older layout would otherwise corrupt
+// the in-process BuildConfiguration read on the next load.
 void materialize_configuration_header(const std::filesystem::path& cppup_dir)
 {
   const auto header_dir  = cppup_dir / "include" / "cppup";
@@ -739,6 +849,12 @@ void materialize_configuration_header(const std::filesystem::path& cppup_dir)
   }
   std::ofstream out(header_path, std::ios::binary | std::ios::trunc);
   out.write(kConfigurationHeader.data(), static_cast<std::streamsize>(kConfigurationHeader.size()));
+
+  // Header changed: invalidate the configuration-DSO cache so subprojects
+  // recompile against the new struct layout.
+  const auto      config_cache = cppup_dir / "build" / "config";
+  std::error_code error_code;
+  std::filesystem::remove_all(config_cache, error_code);
 }
 
 conf::BuildConfiguration load_build_configuration(const std::filesystem::path& project_root,
@@ -809,19 +925,15 @@ std::size_t build_tests_parallel(const BuildContext& ctx)
   run_in_parallel(ctx.config->tests, ctx.options.jobs,
                   [&](const conf::Test& test)
                   {
-                    std::vector<std::string> test_link_flag_strings;
-                    test_link_flag_strings.reserve(test.link_flags.size());
-                    for (const auto& flag : test.link_flags)
-                    {
-                      test_link_flag_strings.emplace_back(flag.flag);
-                    }
+                    const auto inputs = make_test_executable_inputs(test, ctx);
                     const bool cached = build_executable(
                         {
                             .kind                 = "test",
                             .name                 = test.name,
                             .sources              = test.sources,
                             .linked_library_names = test.libraries,
-                            .extra_link_flags     = test_link_flag_strings,
+                            .extra_link_flags     = inputs.extra_link_flags,
+                            .extra_include_paths  = inputs.extra_include_paths,
                             .output_dir           = tests_dir,
                         },
                         ctx);
@@ -955,15 +1067,32 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
                               *context.processRunner, logger);
     }
 
+    // Resolve test-framework packages → plugin → flags map BEFORE any
+    // test target is planned, so the planner sees the same compile/link
+    // inputs the real build will use. Only runs when tests are being
+    // built; plain `cppup build` skips both the resolution and the
+    // per-test injection.
+    ResolvedTestFrameworks resolved_frameworks;
+    if (conf::enabled(options.with_tests))
+    {
+      auto resolved = resolve_test_frameworks(config, cppup_dir, *context.processRunner, logger);
+      if (!resolved)
+      {
+        return std::unexpected(resolved.error());
+      }
+      resolved_frameworks = std::move(*resolved);
+    }
+
     ProgressReporter   progress;
     const BuildContext ctx{
-        .config         = &config,
-        .paths          = &paths,
-        .cache          = cache.get(),
-        .options        = options,
-        .process_runner = context.processRunner.get(),
-        .logger         = &logger,
-        .progress       = &progress,
+        .config               = &config,
+        .paths                = &paths,
+        .cache                = cache.get(),
+        .options              = options,
+        .process_runner       = context.processRunner.get(),
+        .logger               = &logger,
+        .progress             = &progress,
+        .test_framework_flags = &resolved_frameworks,
     };
     progress.set_total(count_planned_steps(ctx));
 
