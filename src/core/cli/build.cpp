@@ -12,7 +12,7 @@ extern "C" BuildConfiguration configure()
                   "commands/format.cpp", "commands/tidy.cpp", "commands/source_selection.cpp",
                   "commands/package.cpp", "commands/lockfile.cpp", "commands/module.cpp",
                   "commands/toolchain.cpp", "commands/plugin.cpp", "commands/update.cpp",
-                  "commands/selection_resolver.cpp"},
+                  "commands/registry.cpp", "commands/selection_resolver.cpp"},
       .type    = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",

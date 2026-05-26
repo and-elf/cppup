@@ -3,11 +3,41 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <random>
+#include <string>
+#include <string_view>
 #include <thread>
 
 #include "../compiler.hpp"
 
+namespace fs = std::filesystem;
 using namespace cppup::configuration;
+
+namespace
+{
+
+// Per-test scratch directory under temp_directory_path(). Older versions of
+// these tests created `.cppup/build/config` under CWD and then `remove_all(".cppup")`
+// at teardown, which wiped the real `.cppup/cache/build_cache.db` whenever the
+// suite was run via `cppup test` from the project root. Keep all FS writes inside
+// the returned directory.
+fs::path make_tmp_root(std::string_view tag)
+{
+  std::random_device rd;
+  auto               path = fs::temp_directory_path() /
+              (std::string{"cppup_test_compiler_"} + std::string{tag} + "_" + std::to_string(rd()));
+  fs::create_directories(path);
+  return path;
+}
+
+CompilerOptions options_with_output(const fs::path& output_dir)
+{
+  CompilerOptions opts;
+  opts.output_directory = output_dir.string();
+  return opts;
+}
+
+}  // namespace
 
 TEST(CompilerOptions, Defaults)
 {
@@ -43,15 +73,16 @@ TEST(ConfigurationCompiler, SharedLibraryPathDiffersByInput)
 
 TEST(ConfigurationCompiler, NeedsRecompilationDetectsStaleness)
 {
-  ConfigurationCompiler compiler;
+  const auto tmp        = make_tmp_root("needs_recompilation");
+  const auto output_dir = tmp / "build_config";
+  fs::create_directories(output_dir);
 
-  std::filesystem::create_directories("test_temp");
-  std::filesystem::create_directories(".cppup/build/config");
+  ConfigurationCompiler compiler(options_with_output(output_dir));
 
-  std::filesystem::path const build_cpp = "test_temp/build.cpp";
+  const fs::path build_cpp = tmp / "build.cpp";
   std::ofstream(build_cpp) << "// build file";
 
-  auto shared_lib_path = compiler.get_shared_library_path(build_cpp);
+  const auto shared_lib_path = compiler.get_shared_library_path(build_cpp);
 
   EXPECT_TRUE(compiler.needs_recompilation(build_cpp, shared_lib_path));
 
@@ -62,33 +93,33 @@ TEST(ConfigurationCompiler, NeedsRecompilationDetectsStaleness)
   std::ofstream(build_cpp, std::ios::app) << "// touched";
   EXPECT_TRUE(compiler.needs_recompilation(build_cpp, shared_lib_path));
 
-  std::filesystem::remove_all("test_temp");
-  std::filesystem::remove_all(".cppup");
+  fs::remove_all(tmp);
 }
 
 TEST(ConfigurationCompiler, CleanRemovesArtifacts)
 {
-  ConfigurationCompiler compiler;
-  std::filesystem::create_directories("test_temp");
-  std::filesystem::create_directories(".cppup/build/config");
+  const auto tmp        = make_tmp_root("clean_removes_artifacts");
+  const auto output_dir = tmp / "build_config";
+  fs::create_directories(output_dir);
 
-  std::filesystem::path build_cpp = "test_temp/build.cpp";
+  ConfigurationCompiler compiler(options_with_output(output_dir));
+
+  const fs::path build_cpp = tmp / "build.cpp";
   std::ofstream(build_cpp) << "// build file";
-  auto shared_lib_path = compiler.get_shared_library_path(build_cpp);
+  const auto shared_lib_path = compiler.get_shared_library_path(build_cpp);
   std::ofstream(shared_lib_path) << "fake content";
 
-  ASSERT_TRUE(std::filesystem::exists(shared_lib_path));
+  ASSERT_TRUE(fs::exists(shared_lib_path));
   compiler.clean(build_cpp);
-  EXPECT_FALSE(std::filesystem::exists(shared_lib_path));
+  EXPECT_FALSE(fs::exists(shared_lib_path));
 
   std::ofstream(shared_lib_path) << "fake content";
-  ASSERT_TRUE(std::filesystem::exists(shared_lib_path));
+  ASSERT_TRUE(fs::exists(shared_lib_path));
 
   compiler.clean();
-  EXPECT_FALSE(std::filesystem::exists(".cppup/build/config"));
+  EXPECT_FALSE(fs::exists(output_dir));
 
-  std::filesystem::remove_all("test_temp");
-  std::filesystem::remove_all(".cppup");
+  fs::remove_all(tmp);
 }
 
 TEST(CompilationResult, DefaultIsFailure)

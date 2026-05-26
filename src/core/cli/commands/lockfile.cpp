@@ -374,6 +374,10 @@ std::string serialize(const std::vector<Entry>& entries, const Selection& select
   {
     output << "selected_profile = " << quote(*selection.profile) << '\n';
   }
+  if (selection.registry)
+  {
+    output << "selected_registry = " << quote(*selection.registry) << '\n';
+  }
   for (const auto& entry : sorted)
   {
     output << '\n';
@@ -421,6 +425,13 @@ Selection read_selection(std::string_view content)
       if (auto value = unquote(split->value))
       {
         out.profile = std::move(*value);
+      }
+    }
+    else if (split->key == "selected_registry")
+    {
+      if (auto value = unquote(split->value))
+      {
+        out.registry = std::move(*value);
       }
     }
   }
