@@ -9,6 +9,7 @@
 
 #include "command_context.hpp"
 #include "commands.hpp"
+#include "install_paths.hpp"
 #include "lockfile.hpp"
 
 namespace cppup::cli
@@ -43,16 +44,39 @@ std::expected<int, std::string> executeToolchainList(const CommandContext& conte
       std::cout << std::endl;
     }
 
-    // Check for custom toolchains
-    std::filesystem::path const toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
-    if (std::filesystem::exists(toolchains_dir))
+    // Custom toolchains live under `.cppup/toolchains/` — both project-scoped
+    // and (when present) user-scoped. Each entry is tagged with its scope so
+    // collisions are visible.
+    struct ScopedDir
     {
-      std::cout << "\nCustom toolchains:" << std::endl;
-      for (const auto& entry : std::filesystem::directory_iterator(toolchains_dir))
+      std::filesystem::path dir;
+      const char*           scope_tag;
+    };
+    std::vector<ScopedDir> dirs;
+    dirs.push_back({project_data_dir(context.projectRoot) / "toolchains", "project"});
+    if (auto user_root = user_data_dir())
+    {
+      dirs.push_back({*user_root / "toolchains", "user"});
+    }
+
+    bool printed_header = false;
+    for (const auto& [dir, scope_tag] : dirs)
+    {
+      if (!std::filesystem::exists(dir))
+      {
+        continue;
+      }
+      for (const auto& entry : std::filesystem::directory_iterator(dir))
       {
         if (entry.is_directory())
         {
-          std::cout << "  " << entry.path().filename().string() << std::endl;
+          if (!printed_header)
+          {
+            std::cout << "\nCustom toolchains:" << std::endl;
+            printed_header = true;
+          }
+          std::cout << "  " << entry.path().filename().string() << " (" << scope_tag << ")"
+                    << std::endl;
         }
       }
     }
@@ -70,13 +94,18 @@ std::expected<int, std::string> executeToolchainAdd(const ToolchainAddOptions& o
 {
   try
   {
-    context.logger->info("Adding toolchain: " + options.name);
+    const auto install_root = resolve_install_root(options.scope, context.projectRoot);
+    if (!install_root)
+    {
+      return std::unexpected("Cannot resolve user data directory: set HOME or XDG_DATA_HOME");
+    }
 
-    // Create toolchains directory
-    std::filesystem::path const toolchains_dir = context.projectRoot / ".cppup" / "toolchains";
+    context.logger->info(std::string{"Adding toolchain ("} +
+                         (is_user(options.scope) ? "user" : "project") + "): " + options.name);
+
+    std::filesystem::path const toolchains_dir = *install_root / "toolchains";
     std::filesystem::create_directories(toolchains_dir);
 
-    // Create toolchain directory
     std::filesystem::path const toolchain_dir = toolchains_dir / options.name;
     if (std::filesystem::exists(toolchain_dir))
     {
@@ -124,20 +153,26 @@ std::expected<int, std::string> executeToolchainRemove(const std::string&    too
   {
     context.logger->info("Removing toolchain: " + toolchain_name);
 
-    // Check if toolchain exists
-    std::filesystem::path const toolchain_dir =
-        context.projectRoot / ".cppup" / "toolchains" / toolchain_name;
-    if (!std::filesystem::exists(toolchain_dir))
+    // Search project then user; project wins on name collisions.
+    std::vector<std::filesystem::path> roots;
+    roots.push_back(project_data_dir(context.projectRoot));
+    if (auto user_root = user_data_dir())
     {
-      return std::unexpected("Toolchain not found: " + toolchain_name);
+      roots.push_back(std::move(*user_root));
     }
 
-    // Remove toolchain directory
-    std::filesystem::remove_all(toolchain_dir);
+    for (const auto& root : roots)
+    {
+      const auto toolchain_dir = root / "toolchains" / toolchain_name;
+      if (std::filesystem::exists(toolchain_dir))
+      {
+        std::filesystem::remove_all(toolchain_dir);
+        context.logger->info("Toolchain removed successfully");
+        return 0;
+      }
+    }
 
-    context.logger->info("Toolchain removed successfully");
-
-    return 0;
+    return std::unexpected("Toolchain not found: " + toolchain_name);
   }
   catch (const std::exception& e)
   {

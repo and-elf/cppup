@@ -26,7 +26,8 @@ extern "C" BuildConfiguration configure()
                      "commands/selection_resolver.cpp",
                      "commands/coverage_parser.cpp",
                      "commands/registry.cpp",
-                     "commands/selection_resolver.cpp"},
+                     "commands/selection_resolver.cpp",
+                     "commands/install_paths.cpp"},
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
       .libraries  = {"cppup_config", "cppup_build", "cppup_dependency", "cppup_logger_console",
@@ -49,6 +50,22 @@ extern "C" BuildConfiguration configure()
                                     Flag{"-lpthread"}, Flag{"-ldl"}};
 
   config.tests.push_back(Test{"test_lockfile", {"commands/test_lockfile.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(Test{"test_install_paths", {"commands/test_install_paths.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(Test{"test_package_user_scope", {"commands/test_package_user_scope.cpp"}});
+  config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
+  config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
+                                    Flag{"-lpthread"}, Flag{"-ldl"}};
+
+  config.tests.push_back(
+      Test{"test_toolchain_user_scope", {"commands/test_toolchain_user_scope.cpp"}});
   config.tests.back().libraries  = {"cppup_cli", "cppup_config", "cppup_build", "cppup_dependency"};
   config.tests.back().link_flags = {Flag{"-lsqlite3"}, Flag{"-lgtest"}, Flag{"-lgtest_main"},
                                     Flag{"-lpthread"}, Flag{"-ldl"}};
