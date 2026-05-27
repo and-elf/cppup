@@ -655,3 +655,94 @@ TEST(RegistrySet, OverwritesPreviousRegistryAndPreservesPackages)
   ASSERT_EQ(parsed->size(), 1U);
   EXPECT_EQ((*parsed)[0].name, "fmt");
 }
+
+// `find_unmaterialized_packages` powers the upfront check in `cppup build`
+// that replaced the old build->sync auto-call. The contract: empty result
+// means "nothing locked or everything materialized"; a non-empty list is
+// the deliberate failure surface so the user runs `cppup sync` explicitly.
+
+TEST(FindUnmaterialized, EmptyWhenNoLockfile)
+{
+  auto root = make_tmp_root("unmat_no_lock");
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_TRUE(result.has_value()) << result.error_or("");
+  EXPECT_TRUE(result->empty());
+
+  fs::remove_all(root);
+}
+
+TEST(FindUnmaterialized, ListsLockedPackageWithMissingDir)
+{
+  auto root = make_tmp_root("unmat_missing");
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_TRUE(result.has_value()) << result.error_or("");
+  ASSERT_EQ(result->size(), 1U);
+  EXPECT_EQ((*result)[0], "fmt");
+
+  fs::remove_all(root);
+}
+
+TEST(FindUnmaterialized, ListsLockedPackageWithEmptyDir)
+{
+  auto root = make_tmp_root("unmat_empty");
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+  fs::create_directories(root / ".cppup" / "packages" / "fmt");
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_TRUE(result.has_value()) << result.error_or("");
+  ASSERT_EQ(result->size(), 1U);
+  EXPECT_EQ((*result)[0], "fmt") << "an empty package dir must be reported as unmaterialized";
+
+  fs::remove_all(root);
+}
+
+TEST(FindUnmaterialized, EmptyWhenAllPackagesArePresent)
+{
+  auto root = make_tmp_root("unmat_present");
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+  const auto pkg_dir = root / ".cppup" / "packages" / "fmt";
+  fs::create_directories(pkg_dir);
+  std::ofstream(pkg_dir / "marker") << "x";
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_TRUE(result.has_value()) << result.error_or("");
+  EXPECT_TRUE(result->empty());
+
+  fs::remove_all(root);
+}
+
+TEST(FindUnmaterialized, ReportsOnlyTheMissingSubset)
+{
+  auto root = make_tmp_root("unmat_subset");
+  write_lockfile(root, {
+                           make_git_entry("fmt", "https://example.com/fmt.git"),
+                           make_git_entry("spdlog", "https://example.com/spdlog.git"),
+                           make_git_entry("zlib", "https://example.com/zlib.git"),
+                       });
+  // Materialize fmt but leave spdlog/zlib missing.
+  const auto fmt_dir = root / ".cppup" / "packages" / "fmt";
+  fs::create_directories(fmt_dir);
+  std::ofstream(fmt_dir / "marker") << "x";
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_TRUE(result.has_value()) << result.error_or("");
+  ASSERT_EQ(result->size(), 2U);
+  EXPECT_NE(std::find(result->begin(), result->end(), std::string{"spdlog"}), result->end());
+  EXPECT_NE(std::find(result->begin(), result->end(), std::string{"zlib"}), result->end());
+  EXPECT_EQ(std::find(result->begin(), result->end(), std::string{"fmt"}), result->end());
+
+  fs::remove_all(root);
+}
+
+TEST(FindUnmaterialized, PropagatesLockfileParseError)
+{
+  auto root = make_tmp_root("unmat_parse_err");
+  std::ofstream(root / "cppup.lock") << "this is not a valid lockfile\n";
+
+  const auto result = cppup::cli::find_unmaterialized_packages(root);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_NE(result.error().find("cppup.lock"), std::string::npos);
+}

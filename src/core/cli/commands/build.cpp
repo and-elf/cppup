@@ -952,17 +952,26 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
       return std::unexpected("No build.cpp found in: " + context.projectRoot.string());
     }
 
-    // Auto-sync from `cppup.lock` when present so a fresh `git clone &&
-    // cppup build` reproduces the package state without an explicit
-    // `cppup sync`. Sync is idempotent; on a fully materialized project
-    // it's a no-op.
-    if (std::filesystem::exists(context.projectRoot / "cppup.lock"))
+    // `cppup build` never reaches over the network. If `cppup.lock` lists
+    // packages that aren't materialized under `.cppup/packages/`, fail fast
+    // with the names so the user runs `cppup sync` deliberately — package
+    // sizes range from header-only libs to multi-GB SDKs, and a silent
+    // download on every build is hostile UX once toolchains-as-packages
+    // land. A missing lockfile is treated as "nothing locked" and skipped.
+    auto missing = find_unmaterialized_packages(context.projectRoot);
+    if (!missing)
     {
-      auto sync_result = executePackageSync(context);
-      if (!sync_result)
+      return std::unexpected(missing.error());
+    }
+    if (!missing->empty())
+    {
+      std::string message = "Missing packages (not materialized in .cppup/packages/):";
+      for (const auto& name : *missing)
       {
-        return std::unexpected("cppup.lock present but sync failed: " + sync_result.error());
+        message += "\n  - " + name;
       }
+      message += "\n\nRun `cppup sync` to install them.";
+      return std::unexpected(message);
     }
 
     const auto cppup_dir = context.projectRoot / ".cppup";

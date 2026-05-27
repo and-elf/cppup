@@ -209,6 +209,16 @@ struct PackageAddOptions
 [[nodiscard]] std::expected<int, std::string> executePackageSync(
     const CommandContext& context) noexcept;
 
+// Walk the project's `cppup.lock` and return the names of any entries
+// whose `.cppup/packages/<name>/` directory does not exist or is empty.
+// A missing lockfile is treated as "nothing was locked" → empty list,
+// since there are no expectations to violate. Returns an error string
+// only when the lockfile exists but cannot be parsed. Used by
+// `cppup build` to fail fast with an actionable message instead of
+// silently auto-syncing on every build.
+[[nodiscard]] std::expected<std::vector<std::string>, std::string> find_unmaterialized_packages(
+    const std::filesystem::path& project_root);
+
 // Toolchain commands
 [[nodiscard]] std::expected<int, std::string> executeToolchainList(
     const CommandContext& context) noexcept;

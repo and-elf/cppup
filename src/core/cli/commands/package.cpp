@@ -689,4 +689,37 @@ std::expected<int, std::string> executePackageSync(const CommandContext& context
   }
 }
 
+std::expected<std::vector<std::string>, std::string> find_unmaterialized_packages(
+    const std::filesystem::path& project_root)
+{
+  const auto path = lockfile_path(project_root);
+  if (!std::filesystem::exists(path))
+  {
+    return std::vector<std::string>{};
+  }
+  const std::ifstream ifs(path, std::ios::binary);
+  std::stringstream   buf;
+  buf << ifs.rdbuf();
+  auto parsed = lockfile::parse(buf.str());
+  if (!parsed)
+  {
+    return std::unexpected("Failed to parse cppup.lock: " + parsed.error());
+  }
+  const auto packages_dir = project_data_dir(project_root) / "packages";
+
+  std::vector<std::string> missing;
+  for (const auto& entry : *parsed)
+  {
+    const auto      install_path = packages_dir / entry.name;
+    std::error_code error_code;
+    const bool      dir_present = std::filesystem::exists(install_path, error_code) &&
+                             !std::filesystem::is_empty(install_path, error_code);
+    if (!dir_present)
+    {
+      missing.push_back(entry.name);
+    }
+  }
+  return missing;
+}
+
 }  // namespace cppup::cli
