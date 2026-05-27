@@ -8,6 +8,7 @@
 #include "../command_context.hpp"
 #include "../commands.hpp"
 #include "init_templates_data.hpp"
+#include "toolchain_probe.hpp"
 
 namespace cppup::cli
 {
@@ -133,6 +134,27 @@ std::expected<int, std::string> executeInit(const std::string&                pr
 
     context.logger->info("Project created at: " + project_dir.string() + " (" +
                          std::to_string(emitted) + " files)");
+
+    // Advisory-only toolchain probe: we never mutate state based on the
+    // result. Tells the user up-front whether `cppup build` will work as-is
+    // or whether they need to install a compiler first. Once toolchains can
+    // be installed via `cppup package add`, the missing-toolchain hint will
+    // point at that command instead of system package managers.
+    const auto hits = probe_toolchains(path_search_dirs(), default_compiler_basenames());
+    if (hits.empty())
+    {
+      context.logger->warning(std::string{missing_toolchain_hint()});
+    }
+    else
+    {
+      std::string detected = "Detected C++ toolchain(s):";
+      for (const auto& hit : hits)
+      {
+        detected += " " + hit.name + " (" + hit.path.string() + ")";
+      }
+      context.logger->info(detected);
+    }
+
     context.logger->info("Next steps:");
     context.logger->info("  cppup build");
     context.logger->info("  cppup test");
