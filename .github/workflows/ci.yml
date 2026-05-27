@@ -83,3 +83,82 @@ jobs:
           fi
       - name: Run tests with coverage
         run: ./build/cppup test --coverage
+
+  windows-bootstrap:
+    # Smoke test for the Windows bootstrap path. EXPECTED TO FAIL right now:
+    # the cppup source still uses POSIX APIs (fork/pipe/waitpid in
+    # SystemProcessRunner.cpp, dlopen/dlsym in the plugin + configuration
+    # loaders, isatty in cli_application.cpp, chmod in update.cpp) that have
+    # no MinGW equivalents. Tracked as the next chunk of Windows-port work.
+    # Once those are shimmed behind #ifdef _WIN32, drop `continue-on-error`
+    # and this job becomes a hard gate.
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up MSYS2 / MinGW64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-sqlite3
+            mingw-w64-x86_64-openssl
+
+      - name: Show compiler version
+        run: g++ --version
+
+      - name: Bootstrap slim cppup (via shared manifest)
+        run: ./bootstrap.sh
+
+      - name: Smoke-test slim binary
+        run: ./bootstrap_build/cppup_bootstrap.exe --help
+
+  windows-bat:
+    # Same goal but exercises bootstrap.bat from native cmd.exe — proves the
+    # batch script parses scripts/bootstrap_sources.txt and drives MinGW
+    # correctly. Also expected to fail at compile until the POSIX shims land.
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up MSYS2 / MinGW64 (provides g++, ar, bash on PATH)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          path-type: inherit
+          install: >-
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-sqlite3
+            mingw-w64-x86_64-openssl
+
+      - name: Verify toolchain visible from cmd.exe
+        shell: cmd
+        run: |
+          where g++
+          where ar
+          where bash
+
+      - name: Run bootstrap.bat
+        shell: cmd
+        run: bootstrap.bat
+
+      - name: Smoke-test slim binary
+        shell: cmd
+        run: bootstrap_build\cppup_bootstrap.exe --help

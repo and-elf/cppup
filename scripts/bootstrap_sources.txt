@@ -1,0 +1,57 @@
+# Source manifest for the slim cppup_bootstrap binary.
+#
+# Consumed by bootstrap.sh AND bootstrap.bat — keeping the source list here
+# means the two scripts can't drift apart. Lines starting with '#' are
+# comments; blank lines are ignored. Section headers are [bracketed]; every
+# non-comment line until the next section is a path (relative to repo root).
+#
+# Two sections:
+#   [config] -> compiled into libcppup_config (the configuration API)
+#   [main]   -> compiled and linked against libcppup_config to produce
+#               the slim cppup_bootstrap binary.
+#
+# Paths use forward slashes. Both bash and Windows batch handle them on
+# their respective platforms (cmd.exe accepts '/' in g++ args, and MinGW
+# tools accept them natively).
+
+[config]
+src/core/configuration/compiler.cpp
+src/core/configuration/compile_commands.cpp
+src/core/configuration/loader.cpp
+src/core/configuration/validation.cpp
+src/core/configuration/package_resolver.cpp
+src/core/configuration/toolchain_flags.cpp
+src/core/configuration/profile_processor.cpp
+src/core/configuration/build_step_executor.cpp
+
+[main]
+src/main.cpp
+src/core/logger/console/console_logger.cpp
+src/core/logger/console/console_logger_plugin.cpp
+src/core/buildsystems/cppup/cppup_plugin.cpp
+src/core/buildsystems/cppup/cppup_package.cpp
+src/core/package/package_concept.cpp
+src/core/package/package_factory.cpp
+src/core/package/packages.cpp
+src/core/package/git/git_package.cpp
+src/core/package/http/http_package.cpp
+src/core/package/archive/archive_package.cpp
+src/core/package/directory/directory_package.cpp
+src/core/package/registry/registry_package.cpp
+src/core/plugin/static_registry.cpp
+src/core/plugin/vtable_support.cpp
+src/core/plugin/package_info_view.cpp
+src/core/plugin/host_service_adapters.cpp
+src/core/plugin/manifest.cpp
+src/core/plugin/descriptor_validation.cpp
+src/core/plugin/test_framework_plugin.cpp
+src/core/cli/cli_application.cpp
+src/core/cli/commands.cpp
+src/core/cli/commands/build.cpp
+src/core/cli/commands/update.cpp
+src/core/cli/commands/lockfile.cpp
+src/core/cli/commands/package.cpp
+src/core/cli/commands/install_paths.cpp
+src/core/cli/commands/selection_resolver.cpp
+src/core/dependency/database.cpp
+src/core/build/cache.cpp

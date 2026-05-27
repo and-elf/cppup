@@ -33,6 +33,12 @@ RUN dnf update -y && dnf install -y \
     gdb \
     lldb \
     valgrind \
+    gh \
+    mingw64-gcc-c++ \
+    mingw64-sqlite \
+    mingw64-openssl \
+    mingw64-winpthreads-static \
+    wine \
     && dnf clean all
 
 # Set working directory

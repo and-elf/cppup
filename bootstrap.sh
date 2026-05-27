@@ -31,6 +31,46 @@ log_info()  { echo "${GREEN}[INFO]${NC} $*"; }
 log_warn()  { echo "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo "${RED}[ERROR]${NC} $*"; }
 
+SOURCES_MANIFEST="scripts/bootstrap_sources.txt"
+
+# Read a section ([name]) from the source manifest into the named array.
+# Strips comments and blank lines. Errors if the section is missing.
+read_manifest_section() {
+    local section="$1"
+    local -n out_array="$2"
+    out_array=()
+
+    if [[ ! -f "$SOURCES_MANIFEST" ]]; then
+        log_error "source manifest not found: $SOURCES_MANIFEST"
+        exit 1
+    fi
+
+    local in_section=0
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [[ -z "$line" ]] && continue
+        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+            if [[ "${BASH_REMATCH[1]}" == "$section" ]]; then
+                in_section=1
+            else
+                in_section=0
+            fi
+            continue
+        fi
+        if (( in_section )); then
+            out_array+=("$line")
+        fi
+    done < "$SOURCES_MANIFEST"
+
+    if (( ${#out_array[@]} == 0 )); then
+        log_error "no entries in [$section] of $SOURCES_MANIFEST"
+        exit 1
+    fi
+}
+
 check_prerequisites() {
     log_info "Checking prerequisites..."
     command -v "$CXX" >/dev/null \
@@ -57,18 +97,9 @@ build_slim() {
         -Isrc
     )
 
-    # cppup_config: same set the previous bootstrap needed -- the config
-    # library is consumed by executeBuild's loader path.
-    local CONFIG_SOURCES=(
-        src/core/configuration/compiler.cpp
-        src/core/configuration/compile_commands.cpp
-        src/core/configuration/loader.cpp
-        src/core/configuration/validation.cpp
-        src/core/configuration/package_resolver.cpp
-        src/core/configuration/toolchain_flags.cpp
-        src/core/configuration/profile_processor.cpp
-        src/core/configuration/build_step_executor.cpp
-    )
+    # Source lists live in scripts/bootstrap_sources.txt — shared with bootstrap.bat.
+    local CONFIG_SOURCES=()
+    read_manifest_section config CONFIG_SOURCES
 
     local CONFIG_OBJECTS=()
     for src in "${CONFIG_SOURCES[@]}"; do
@@ -86,38 +117,8 @@ build_slim() {
     # init/test/format/tidy/package/toolchain/plugin/module/cc are
     # intentionally absent -- the slim CLIApplication::run() guards their
     # registration + dispatch with #ifdef CPPUP_SLIM.
-    local MAIN_SOURCES=(
-        src/main.cpp
-        src/core/logger/console/console_logger.cpp
-        src/core/logger/console/console_logger_plugin.cpp
-        src/core/buildsystems/cppup/cppup_plugin.cpp
-        src/core/buildsystems/cppup/cppup_package.cpp
-        src/core/package/package_concept.cpp
-        src/core/package/package_factory.cpp
-        src/core/package/packages.cpp
-        src/core/package/git/git_package.cpp
-        src/core/package/http/http_package.cpp
-        src/core/package/archive/archive_package.cpp
-        src/core/package/directory/directory_package.cpp
-        src/core/package/registry/registry_package.cpp
-        src/core/plugin/static_registry.cpp
-        src/core/plugin/vtable_support.cpp
-        src/core/plugin/package_info_view.cpp
-        src/core/plugin/host_service_adapters.cpp
-        src/core/plugin/manifest.cpp
-        src/core/plugin/descriptor_validation.cpp
-        src/core/plugin/test_framework_plugin.cpp
-        src/core/cli/cli_application.cpp
-        src/core/cli/commands.cpp
-        src/core/cli/commands/build.cpp
-        src/core/cli/commands/update.cpp
-        src/core/cli/commands/lockfile.cpp
-        src/core/cli/commands/package.cpp
-        src/core/cli/commands/install_paths.cpp
-        src/core/cli/commands/selection_resolver.cpp
-        src/core/dependency/database.cpp
-        src/core/build/cache.cpp
-    )
+    local MAIN_SOURCES=()
+    read_manifest_section main MAIN_SOURCES
 
     local MAIN_OBJECTS=()
     for src in "${MAIN_SOURCES[@]}"; do
