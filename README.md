@@ -193,3 +193,7 @@ cppup compile-commands       # or run a full `cppup build` first
 - Configuration module docs: [src/core/configuration/README.md](src/core/configuration/README.md)
 - Package backends: [src/core/package/README.md](src/core/package/README.md), [src/core/dependency/README.md](src/core/dependency/README.md)
 - Specs: [.kiro/specs/cli-commands/](.kiro/specs/cli-commands/) and [.kiro/specs/configuration-api/](.kiro/specs/configuration-api/)
+
+## License
+
+MIT, with a non-binding Beerware addendum — see [LICENSE](LICENSE). If we meet some day and you think this is worth it, you can buy the author a beer.
