@@ -5,7 +5,7 @@ cppup is a cross-platform C++ project manager and build system inspired by Cargo
 It focuses on:
 - Build-system-agnostic package resolution (cppup-native, CMake, Make, header-only)
 - Project configuration written in real C++ (`build.cpp`), not a bespoke DSL
-- Reproducible builds via a project-root `cppup.lock` (auto-synced on `cppup build`)
+- Reproducible builds via a project-root `cppup.lock` (materialized by `cppup sync`)
 - A plugin ABI for build systems, package sources, and loggers — extensible without re-linking the host
 - Practical defaults for modern C++ (C++20/23/26, sanitizers, coverage) and a `compile_commands.json` exporter for clangd
 
@@ -22,7 +22,8 @@ cppup package add --name fmt --git https://github.com/fmtlib/fmt.git --branch 11
 cppup lock
 cppup sync
 
-# build and test (build auto-syncs from cppup.lock if it exists)
+# build and test (build never reaches over the network; run `cppup sync`
+# first if any locked package is unmaterialized)
 cppup build
 cppup test
 
@@ -30,7 +31,7 @@ cppup test
 cppup compile-commands
 ```
 
-A clean checkout of a project with a committed `cppup.lock` only needs `cppup build` — the auto-sync materializes packages on first run.
+A clean checkout of a project with a committed `cppup.lock` needs an explicit `cppup sync` once to materialize packages, then `cppup build` thereafter — `build` never fetches over the network and fails fast (listing the missing packages) if any locked entry is not yet materialized.
 
 ## Build and Bootstrap cppup
 

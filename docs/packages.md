@@ -46,20 +46,23 @@ answers one question and is owned by one source of truth.
 git clone <project>
 cd <project>
 cppup sync     # materializes .cppup/packages from cppup.lock
-cppup build    # auto-runs sync first if cppup.lock is present
+cppup build    # builds against the materialized packages; no network I/O
 ```
 
-That is the entire onboarding for a fresh checkout - mirrors
-`cargo build` / `uv sync` / `npm install`. The first `cppup sync` is
-optional; `cppup build` will sync on its own when `cppup.lock` exists.
+That is the entire onboarding for a fresh checkout - mirrors `cargo
+fetch && cargo build --offline` / `uv sync && uv run`. `cppup build`
+never reaches over the network: if any locked package is not
+materialized under `.cppup/packages/<name>/`, the build fails fast with
+the list of missing entries and asks you to run `cppup sync`.
 
 Day-to-day:
 
 1. **Edit `build.cpp`** to add or remove a package.
 2. **Run `cppup lock`** to regenerate `cppup.lock`.
-3. **Commit both** `build.cpp` and `cppup.lock`.
-4. **CI** runs `cppup build` against the committed `cppup.lock` - the
-   auto-sync proves the lockfile reproduces.
+3. **Run `cppup sync`** to materialize any new entries.
+4. **Commit both** `build.cpp` and `cppup.lock`.
+5. **CI** runs `cppup sync && cppup build` against the committed
+   lockfile — the explicit sync step proves the lockfile reproduces.
 
 `cppup package add` stays as the convenience path for ad-hoc local
 installs; it does not currently mutate `build.cpp` or `cppup.lock`. The
@@ -92,10 +95,10 @@ User scope follows the XDG Base Directory Specification: it uses
 falls back to `$HOME/.cppup/` otherwise. `--user` errors out when
 neither environment variable is available.
 
-The auto-sync from `cppup.lock` is project-scoped — packages declared
-in `build.cpp` always materialize into the project's `.cppup/`. User
-scope is for ad-hoc, cross-project installs (e.g., a custom toolchain
-you reuse from many repos) and is independent of the lockfile.
+Sync from `cppup.lock` is project-scoped — packages declared in
+`build.cpp` always materialize into the project's `.cppup/`. User scope
+is for ad-hoc, cross-project installs (e.g., a custom toolchain you
+reuse from many repos) and is independent of the lockfile.
 
 ## Declaring transitive dependencies
 
@@ -173,17 +176,23 @@ The placeholder behaviour exists so the lockfile schema and the
 package directory layout stabilize ahead of the actual fetch
 implementations. Tracked in the "Out of scope" section below.
 
-## `cppup build` auto-sync
+## `cppup build` materialization check
 
-When `cppup.lock` is present at the project root, `cppup build` runs the
-equivalent of `cppup sync` before configuring the build. This is the
-mechanism that makes `git clone && cppup build` work for a fresh
-checkout without an explicit sync step. Sync is idempotent, so the
-overhead on an already-materialized project is reading and parsing the
-lockfile and one stat per package.
+When `cppup.lock` is present at the project root, `cppup build` walks
+the `[[package]]` entries and asserts each one has a non-empty
+`.cppup/packages/<name>/` directory. If any are missing the build
+fails before doing any work, returning a single error that lists the
+missing entries and points at `cppup sync`. `cppup build` never
+reaches over the network — sync is the only command that does.
+
+Rationale: package sizes range from header-only libs to multi-GB SDKs
+(toolchains and Yocto SDKs are on the roadmap as packages), and a
+silent download on every `build` is hostile UX once that lands. The
+explicit `add → sync → build` separation matches cargo, uv, and pnpm
+conventions and keeps `build` deterministic-from-current-state.
 
 Projects without a `cppup.lock` (e.g. the cppup tree itself, or a
-project that hasn't opted in yet) see no behaviour change.
+project that hasn't opted in yet) skip the check entirely.
 
 ## Selection: toolchain and profile
 
@@ -329,9 +338,11 @@ dependencies = []
 
 A single `cppup build` invocation touches the lockfile in three places:
 
-1. **Auto-sync.** If `cppup.lock` exists, run the equivalent of
-   `cppup package sync` to materialize `.cppup/packages/` from the
-   `[[package]]` entries.
+1. **Materialization check.** If `cppup.lock` exists, walk the
+   `[[package]]` entries and assert each one has a non-empty
+   `.cppup/packages/<name>/` directory. Missing entries fail the build
+   fast with an actionable error pointing at `cppup sync`; `build`
+   itself never fetches.
 2. **Legacy migration.** Fold any `.cppup/toolchain.txt` into the
    lockfile's `selected_toolchain` and delete the legacy file.
 3. **Selection.** Read `selected_toolchain` / `selected_profile`,
@@ -340,11 +351,11 @@ A single `cppup build` invocation touches the lockfile in three places:
    right values, and finally apply the resolved toolchain + profile to
    the loaded `BuildConfiguration`.
 
-`compile_commands` follows the same selection path (minus the auto-sync
-and legacy migration) so the generated `compile_commands.json` reflects
-the active toolchain + profile.
+`compile_commands` follows the same selection path (minus the
+materialization check and legacy migration) so the generated
+`compile_commands.json` reflects the active toolchain + profile.
 
-A project with no `cppup.lock` skips all three steps — no auto-sync, no
+A project with no `cppup.lock` skips all three steps — no check, no
 migration, and selection falls back to `$CXX`/`$CC` and the
 configuration's own defaults.
 
@@ -354,7 +365,8 @@ The following are deliberately deferred. They are open follow-ups that
 build on this layer model:
 
 - Automatic regeneration of `cppup.lock` on every `cppup build` (today
-  `build` only auto-syncs; it does not re-lock).
+  `build` only checks the lockfile is materialized; it neither
+  re-locks nor syncs).
 - `cppup package add` mutating `build.cpp` or `cppup.lock`.
 - Populating `git_commit` and `checksum` — these fields exist in the
   schema but are written empty until a resolution step pins them.
