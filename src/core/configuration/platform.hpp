@@ -52,26 +52,43 @@ constexpr std::string_view target_arch = "unknown";
   return target_arch == "arm64";
 }
 
-// Library extension for the current platform
-[[nodiscard]] constexpr std::string_view library_extension(
-    LibraryType type = LibraryType::Shared) noexcept
+// True when `toolchain` names a Windows-targeting cross- or native
+// compiler: any mingw triple, any `*-windows-*` LLVM triple, MSVC `cl` /
+// `clang-cl`. Drives the executable/library extension helpers below so
+// `build.cpp` can describe targets without baking in the host's OS.
+[[nodiscard]] inline bool toolchain_targets_windows(std::string_view toolchain) noexcept
 {
-  if constexpr (is_windows())
+  return toolchain.contains("mingw") || toolchain.contains("windows") || toolchain == "cl" ||
+         toolchain == "cl.exe" || toolchain == "clang-cl" || toolchain == "clang-cl.exe";
+}
+
+[[nodiscard]] inline bool toolchain_targets_macos(std::string_view toolchain) noexcept
+{
+  return toolchain.contains("apple-darwin") || toolchain.contains("-darwin");
+}
+
+// Filename suffix the linker stamps onto executables for the given
+// toolchain. Empty for ELF/Mach-O hosts; ".exe" for any Windows target.
+// cppup appends this to planned `output_path`s so the build cache's
+// `exists()` probe matches what the linker actually wrote.
+[[nodiscard]] inline std::string_view executable_extension(std::string_view toolchain) noexcept
+{
+  return toolchain_targets_windows(toolchain) ? std::string_view{".exe"} : std::string_view{};
+}
+
+// Library extension for the active toolchain's target platform.
+[[nodiscard]] inline std::string_view library_extension(LibraryType      type,
+                                                        std::string_view toolchain) noexcept
+{
+  if (toolchain_targets_windows(toolchain))
   {
     return (type == LibraryType::Static) ? ".lib" : ".dll";
   }
-  else if constexpr (is_linux())
-  {
-    return (type == LibraryType::Static) ? ".a" : ".so";
-  }
-  else if constexpr (is_macos())
+  if (toolchain_targets_macos(toolchain))
   {
     return (type == LibraryType::Static) ? ".a" : ".dylib";
   }
-  else
-  {
-    return (type == LibraryType::Static) ? ".a" : ".so";  // Default fallback
-  }
+  return (type == LibraryType::Static) ? ".a" : ".so";
 }
 
 // Compile-time conditional configuration helpers

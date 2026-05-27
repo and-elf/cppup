@@ -124,6 +124,39 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
   }
 }
 
+TEST(Platform, ToolchainTargetsWindowsRecognizesKnownNames)
+{
+  EXPECT_TRUE(toolchain_targets_windows("x86_64-w64-mingw32-g++"));
+  EXPECT_TRUE(toolchain_targets_windows("i686-w64-mingw32-gcc"));
+  EXPECT_TRUE(toolchain_targets_windows("x86_64-pc-windows-msvc"));
+  EXPECT_TRUE(toolchain_targets_windows("cl"));
+  EXPECT_TRUE(toolchain_targets_windows("clang-cl.exe"));
+
+  EXPECT_FALSE(toolchain_targets_windows("g++"));
+  EXPECT_FALSE(toolchain_targets_windows("clang++"));
+  EXPECT_FALSE(toolchain_targets_windows("/usr/bin/g++-13"));
+  EXPECT_FALSE(toolchain_targets_windows(""));
+}
+
+TEST(Platform, ExecutableExtensionFollowsToolchainTarget)
+{
+  EXPECT_EQ(executable_extension("g++"), "");
+  EXPECT_EQ(executable_extension("clang++"), "");
+  EXPECT_EQ(executable_extension(""), "");
+  EXPECT_EQ(executable_extension("x86_64-w64-mingw32-g++"), ".exe");
+  EXPECT_EQ(executable_extension("cl"), ".exe");
+  EXPECT_EQ(executable_extension("aarch64-pc-windows-gnu-clang++"), ".exe");
+}
+
+TEST(Platform, LibraryExtensionFollowsToolchainTarget)
+{
+  EXPECT_EQ(library_extension(LibraryType::Static, "g++"), ".a");
+  EXPECT_EQ(library_extension(LibraryType::Shared, "g++"), ".so");
+  EXPECT_EQ(library_extension(LibraryType::Static, "x86_64-w64-mingw32-g++"), ".lib");
+  EXPECT_EQ(library_extension(LibraryType::Shared, "x86_64-w64-mingw32-g++"), ".dll");
+  EXPECT_EQ(library_extension(LibraryType::Shared, "aarch64-apple-darwin23-clang++"), ".dylib");
+}
+
 TEST(Platform, PlatformSpecificConfigurationApplied)
 {
   std::vector<std::string> compile_flags;
