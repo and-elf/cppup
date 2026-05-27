@@ -1,11 +1,19 @@
 # cppup Plugin API — Specification v1
 
-Status: **Draft** — tracks issue #26.
-Target: cppup 0.2.0.
+Status: **Partial implementation in tree.** The ABI in
+[include/cppup/plugin/abi.h](../include/cppup/plugin/abi.h), the manifest
+parser, descriptor validator, dynamic loader, and static-plugin registry
+are landed. `cppup plugin add` is still a scaffolding stub — the
+validation pipeline described in §6 has not been wired through. Built-in
+extensions (cppup-native build system, console logger, gtest test
+framework) register through the same plugin pipeline rather than ad-hoc
+factories.
 
-This document is the single source of truth for the plugin system. Tests
-and implementation derive from this spec; if the spec is wrong, fix the
-spec first.
+This document is the source of truth for the plugin system. The ABI
+header is the ultimate reference for byte-level layout; this document
+explains *why* the ABI looks the way it does and how the host uses it.
+If the spec and the code disagree, file an issue — both sides should be
+moved into alignment, not allowed to drift.
 
 ## 1. Goals & non-goals
 
@@ -24,7 +32,7 @@ spec first.
 
 ### 1.2 Non-goals (v1)
 - Out-of-process / sandboxed plugins. The architecture leaves room for
-  this (see §11) but v1 loads plugins in-process under full trust.
+  this (see §13) but v1 loads plugins in-process under full trust.
 - Cross-version binary compatibility across major cppup releases. A
   plugin stamped for `0.2.x` is not expected to load under `0.3.0`.
 - A package format / signing infrastructure. The manifest carries hashes
@@ -34,20 +42,23 @@ spec first.
 
 ## 2. Plugin kinds
 
-Three kinds. Each maps to an existing cppup concept (the plugin layer
-does not invent new abstractions; it lets external code satisfy
-existing ones via a stable C ABI).
+Three runtime kinds today, two reserved for post-v1. Each runtime kind
+maps to an existing cppup concept — the plugin layer does not invent
+new abstractions; it lets external code satisfy existing ones via a
+stable C ABI.
 
-| Kind enum                    | Existing concept                                 | Lives in                                                       |
-| ---                          | ---                                              | ---                                                            |
-| `CPPUP_KIND_BUILD_SYSTEM`    | `cppup::buildsystems::*Package`                  | [src/core/buildsystems/](../src/core/buildsystems/)            |
-| `CPPUP_KIND_PACKAGE_SOURCE`  | `cppup::package::PackageType`                    | [src/core/package/](../src/core/package/)                      |
-| `CPPUP_KIND_LOGGER`          | `cppup::logger::LoggerType`                      | [src/core/logger/](../src/core/logger/)                        |
+| Kind enum                    | Existing concept                                 | Lives in                                                       | Status |
+| ---                          | ---                                              | ---                                                            | --- |
+| `CPPUP_KIND_BUILD_SYSTEM = 1`    | `cppup::buildsystems::*Package`              | [src/core/buildsystems/](../src/core/buildsystems/)            | v1 vtable frozen |
+| `CPPUP_KIND_PACKAGE_SOURCE = 2`  | `cppup::package::PackageType`                | [src/core/package/](../src/core/package/)                      | v1 vtable frozen |
+| `CPPUP_KIND_LOGGER = 3`          | `cppup::logger::LoggerType`                  | [src/core/logger/](../src/core/logger/)                        | v1 vtable frozen |
+| `CPPUP_KIND_TEMPLATE = 4`        | `cppup init --type <name>` scaffolders       | n/a                                                            | reserved, no vtable yet |
+| `CPPUP_KIND_TEST_SYSTEM = 5`     | `cppup::TestFrameworkPlugin`                 | [src/core/test_frameworks/](../src/core/test_frameworks/)      | reserved; today exposed only via the in-process C++ registry (§11) |
 
 A "config-hook" kind is **not** part of the plugin ABI. A plugin that
 needs to augment a user's `BuildConfiguration` ships a header (e.g.
 `include/foo_plugin.hpp`) with regular C++ functions; the user
-`#include`s it and calls it explicitly from `cppup.cpp`. Plugins never
+`#include`s it and calls it explicitly from `build.cpp`. Plugins never
 mutate configuration implicitly.
 
 ## 3. ABI
@@ -112,93 +123,122 @@ A descriptor's `vtable_version` must equal the version of the struct
 its `vtable` field points at. The host rejects any descriptor whose
 `(kind, vtable_version)` pair it does not recognise.
 
-### 3.4 Vtables (initial sketch)
+### 3.4 Vtables
 
-Status types and shared structs:
+[`include/cppup/plugin/abi.h`](../include/cppup/plugin/abi.h) is the
+authoritative reference. The summary below highlights the design points
+that matter when writing or porting a plugin; the header has the field
+list and per-field documentation.
 
-```c
-typedef enum {
-  CPPUP_OK = 0,
-  CPPUP_ERR_GENERIC = 1,
-  CPPUP_ERR_NOT_SUPPORTED = 2,
-  CPPUP_ERR_IO = 3,
-  // ... grow as needed; never renumber
-} cppup_status;
+**Status codes** (`cppup_status`): `CPPUP_OK = 0`, `CPPUP_ERR_GENERIC = 1`,
+`CPPUP_ERR_NOT_SUPPORTED = 2`, `CPPUP_ERR_IO = 3`, `CPPUP_ERR_INVALID_ARG = 4`,
+`CPPUP_ERR_BUFFER_TOO_SMALL = 5`. Append-only — never renumber.
 
-// Error detail accessor: when a vtable function returns non-zero,
-// the host calls this to retrieve the last error message for the
-// instance. The returned pointer is owned by the plugin and must
-// remain valid until the next call on the same instance.
-typedef const char* (*cppup_last_error_fn)(void* instance);
-```
+**Source types** (`cppup_source_type`): `DIRECTORY = 0`, `GIT = 1`,
+`TAR = 2`, `ZIP = 3`, `HTTP = 4`, `REGISTRY = 5`. Append-only. Mirrors
+`cppup::configuration::SourceType`.
 
-Build system:
+**Package info struct** (`cppup_package_info_v1`): name (required, never
+NULL) plus optional `version`, `source_directory`, `url`, `source_type`,
+`git_branch`, `git_commit`, `subdirectory`, and a NULL-terminated
+`build_args` array. **Optional fields are `NULL` when absent, not empty
+strings.** The struct lifetime is the call; plugins copy fields they
+need to retain.
 
-```c
-typedef struct {
-  const char*          name;           // "ninja", "meson", ...
-  cppup_last_error_fn  last_error;
+**Logger vtable v1** — pure sink:
+- `create(const char* config_toml)` → opaque instance
+- `destroy(instance)`
+- `log(instance, level, message, len)` — `message` is UTF-8 of length
+  `len`, **not** NUL-terminated. Levels match
+  `cppup::logger::LogLevel` (`Debug=0`, `Info=1`, `Warning=2`,
+  `Error=3`).
+- `last_error(instance)` — owned by the plugin, valid until the next
+  call on the same instance.
 
-  bool (*detects)(const char* source_path);
-  void* (*create)(const cppup_package_info* info);
-  void  (*destroy)(void* instance);
-  cppup_status (*build)(void* instance, const char* source_path);
+**Package source vtable v1** — handles exactly one
+`accepted_type`. The host dispatches by `cppup_source_type`:
+- `create(info)` / `destroy(instance)`
+- `resolve_source(instance, out, cap, out_needed)` — **two-call
+  pattern**: pass `cap=0` (and `out=NULL`) first to read `*out_needed`,
+  then pass a sized buffer. Returns `CPPUP_ERR_BUFFER_TOO_SMALL` when
+  `out_needed` is set.
+- `set_command_executor(instance, cppup_cmd_exec_v1*)` and
+  `set_cache(instance, cppup_cache_v1*)` — see §3.5. Called at most
+  once per instance and before any `resolve_source`. NULL detaches.
+- `last_error(instance)`.
 
-  // Flag accessors: caller-allocated buffer; if too small, function
-  // returns the required size and writes nothing.
-  size_t (*get_compile_flags)(void* instance, char* out, size_t cap);
-  size_t (*get_link_flags)(void* instance, char* out, size_t cap);
-  size_t (*get_include_paths)(void* instance, char* out, size_t cap);
-  size_t (*get_library_paths)(void* instance, char* out, size_t cap);
-} cppup_build_system_vtable_v1;
-```
+**Build-system vtable v1** — uses the **visitor pattern** for flag
+accessors instead of caller-allocated buffers. The plugin calls
+`visit(user, str, len)` once per flag / path, in declaration order:
+- `create(info)` / `destroy(instance)`
+- `build(instance, source_path)` → `cppup_status`
+- `get_compile_flags(instance, visit, user)` — and likewise
+  `get_link_flags`, `get_include_paths`, `get_library_paths`. Strings
+  passed to `visit` are valid only for the duration of the call.
+- `set_command_executor(instance, cppup_cmd_exec_v1*)` — build systems
+  do not get a cache pointer; source resolution is already a
+  package-source concern.
+- `last_error(instance)`.
 
-Package source:
+The build-system flag accessors deliberately differ from the
+package-source resolver: flags are inherently a sequence, so the
+visitor avoids the two-call sizing dance. Single-shot path results
+(`resolve_source`) use two-call sizing because the natural caller
+wants a single `std::filesystem::path` and copying via a visitor would
+just complicate the host adapter.
 
-```c
-typedef struct {
-  cppup_source_type    accepted_type;   // matches cppup::configuration::SourceType
-  cppup_last_error_fn  last_error;
+### 3.5 Host services
 
-  void* (*create)(const cppup_package_info* info);
-  void  (*destroy)(void* instance);
-  cppup_status (*resolve_source)(void* instance, char* out_path, size_t cap);
-  void  (*set_command_executor)(void* instance, cppup_cmd_exec_v1* exec);
-  void  (*set_cache)(void* instance, cppup_cache_v1* cache);
-} cppup_package_source_vtable_v1;
-```
+The host injects services into plugin instances via the `set_*`
+functions on each vtable. These structs are owned by the host and live
+strictly longer than any plugin instance that holds them.
 
-Logger:
+**`cppup_cmd_exec_v1`** — process execution for package sources and
+build systems (clones, downloads, build invocations):
 
-```c
-typedef struct {
-  const char*          name;            // "json", "syslog", ...
-  cppup_last_error_fn  last_error;
+- `execute(state, command, working_dir)` → status
+- `execute_with_output(state, command, working_dir, visit, user)` —
+  delivers captured stdout to `visit` in chunks (NUL-terminated UTF-8
+  of length `len`). If `visit` is NULL, output is discarded. Two-call
+  sizing is intentionally **not** used here: process invocation is
+  not idempotent.
+- `last_error(state)` — host-owned, valid until the next call.
 
-  void* (*create)(const char* config_toml);
-  void  (*destroy)(void* instance);
-  void  (*log)(void* instance, uint8_t level, const char* message, size_t len);
-} cppup_logger_vtable_v1;
-```
+**`cppup_cache_v1`** — package cache service for package-source
+plugins:
 
-The full ABI header is exhaustive in [include/cppup/plugin/abi.h](#)
-(to be created by the implementation step). The sketches above are
-normative for the structure but not for every field — `cppup_cmd_exec_v1`,
-`cppup_cache_v1`, and `cppup_package_info` follow the same pattern.
+- `get_cache_directory(state, out, cap, out_needed)` — root of the
+  cache (two-call sizing).
+- `get_package_cache_path(state, info, out, cap, out_needed)` — the
+  directory this specific package should materialize into.
+- `is_cached(state, info)` → `0/1`
+- `clear_package_cache(state, info)` and `clear_all_cache(state)`.
 
-### 3.5 String and buffer rules
+A plugin that calls into these services through the host adapter (see
+`src/core/plugin/host_service_adapters.{hpp,cpp}`) gets a uniform view
+regardless of whether it ended up in-process via the static registry
+or via `dlopen`.
+
+### 3.6 String and buffer rules
 
 - All strings crossing the ABI are NUL-terminated UTF-8, except where
-  explicitly paired with a length (`log`).
-- Out-buffers follow the **two-call pattern**: pass `out=NULL, cap=0`
-  to query required size; pass a sufficient buffer to receive data.
-  If `cap` is non-zero but too small, the function writes nothing and
-  returns the required size.
+  explicitly paired with a length (`log`, the `visit` callback strings).
+- Out-buffers follow the **two-call pattern** where used: pass `cap=0`
+  (and `out=NULL`) to query required size via `out_needed`, then pass a
+  sufficient buffer to receive data. If `cap` is non-zero but too
+  small, the function writes nothing, sets `out_needed`, and returns
+  `CPPUP_ERR_BUFFER_TOO_SMALL`.
 - Pointers passed by the host into the plugin are valid only for the
-  duration of the call.
+  duration of the call (including `cppup_package_info_v1*` and any
+  strings inside it).
 - Pointers returned by the plugin must remain valid at least until
   the next call into the same instance or the plugin SO, whichever
   comes first (i.e. plugins own their return buffers).
+- `VtableSupport` (in `src/core/plugin/vtable_support.{hpp,cpp}`) is
+  the host-side table of `(kind, vtable_version)` pairs the running
+  cppup understands. The descriptor validator rejects anything not in
+  this set with `VtableVersionUnsupported`; this is how forward-incompat
+  changes are detected without a global ABI version bump.
 
 ## 4. Manifest TOML
 
@@ -293,7 +333,17 @@ secondary entry point, or as a standalone tool — TBD by implementation).
 
 ## 6. CLI: `cppup plugin add | remove | list`
 
-This replaces the stub in [src/core/cli/commands/plugin.cpp](../src/core/cli/commands/plugin.cpp).
+The validated install pipeline below is the target design. The current
+implementation in
+[src/core/cli/commands/plugin.cpp](../src/core/cli/commands/plugin.cpp)
+is a thin stub: `plugin add` creates `.cppup/plugins/<name>/` with a
+`manifest.json` placeholder, `plugin list` walks the directory plus the
+static registry, and `plugin remove` deletes the directory. None of the
+manifest parsing, hash verification, `dlopen` validation, or
+`installed.toml` registry described below is wired through yet. The
+manifest parser and descriptor validator that this pipeline will call
+into are in `src/core/plugin/{manifest,descriptor_validation}.cpp` and
+fully tested in isolation.
 
 ### 6.1 On-disk layout
 
@@ -535,7 +585,7 @@ ship it alone.
 
 ## 9. Error semantics & invariants
 
-Per the [assertion refactor](../memory/) policy:
+Per the project's assertion / error-handling policy:
 
 | Layer                                                | Error mechanism                         |
 | ---                                                  | ---                                     |
@@ -548,7 +598,7 @@ Per the [assertion refactor](../memory/) policy:
 
 No `try/catch` is added around third-party plugin code in v1. A
 plugin that throws or crashes takes down the cppup process; an
-out-of-process model (§11) addresses this later.
+out-of-process model (§13) addresses this later.
 
 ## 10. Test plan (TDD seed)
 
@@ -595,7 +645,76 @@ implementation code goes in.
 8. Header-only extension
    - 8.1 A user `cppup.cpp` that `#include`s `foo_plugin.hpp` and calls `foo::*` compiles without the runtime plugin installed (proves the header is independent of the SO).
 
-## 11. Future extensions (non-binding)
+## 11. Test-framework plugins (internal, pre-ABI)
+
+`CPPUP_KIND_TEST_SYSTEM` is reserved in the C ABI but its vtable is
+deliberately undefined for v1. Until a stable test-system ABI lands,
+cppup exposes test frameworks through an **internal C++ interface**:
+
+- [`src/core/test_frameworks/`](../src/core/test_frameworks/) holds
+  `TestFrameworkPlugin` (the abstract base) and concrete framework
+  plugins (gtest today).
+- `TestFrameworkRegistry` is a process-global registry of pointers to
+  framework plugins. The gtest plugin is registered at process startup
+  alongside the other static plugins.
+- `BuildConfiguration::test_frameworks` is a list of `TestFramework`
+  entries that name a framework (e.g. `"gtest"`) and optionally pin a
+  source package. When a `TestFramework` has no explicit
+  `.package`, the framework's `default_package()` is consulted and
+  recorded in `cppup.lock` so the next sync resolves to the same
+  source.
+
+The interface surface is roughly:
+
+```cpp
+struct TestBuildFlags {
+  std::vector<std::filesystem::path> include_paths;
+  std::vector<std::filesystem::path> library_paths;
+  std::vector<std::string>           libraries;
+  std::vector<std::string>           link_flags;
+};
+
+class TestFrameworkPlugin {
+ public:
+  virtual std::string_view  name() const noexcept = 0;
+  virtual std::expected<TestBuildFlags, std::string>
+                            build_and_get_flags(const fs::path& package_root,
+                                                const fs::path& cache_dir,
+                                                CommandRunner&  runner)        = 0;
+  virtual std::vector<std::string> list_test_cases(const fs::path& binary,
+                                                   std::string_view filter,
+                                                   CommandRunner&  runner)     = 0;
+  virtual int               run(const fs::path& binary, std::string_view filter,
+                                CommandRunner& runner)                         = 0;
+  virtual std::optional<Package> default_package() const                       = 0;
+};
+```
+
+This is intentionally not part of the cross-`dlopen` C ABI yet. The
+shape is likely to change once the host's package-source plugin path
+matures enough to also drive test-framework binaries, at which point a
+`cppup_test_system_vtable_v1` can freeze.
+
+## 12. Lockfile integration
+
+The plugin layer contributes one piece of state to `cppup.lock`: when a
+`TestFramework` entry in `config.test_frameworks` has no explicit
+`.package`, the framework plugin's `default_package()` is resolved at
+`cppup lock` time and emitted as a regular `[[package]]` entry. This
+keeps "tests use gtest" reproducible across machines without forcing
+the user to maintain the gtest source URL by hand.
+
+The plugin *identity* (which plugin produced the default) is not
+recorded in `cppup.lock`. A rebuild after a plugin update may resolve
+to a different default package. This is acknowledged drift; explicit
+`.package` pinning is the escape hatch.
+
+The `selected_registry` selection key (`cppup registry set <location>`)
+likewise feeds plugin-managed package sources, but registry-aware
+fetch is still on the deferred list — see
+[docs/packages.md](packages.md).
+
+## 13. Future extensions (non-binding)
 
 - **Out-of-process plugins.** A second descriptor kind exposing
   plugins over stdin/stdout JSON-RPC. Lets untrusted plugins run in a
@@ -608,7 +727,7 @@ implementation code goes in.
 - **`cppup plugin update`.** Re-fetch from the recorded `source` and
   re-add with `--replace`.
 
-## 12. Open issues
+## 14. Open issues
 
 None blocking v1 implementation. To revisit before v1.1:
 

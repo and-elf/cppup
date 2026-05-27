@@ -1,162 +1,117 @@
-# Modular Package System
+# Package sources
 
-This directory contains the modular package system for cppup, which provides source resolution capabilities for different package source types.
+This directory implements the package-fetching side of cppup: given a
+`PackageInfo` (which source kind, where to pull it from), it produces
+a local directory under `.cppup/packages/<name>/` ready to be picked up
+by a build-system backend.
 
-## Architecture
+For the user-facing model (lockfile, sync, install scope), see
+[docs/packages.md](../../../docs/packages.md). For the plugin ABI that
+package sources implement, see
+[docs/plugin_api.md §3.4](../../../docs/plugin_api.md).
 
-The package system is organized into separate modules for each source type:
+## Layout
 
 ```
 src/core/package/
-├── package_concept.h/cpp     # Core concepts and utilities
-├── package_factory.h/cpp     # Factory for creating packages
-├── packages.h                # Main header including all types
-├── git/                      # Git repository packages
-├── directory/                # Local directory packages
-├── archive/                  # TAR/ZIP archive packages
-├── http/                     # HTTP download packages
-└── registry/                 # Registry packages (future)
+├── package_concept.h/cpp     # PackageType concept + PackageCacheInterface
+├── package_factory.h/cpp     # dispatch PackageInfo -> concrete source
+├── packages.h                # umbrella header
+├── git/                      # GitPackage      — git clone + checkout
+├── directory/                # DirectoryPackage — local path passthrough
+├── archive/                  # ArchivePackage   — tar.gz / zip (placeholder fetch)
+├── http/                     # HttpPackage      — single file / archive (placeholder fetch)
+└── registry/                 # RegistryPackage  — stub
 ```
 
-## Package Types
+## Source kinds and current behaviour
 
-### GitPackage (`git/`)
-Handles Git repository cloning with support for:
-- Branch specification
-- Commit checkout
-- Caching of cloned repositories
+| Kind | Source dir | CLI form | Behaviour today |
+|---|---|---|---|
+| `git`       | `git/`       | `--git URL [--branch B \| --tag T \| --commit C]` | Working: clones, checks out, caches by URL+ref. |
+| `directory` | `directory/` | `--dir PATH`                                    | Working: uses the path in place (no copy). |
+| `tar`       | `archive/`   | `--tar URL`                                     | Stub: creates an empty `.cppup/packages/<name>/`. |
+| `zip`       | `archive/`   | `--zip URL`                                     | Stub: creates an empty `.cppup/packages/<name>/`. |
+| `http`      | `http/`      | `--url URL`                                     | Stub: creates an empty `.cppup/packages/<name>/`. |
+| `registry`  | `registry/`  | `--name N --version V`                          | Stub: `resolve_source()` returns an error. |
 
-### DirectoryPackage (`directory/`)
-Handles local directory sources:
-- Path validation
-- Direct filesystem access
+The stubs exist so the lockfile schema and on-disk layout can stabilize
+ahead of the actual fetch implementations. The deferred work is tracked
+in [docs/packages.md](../../../docs/packages.md) under "Out of scope".
 
-### ArchivePackage (`archive/`)
-Handles archive downloads and extraction:
-- TAR.GZ and ZIP support
-- Automatic extraction
-- Download caching
+## Concept
 
-### HttpPackage (`http/`)
-Handles HTTP downloads:
-- Single file downloads
-- Archive detection and extraction
-- URL-based caching
+Each source type satisfies `cppup::package::PackageType`:
 
-### RegistryPackage (`registry/`)
-Placeholder for future registry support.
+```cpp
+template <typename T>
+concept PackageType = requires(T t) {
+  { t.info() }            -> std::convertible_to<const PackageInfo&>;
+  { t.resolve_source() }  -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
+  { t.set_command_executor(std::shared_ptr<CommandExecutor>{}) } -> std::same_as<void>;
+};
+```
+
+`PackageFactory::create_package` dispatches on `info.source_type` and
+returns a type-erased handle. Concrete types are also constructible
+directly (`cppup::package::git::GitPackage{info}`) when callers want to
+avoid the dispatch.
+
+## Host services injected into sources
+
+- `CommandExecutor` — wraps process invocation (`git clone`, archive
+  extraction, etc.) so tests can swap in a fake. Set via
+  `set_command_executor`.
+- `PackageCacheInterface` — abstract cache for resolved content. The
+  default implementation keys by package name under `.cppup/packages/`
+  and is shared across source types.
+
+Both surfaces also exist as plain-C structs in the plugin ABI
+(`cppup_cmd_exec_v1`, `cppup_cache_v1`) so out-of-tree package-source
+plugins get the same view.
 
 ## Usage
-
-### Basic Usage
 
 ```cpp
 #include "src/core/package/packages.h"
 
-// Create a package using the factory
 auto info = PackageInfo{
-    .name = "example",
-    .source_type = SourceType::GIT,
-    .url = "https://github.com/user/repo.git"
+    .name        = "fmt",
+    .source_type = SourceType::Git,
+    .url         = "https://github.com/fmtlib/fmt.git",
+    .git_branch  = "10.2.1",
 };
 
-auto package = cppup::package::make_package(std::move(info));
+auto package  = cppup::package::make_package(std::move(info));
+package.set_command_executor(std::make_shared<MyCommandExecutor>());
 
-// Set command executor for operations requiring shell commands
-auto executor = std::make_shared<MyCommandExecutor>();
-package.set_command_executor(executor);
-
-// Resolve the source
 auto source_path = package.resolve_source();
-if (source_path) {
-    std::cout << "Source resolved to: " << source_path.value() << std::endl;
+if (!source_path) {
+  std::cerr << source_path.error() << "\n";
 }
 ```
 
-### Creating Specific Package Types
+The CLI calls this from `cppup package add` (immediate fetch) and from
+`cppup package sync` (lockfile → disk).
+
+## How packages reach the build
+
+`cppup sync` materializes `.cppup/packages/<name>/` but **does not** by
+itself add include paths or link flags to the project. Today, consumers
+add what they need explicitly in `build.cpp`:
 
 ```cpp
-// Create a specific package type directly
-auto git_package = cppup::package::PackageFactory::create_package_of_type<
-    cppup::package::git::GitPackage
->(std::move(info));
+config.include_paths.push_back(".cppup/packages/fmt/include");
 ```
 
-### Integration with Build Systems
+Automatic library export — using `[exports]` from a `package.toml`
+manifest to drive include paths and link flags — is the next major
+piece of work, tracked in [../../../manifests/README.md](../../../manifests/README.md).
+The schema is designed; the wiring through `cppup build` is not.
 
-Build systems (like CppupPackage) can use the modular package system for source resolution:
+## Tests
 
-```cpp
-class CppupPackage {
-private:
-    std::unique_ptr<cppup::configuration::Package> source_package_;
-    
-    void ensure_source_package() const {
-        if (!source_package_) {
-            source_package_ = std::make_unique<Package>(
-                cppup::package::make_package(info_)
-            );
-        }
-    }
-    
-public:
-    std::expected<std::filesystem::path, std::string> resolve_source() const {
-        ensure_source_package();
-        return source_package_->resolve_source();
-    }
-};
-```
-
-## Concepts
-
-All package types must satisfy the `PackageType` concept:
-
-```cpp
-template<typename T>
-concept PackageType = requires(T t, const std::filesystem::path& source_path) {
-    { t.info() } -> std::convertible_to<const PackageInfo&>;
-    { t.resolve_source() } -> std::convertible_to<std::expected<std::filesystem::path, std::string>>;
-    { t.set_command_executor(std::shared_ptr<CommandExecutor>{}) } -> std::same_as<void>;
-};
-```
-
-## Utilities
-
-The `cppup::package::utils` namespace provides common utilities:
-
-- `execute_command()` - Execute shell commands
-- `execute_command_with_output()` - Execute and capture output
-- `get_actual_source_path()` - Handle subdirectory resolution
-- `download_file()` - Download files from URLs
-- `extract_archive()` - Extract various archive formats
-
-## Caching
-
-The `PackageCache` singleton manages caching of downloaded/cloned sources:
-
-- Automatic cache key generation based on package info
-- Cache validation and cleanup
-- Configurable cache directory
-
-## Benefits
-
-1. **Modularity**: Each source type is independent
-2. **Testability**: Easy to mock individual package types
-3. **Extensibility**: Simple to add new source types
-4. **Performance**: No virtual call overhead
-5. **Type Safety**: Compile-time concept validation
-6. **Reusability**: Shared utilities without coupling
-
-## Migration from Legacy System
-
-The old `package_utilities.h` functions are deprecated but maintained for backward compatibility. New code should use the modular system:
-
-```cpp
-// Old way (deprecated)
-auto result = cppup::configuration::package_utils::resolve_git_source(info, executor);
-
-// New way
-auto package = cppup::package::git::GitPackage(info);
-package.set_command_executor(executor);
-auto result = package.resolve_source();
-```
+Unit tests for each source live alongside the implementation (e.g.
+`git/test_git_package.cpp`) and use `FakeCommandExecutor` /
+`InMemoryPackageCache` from `package_concept.cpp` to avoid hitting the
+network or disk.

@@ -6,6 +6,16 @@ clients and that local recipes/contributors author by hand. Think of it as
 a declarative, TOML-only sibling of Conan's `conanfile.py`: no Python, no
 methods, no logic — just data.
 
+> **Status:** The schema below is the target. The parser, registry
+> client, and `[exports]` → build-system wiring are not yet integrated
+> with `cppup build`. Today projects declare dependencies directly in
+> `build.cpp` (`config.packages` via the `from_*` helpers) and the
+> resolved set lands in `cppup.lock`. `cppup registry set` records a
+> registry location, but registry-aware fetch is on the deferred list
+> in [../docs/packages.md](../docs/packages.md). This README describes
+> where the manifest format is heading; it does not yet describe what
+> the CLI does end-to-end.
+
 The repo is a **mono-repo** holding the registry index, every generated
 manifest, and the tooling that produces them. Layout:
 
@@ -43,11 +53,11 @@ manifests/
    re-hostable on any registry.
 2. **Mirror the in-process model.** Field names and enums track the
    existing C++ types so parsing is a thin TOML → struct mapping:
-   - `PackageInfo` ([src/core/configuration/types.hpp:49](src/core/configuration/types.hpp#L49))
-   - `Toolchain` ([src/core/configuration/types.hpp:418](src/core/configuration/types.hpp#L418))
-   - `DependencyRequirement` ([src/core/dependency/resolver.hpp:44](src/core/dependency/resolver.hpp#L44))
-   - Plugin `Manifest` ([src/core/plugin/manifest.hpp:36](src/core/plugin/manifest.hpp#L36))
-   - Lockfile `Entry` ([src/core/cli/commands/lockfile.hpp:52](src/core/cli/commands/lockfile.hpp#L52))
+   - `PackageInfo` ([src/core/configuration/types.hpp:49](../src/core/configuration/types.hpp#L49))
+   - `Toolchain` ([src/core/configuration/types.hpp:418](../src/core/configuration/types.hpp#L418))
+   - `DependencyRequirement` ([src/core/dependency/resolver.hpp:44](../src/core/dependency/resolver.hpp#L44))
+   - Plugin `Manifest` ([src/core/plugin/manifest.hpp:36](../src/core/plugin/manifest.hpp#L36))
+   - Lockfile `Entry` ([src/core/cli/commands/lockfile.hpp:52](../src/core/cli/commands/lockfile.hpp#L52))
 3. **Source-builds only, for now.** A manifest describes how to fetch and
    build a package from source. Pre-built binary support is out of scope
    for v1 but the schema reserves a `[binary]` table for later.
@@ -178,7 +188,7 @@ plugins = []
 ## Versioning & constraints
 
 Constraint syntax matches `VersionConstraint`
-([src/core/dependency/resolver.hpp:33](src/core/dependency/resolver.hpp#L33)):
+([src/core/dependency/resolver.hpp:33](../src/core/dependency/resolver.hpp#L33)):
 
 | Syntax    | Meaning                  |
 |-----------|--------------------------|
@@ -195,7 +205,7 @@ Constraint syntax matches `VersionConstraint`
 `package.toml` is the input; `cppup.lock` is the output. The lockfile
 records the *resolved* version, source URL, commit, checksum, and
 selected features for every package in the dependency tree — schema
-already defined at [src/core/cli/commands/lockfile.hpp:27](src/core/cli/commands/lockfile.hpp#L27).
+already defined at [src/core/cli/commands/lockfile.hpp:27](../src/core/cli/commands/lockfile.hpp#L27).
 A manifest is hand-authored; the lockfile is machine-written.
 
 ## Why TOML, not Python
@@ -231,7 +241,7 @@ See `tools/conan2toml/GAPS.md` for the full conversion-blocker list.
 Schema-level items still under discussion:
 
 - **Profiles.** Conan profiles map roughly to cppup's `Profile`
-  ([src/core/configuration/profile.hpp:14](src/core/configuration/profile.hpp#L14)).
+  ([src/core/configuration/profile.hpp:14](../src/core/configuration/profile.hpp#L14)).
   Profiles are a consumer-side concept and probably don't belong in
   individual package manifests — they live in the workspace, not the
   registry.

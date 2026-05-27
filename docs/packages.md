@@ -5,10 +5,13 @@ build` needs to reproduce on another machine. It contains two
 independent kinds of state:
 
 1. **Package resolution** — one `[[package]]` entry per reachable
-   dependency, derived from `build.cpp`'s `config.packages`.
-2. **Selection** — the active toolchain and profile, as top-level
-   `selected_toolchain` / `selected_profile` keys, set by `cppup
-   toolchain select` / `cppup profile select`.
+   dependency, derived from `build.cpp`'s `config.packages` *plus* any
+   default packages contributed by test-framework plugins (see
+   "Test-framework defaults" below).
+2. **Selection** — the active toolchain, profile, and registry, as
+   top-level `selected_toolchain` / `selected_profile` /
+   `selected_registry` keys, set by `cppup toolchain select` /
+   `cppup profile select` / `cppup registry set`.
 
 The two halves are independent: writing a selection never disturbs the
 package list, and `cppup package lock` regenerating the package list
@@ -129,6 +132,20 @@ entry per reachable node with the direct child names recorded in
 - Project-scoped: packages in `.cppup/packages/registry.txt` that aren't
   reachable from `config.packages` are not written.
 
+### Test-framework defaults
+
+For each `TestFramework` entry in `config.test_frameworks` that has no
+explicit `.package`, `cppup lock` consults the framework plugin's
+`default_package()` and emits the result as a regular `[[package]]`
+entry. This is how `config.test_frameworks = { TestFramework{"gtest"} }`
+ends up reproducible across machines without forcing the user to
+maintain the gtest source URL by hand.
+
+Note: the plugin *identity* (which plugin produced the default) is not
+recorded — a rebuild after a plugin update can resolve to a different
+default. Set `.package` explicitly when you want to pin the source.
+See [plugin_api.md](plugin_api.md#12-lockfile-integration).
+
 ## `cppup sync` (also `cppup package sync`)
 
 - Reads `cppup.lock`.
@@ -140,6 +157,21 @@ entry per reachable node with the direct child names recorded in
 - Repairs partial state: deleting `.cppup/packages/<name>/` and
   re-running `sync` re-fetches it; deleting the metadata while keeping
   the directory restores the registry record from the lockfile.
+
+### What "fetch" actually does today
+
+| Source        | Behaviour during `sync` |
+|---------------|-------------------------|
+| `git`         | `git clone` (with branch/tag/commit checkout); cached |
+| `directory`   | no-op — the path is used in place |
+| `url`         | placeholder: creates empty `.cppup/packages/<name>/` |
+| `tar`         | placeholder: creates empty `.cppup/packages/<name>/` |
+| `zip`         | placeholder: creates empty `.cppup/packages/<name>/` |
+| `registry`    | error — registry sources are a stub today |
+
+The placeholder behaviour exists so the lockfile schema and the
+package directory layout stabilize ahead of the actual fetch
+implementations. Tracked in the "Out of scope" section below.
 
 ## `cppup build` auto-sync
 
@@ -165,6 +197,7 @@ are read and written independently.
 version = 1
 selected_toolchain = "clang++"
 selected_profile   = "debug"
+selected_registry  = "https://registry.example.com"
 
 [[package]]
 ...
@@ -179,11 +212,17 @@ selection in the first place.
 ```
 cppup toolchain select clang++
 cppup profile select debug
+cppup registry set https://registry.example.com   # or an absolute local path
 ```
 
-Both commands round-trip through the lockfile: they read the file (if
-present), update one key, and rewrite it. The package list is preserved.
-Either command creates `cppup.lock` if it doesn't already exist.
+All three commands round-trip through the lockfile: they read the file
+(if present), update one key, and rewrite it. The package list is
+preserved. Each command creates `cppup.lock` if it doesn't already
+exist.
+
+`selected_registry` is recorded today and read back by the resolver,
+but the actual registry-aware fetch path is on the deferred list
+(see "Out of scope" below).
 
 ### Precedence
 
