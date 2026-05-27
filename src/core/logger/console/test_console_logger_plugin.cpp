@@ -12,7 +12,7 @@
 using cppup::logger::console::register_static_plugin;
 using cppup::logger::console::static_registration;
 using cppup::plugin::default_vtable_support;
-using cppup::plugin::global_static_registry;
+using cppup::plugin::global_registry;
 using cppup::plugin::StaticPluginRegistry;
 
 TEST(ConsoleLoggerPlugin, RegistrationShapeIsWellFormed)
@@ -70,13 +70,13 @@ TEST(ConsoleLoggerPlugin, LogDoesNotCrashOnEmptyMessage)
 TEST(ConsoleLoggerPlugin, RegisterStaticPluginIsIdempotent)
 {
   // Reset shared state so the test is order-independent.
-  global_static_registry().clear();
+  global_registry().clear();
   register_static_plugin();
-  EXPECT_TRUE(global_static_registry().contains("cppup-console-logger"));
-  const auto size_after_first = global_static_registry().size();
+  EXPECT_TRUE(global_registry().static_registry().contains("cppup-console-logger"));
+  const auto size_after_first = global_registry().static_registry().size();
 
   register_static_plugin();  // duplicate — registry rejects, no growth
-  EXPECT_EQ(global_static_registry().size(), size_after_first);
+  EXPECT_EQ(global_registry().static_registry().size(), size_after_first);
 
-  global_static_registry().clear();
+  global_registry().clear();
 }

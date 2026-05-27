@@ -91,7 +91,7 @@ cppup::plugin::StaticPluginRegistration static_registration()
 
 void register_static_plugin()
 {
-  [[maybe_unused]] const auto result = cppup::plugin::global_static_registry().register_plugin(
+  [[maybe_unused]] const auto result = cppup::plugin::global_registry().register_static_plugin(
       static_registration(), cppup::plugin::default_vtable_support());
 }
 

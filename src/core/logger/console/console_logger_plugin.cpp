@@ -99,7 +99,7 @@ void register_static_plugin()
   //   - duplicate registration on a re-entrant startup path, which
   //     the registry rejects harmlessly
   // Both are non-actionable at runtime, so the result is discarded.
-  [[maybe_unused]] const auto result = cppup::plugin::global_static_registry().register_plugin(
+  [[maybe_unused]] const auto result = cppup::plugin::global_registry().register_static_plugin(
       static_registration(), cppup::plugin::default_vtable_support());
 }
 

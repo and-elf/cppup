@@ -96,10 +96,52 @@ std::expected<void, StaticRegistrationDiagnostic> StaticPluginRegistry::register
   return {};
 }
 
-StaticPluginRegistry& global_static_registry()
+PluginRegistry& global_registry()
 {
-  static StaticPluginRegistry instance;
+  static PluginRegistry instance;
   return instance;
+}
+
+namespace
+{
+
+const cppup_plugin_descriptor* find_build_system_in(
+    const std::vector<const cppup_plugin_descriptor*>& descriptors, std::string_view id) noexcept
+{
+  for (const auto* descriptor : descriptors)
+  {
+    if (descriptor == nullptr || descriptor->kind != CPPUP_KIND_BUILD_SYSTEM)
+    {
+      continue;
+    }
+    if (descriptor->id != nullptr && id == descriptor->id)
+    {
+      return descriptor;
+    }
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+const cppup_plugin_descriptor* find_build_system_descriptor(const PluginRegistry& registry,
+                                                            std::string_view      id) noexcept
+{
+  for (const auto& reg : registry.static_registry().list())
+  {
+    if (const auto* hit = find_build_system_in(reg.descriptors, id); hit != nullptr)
+    {
+      return hit;
+    }
+  }
+  for (const auto& reg : registry.dynamic_plugins())
+  {
+    if (const auto* hit = find_build_system_in(reg.descriptors, id); hit != nullptr)
+    {
+      return hit;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace cppup::plugin

@@ -56,6 +56,26 @@ constexpr cppup_plugin_descriptor kDescriptor{
     .vtable         = &kLoggerVtable,
 };
 
+constexpr cppup_build_system_vtable_v1 kCmakeVtable{
+    .name                 = "cmake",
+    .last_error           = nullptr,
+    .create               = nullptr,
+    .destroy              = nullptr,
+    .build                = nullptr,
+    .get_compile_flags    = nullptr,
+    .get_link_flags       = nullptr,
+    .get_include_paths    = nullptr,
+    .get_library_paths    = nullptr,
+    .set_command_executor = nullptr,
+};
+
+constexpr cppup_plugin_descriptor kCmakeDescriptor{
+    .id             = "cmake",
+    .kind           = CPPUP_KIND_BUILD_SYSTEM,
+    .vtable_version = 1,
+    .vtable         = &kCmakeVtable,
+};
+
 const cppup_plugin_descriptor* const kDescriptors[] = {&kDescriptor};
 
 cppup::plugin::StaticPluginRegistration make_reg(std::string name     = "static-sample",
@@ -137,8 +157,103 @@ TEST(StaticPluginRegistry, ClearEmptiesRegistry)
 
 TEST(StaticPluginRegistry, GlobalRegistryIsPerProcessSingleton)
 {
-  auto& a = cppup::plugin::global_static_registry();
-  auto& b = cppup::plugin::global_static_registry();
+  auto& a = cppup::plugin::global_registry();
+  auto& b = cppup::plugin::global_registry();
   EXPECT_EQ(&a, &b);
   a.clear();
+}
+
+namespace
+{
+
+constexpr const char* kCmakeManifest = R"(schema = 1
+[plugin]
+name = "cmake-bs"
+version = "0.1.0"
+cppup_compat = ">=0.1.0"
+build_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+commit_hash = "static"
+build_date = "2026-05-22T00:00:00Z"
+license = "MIT"
+
+[[plugin.entries]]
+id = "cmake"
+kind = "build_system"
+vtable_version = 1
+)";
+
+}  // namespace
+
+TEST(PluginRegistry, FindsBuildSystemFromStaticEntries)
+{
+  cppup::plugin::PluginRegistry reg;
+  ASSERT_TRUE(reg.register_static_plugin({"cmake-bs", kCmakeManifest, {&kCmakeDescriptor}},
+                                         default_vtable_support())
+                  .has_value());
+
+  const auto* hit = cppup::plugin::find_build_system_descriptor(reg, "cmake");
+  ASSERT_NE(hit, nullptr);
+  EXPECT_EQ(hit, &kCmakeDescriptor);
+
+  EXPECT_EQ(cppup::plugin::find_build_system_descriptor(reg, "missing"), nullptr);
+  EXPECT_EQ(cppup::plugin::find_build_system_descriptor(reg, "sample-logger"), nullptr);
+}
+
+TEST(PluginRegistry, FindsBuildSystemFromDynamicEntries)
+{
+  cppup::plugin::PluginRegistry reg;
+  reg.register_dynamic_plugin({.name = "external-cmake", .descriptors = {&kCmakeDescriptor}});
+
+  const auto* hit = cppup::plugin::find_build_system_descriptor(reg, "cmake");
+  ASSERT_NE(hit, nullptr);
+  EXPECT_EQ(hit, &kCmakeDescriptor);
+}
+
+TEST(PluginRegistry, StaticEntriesShadowDynamicAtSameId)
+{
+  // A built-in plugin takes precedence over a later-loaded dynamic one
+  // sharing the same id. The static list is walked first.
+  cppup::plugin::PluginRegistry reg;
+  ASSERT_TRUE(reg.register_static_plugin({"cmake-bs", kCmakeManifest, {&kCmakeDescriptor}},
+                                         default_vtable_support())
+                  .has_value());
+
+  // Construct a *different* descriptor with the same id.
+  static constexpr cppup_build_system_vtable_v1 kAlt{
+      .name                 = "cmake",
+      .last_error           = nullptr,
+      .create               = nullptr,
+      .destroy              = nullptr,
+      .build                = nullptr,
+      .get_compile_flags    = nullptr,
+      .get_link_flags       = nullptr,
+      .get_include_paths    = nullptr,
+      .get_library_paths    = nullptr,
+      .set_command_executor = nullptr,
+  };
+  static constexpr cppup_plugin_descriptor kAltDescriptor{
+      .id             = "cmake",
+      .kind           = CPPUP_KIND_BUILD_SYSTEM,
+      .vtable_version = 1,
+      .vtable         = &kAlt,
+  };
+  reg.register_dynamic_plugin({.name = "shadow", .descriptors = {&kAltDescriptor}});
+
+  EXPECT_EQ(cppup::plugin::find_build_system_descriptor(reg, "cmake"), &kCmakeDescriptor);
+}
+
+TEST(PluginRegistry, IgnoresNonBuildSystemDescriptors)
+{
+  // The lookup must skip logger / package-source descriptors even if
+  // their id matches — kind is part of the match criterion.
+  cppup::plugin::PluginRegistry           reg;
+  cppup::plugin::StaticPluginRegistration logger_reg{
+      .name          = "static-sample",
+      .manifest_toml = kValidManifest,
+      .descriptors   = {&kDescriptor},
+  };
+  ASSERT_TRUE(
+      reg.register_static_plugin(std::move(logger_reg), default_vtable_support()).has_value());
+
+  EXPECT_EQ(cppup::plugin::find_build_system_descriptor(reg, "sample-logger"), nullptr);
 }

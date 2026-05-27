@@ -20,9 +20,11 @@
 #include "../../configuration/compile_commands.hpp"
 #include "../../configuration/compiler.hpp"
 #include "../../configuration/link_resolution.hpp"
+#include "../../configuration/platform.hpp"
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
 #include "../../logger/console/console_logger.hpp"
+#include "../../plugin/static_registry.hpp"
 #include "../../plugin/test_framework_plugin.hpp"
 #include "build_options.hpp"
 #include "command_context.hpp"
@@ -30,6 +32,7 @@
 #include "core/panic.hpp"
 #include "embedded_configuration_header.hpp"
 #include "selection_resolver.hpp"
+#include "subproject_runner.hpp"
 
 namespace cppup::cli
 {
@@ -520,9 +523,11 @@ bld::BuildTarget make_executable_target(const ExecutableSpec& spec, const BuildC
   const auto& target_dir = spec.output_dir.empty() ? paths.build_dir : spec.output_dir;
 
   bld::BuildTarget target;
-  target.name        = spec.name;
-  target.type        = spec.kind;
-  target.output_path = target_dir / spec.name;
+  target.name = spec.name;
+  target.type = spec.kind;
+  const std::string_view exe_ext =
+      config.toolchain ? conf::executable_extension(config.toolchain->name) : std::string_view{};
+  target.output_path = target_dir / (spec.name + std::string{exe_ext});
   for (const auto& src : spec.sources)
   {
     target.source_files.push_back(paths.project_root / src);
@@ -699,63 +704,6 @@ bool build_executable(const ExecutableSpec& spec, const BuildContext& ctx)
   auto deps = collect_dependencies(*ctx.cache, target);
   ctx.cache->cache_build_result(target, deps);
   return false;
-}
-
-// Hand off a non-Cppup subproject to its native build system. The external
-// build's stdout/stderr flows through directly — we don't wrap it in
-// progress reporting. Throws runtime_error on external-tool failure.
-void run_external_subproject(const conf::Subproject&      sub_project,
-                             const std::filesystem::path& sp_dir, ProcessRunner& runner,
-                             Logger& logger)
-{
-  if (!sub_project.build_system)
-  {
-    return;
-  }
-  switch (*sub_project.build_system)
-  {
-    case conf::BuildSystem::CMake:
-    {
-      logger.info("Using CMake for subproject " + sub_project.path);
-      std::vector<std::string> cfg_args{"-S", sp_dir.string(), "-B", (sp_dir / "build").string()};
-      for (const auto& arg : sub_project.build_args)
-      {
-        cfg_args.push_back(arg);
-      }
-      if (runner.run(ProcessRunRequest{
-              .command = "cmake", .args = std::move(cfg_args), .working_dir = ""}) != 0)
-      {
-        throw std::runtime_error("subproject " + sub_project.path + ": cmake configure failed");
-      }
-      const std::vector<std::string> build_args{"--build", (sp_dir / "build").string()};
-      if (runner.run(
-              ProcessRunRequest{.command = "cmake", .args = build_args, .working_dir = ""}) != 0)
-      {
-        throw std::runtime_error("subproject " + sub_project.path + ": cmake build failed");
-      }
-      return;
-    }
-    case conf::BuildSystem::Make:
-    {
-      logger.info("Using Make for subproject " + sub_project.path);
-      std::vector<std::string> make_args(sub_project.build_args.begin(),
-                                         sub_project.build_args.end());
-      if (runner.run(ProcessRunRequest{
-              .command = "make", .args = std::move(make_args), .working_dir = sp_dir.string()}) !=
-          0)
-      {
-        throw std::runtime_error("subproject " + sub_project.path + ": make failed");
-      }
-      return;
-    }
-    case conf::BuildSystem::HeaderOnly:
-      logger.info("Using header-only subproject " + sub_project.path);
-      return;
-    case conf::BuildSystem::Cppup:
-      // Cppup subprojects were already merged in load_with_subprojects;
-      // they should not appear here.
-      return;
-  }
 }
 
 // Walk libraries/binaries/tests, query the cache, and return the number of
@@ -1063,8 +1011,13 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
 
     for (const auto& sub_project : config.subprojects)
     {
-      run_external_subproject(sub_project, paths.project_root / sub_project.path,
-                              *context.processRunner, logger);
+      auto sub_result = run_subproject_via_plugin(
+          sub_project, paths.project_root / sub_project.path, cppup::plugin::global_registry(),
+          *context.processRunner, logger);
+      if (!sub_result)
+      {
+        return std::unexpected(sub_result.error());
+      }
     }
 
     // Resolve test-framework packages → plugin → flags map BEFORE any

@@ -27,6 +27,7 @@ extern "C" BuildConfiguration configure()
                      "commands/coverage_parser.cpp",
                      "commands/registry.cpp",
                      "commands/selection_resolver.cpp",
+                     "commands/subproject_runner.cpp",
                      "commands/install_paths.cpp"},
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-pthread"}, Flag{"-ldl"}},
@@ -51,6 +52,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_package_user_scope", "commands/test_package_user_scope.cpp");
   add_test("test_toolchain_user_scope", "commands/test_toolchain_user_scope.cpp");
   add_test("test_coverage_parser", "commands/test_coverage_parser.cpp");
+  add_test("test_subproject_runner", "commands/test_subproject_runner.cpp");
 
   return config;
 }

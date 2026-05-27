@@ -8,7 +8,7 @@
 using cppup::package::git::register_static_plugin;
 using cppup::package::git::static_registration;
 using cppup::plugin::default_vtable_support;
-using cppup::plugin::global_static_registry;
+using cppup::plugin::global_registry;
 using cppup::plugin::StaticPluginRegistry;
 
 TEST(GitPackagePlugin, RegistrationShapeIsWellFormed)
@@ -98,11 +98,11 @@ TEST(GitPackagePlugin, ResolveSourceWithoutExecutorReportsErrorViaStatusAndLastE
 
 TEST(GitPackagePlugin, RegisterStaticPluginIsIdempotent)
 {
-  global_static_registry().clear();
+  global_registry().clear();
   register_static_plugin();
-  EXPECT_TRUE(global_static_registry().contains("cppup-package-git"));
-  const auto size_after_first = global_static_registry().size();
+  EXPECT_TRUE(global_registry().static_registry().contains("cppup-package-git"));
+  const auto size_after_first = global_registry().static_registry().size();
   register_static_plugin();
-  EXPECT_EQ(global_static_registry().size(), size_after_first);
-  global_static_registry().clear();
+  EXPECT_EQ(global_registry().static_registry().size(), size_after_first);
+  global_registry().clear();
 }

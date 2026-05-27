@@ -44,6 +44,8 @@ src/core/plugin/package_info_view.cpp
 src/core/plugin/host_service_adapters.cpp
 src/core/plugin/manifest.cpp
 src/core/plugin/descriptor_validation.cpp
+src/core/plugin/plugin_build_system.cpp
+src/core/plugin/plugin_host_services.cpp
 src/core/plugin/test_framework_plugin.cpp
 src/core/cli/cli_application.cpp
 src/core/cli/commands.cpp
@@ -53,5 +55,6 @@ src/core/cli/commands/lockfile.cpp
 src/core/cli/commands/package.cpp
 src/core/cli/commands/install_paths.cpp
 src/core/cli/commands/selection_resolver.cpp
+src/core/cli/commands/subproject_runner.cpp
 src/core/dependency/database.cpp
 src/core/build/cache.cpp

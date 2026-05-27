@@ -11,7 +11,7 @@ namespace cppup::logger::console
 // touching global state.
 [[nodiscard]] cppup::plugin::StaticPluginRegistration static_registration();
 
-// Register this internal lib with cppup's global_static_registry().
+// Register this internal lib with cppup's global_registry().
 // Intended to be called once during process startup before any
 // plugin lookups occur.
 void register_static_plugin();

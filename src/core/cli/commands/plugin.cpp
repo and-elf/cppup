@@ -19,7 +19,8 @@ std::expected<int, std::string> executePluginList(const CommandContext& context)
   {
     context.logger->info("Listing installed plugins...");
 
-    auto builtins = cppup::plugin::list_static_plugins(cppup::plugin::global_static_registry());
+    auto builtins =
+        cppup::plugin::list_static_plugins(cppup::plugin::global_registry().static_registry());
     std::filesystem::path const plugins_dir      = context.projectRoot / ".cppup" / "plugins";
     const bool                  has_external_dir = std::filesystem::exists(plugins_dir);
 
