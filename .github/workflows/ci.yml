@@ -85,15 +85,12 @@ jobs:
         run: ./build/cppup test --coverage
 
   windows-bootstrap:
-    # Smoke test for the Windows bootstrap path. EXPECTED TO FAIL right now:
-    # the cppup source still uses POSIX APIs (fork/pipe/waitpid in
-    # SystemProcessRunner.cpp, dlopen/dlsym in the plugin + configuration
-    # loaders, isatty in cli_application.cpp, chmod in update.cpp) that have
-    # no MinGW equivalents. Tracked as the next chunk of Windows-port work.
-    # Once those are shimmed behind #ifdef _WIN32, drop `continue-on-error`
-    # and this job becomes a hard gate.
+    # Smoke test for the Windows bootstrap path: build the slim
+    # cppup_bootstrap.exe via bootstrap.sh under MSYS2's MinGW64 shell
+    # and verify --help runs. The POSIX call sites (fork/exec, dlopen,
+    # isatty, chmod, setenv, etc.) all have #ifdef _WIN32 branches now,
+    # so this is a hard gate.
     runs-on: windows-latest
-    continue-on-error: true
     defaults:
       run:
         shell: msys2 {0}
@@ -127,9 +124,8 @@ jobs:
   windows-bat:
     # Same goal but exercises bootstrap.bat from native cmd.exe — proves the
     # batch script parses scripts/bootstrap_sources.txt and drives MinGW
-    # correctly. Also expected to fail at compile until the POSIX shims land.
+    # correctly.
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:

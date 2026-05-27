@@ -131,10 +131,25 @@ build_slim() {
         fi
     done
 
+    # Link line diverges per host: MinGW/MSYS2 has no libdl, needs ws2_32 +
+    # crypt32 for OpenSSL's Windows sockets/crypto deps, and -lstdc++exp to
+    # provide std::print's terminal-write symbols (GCC 15 libstdc++ on Windows
+    # routes std::__open_terminal / std::__write_to_terminal through the
+    # experimental library).
+    local LINK_LIBS
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            LINK_LIBS="-lsqlite3 -lcrypto -lpthread -lws2_32 -lcrypt32 -lstdc++exp"
+            ;;
+        *)
+            LINK_LIBS="-lsqlite3 -lcrypto -pthread -ldl"
+            ;;
+    esac
+
     $CXX $CXXFLAGS "${MAIN_OBJECTS[@]}" \
         -L"$BUILD_DIR" -lcppup_config \
         -o "$BOOTSTRAP_BINARY" \
-        -lsqlite3 -lcrypto -pthread -ldl
+        $LINK_LIBS
 
     log_info "Slim binary built: $BOOTSTRAP_BINARY"
 }

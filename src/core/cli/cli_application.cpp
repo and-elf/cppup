@@ -1,7 +1,13 @@
 #include "cli_application.hpp"
 
 #ifndef CPPUP_SLIM
+#ifdef _WIN32
+#include <io.h>
+
+#include <cstdio>
+#else
 #include <unistd.h>
+#endif
 
 #include <iostream>
 #endif
@@ -131,7 +137,11 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   }
 
   // No explicit flags. If stdin is a TTY, ask the user; otherwise minimal.
+#ifdef _WIN32
+  if (::_isatty(::_fileno(stdin)) == 0)
+#else
   if (::isatty(STDIN_FILENO) == 0)
+#endif
   {
     return opts;
   }

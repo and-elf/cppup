@@ -49,8 +49,11 @@ HostCommandExecutor::HostCommandExecutor(cppup_cmd_exec_v1* host) : host_{host} 
 std::expected<void, std::string> HostCommandExecutor::execute(
     const std::string& command, const std::filesystem::path& working_directory) const
 {
+  // path::c_str() is wchar_t* on Windows; the plugin C ABI is char*.
+  // Pin the narrow form in a local so c_str() outlives the call.
+  const std::string  working_directory_str = working_directory.string();
   const cppup_status status =
-      host_->execute(host_->state, command.c_str(), working_directory.c_str());
+      host_->execute(host_->state, command.c_str(), working_directory_str.c_str());
   if (status != CPPUP_OK)
   {
     return std::unexpected<std::string>{fetch_last_error(host_, "execute failed")};
@@ -76,8 +79,9 @@ std::expected<std::string, std::string> HostCommandExecutor::execute_with_output
       // see a truncated string; this is acceptable for diagnostics.
     }
   };
-  const cppup_status status = host_->execute_with_output(host_->state, command.c_str(),
-                                                         working_directory.c_str(), visit, &out);
+  const std::string  working_directory_str = working_directory.string();
+  const cppup_status status                = host_->execute_with_output(
+      host_->state, command.c_str(), working_directory_str.c_str(), visit, &out);
   if (status != CPPUP_OK)
   {
     return std::unexpected<std::string>{fetch_last_error(host_, "execute_with_output failed")};

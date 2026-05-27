@@ -39,7 +39,9 @@ PluginBuildSystem::PluginBuildSystem(cppup::configuration::PackageInfo   info,
 std::expected<void, std::string> PluginBuildSystem::build(
     const std::filesystem::path& source_path) const
 {
-  const cppup_status status = vtable_->build(instance_.get(), source_path.c_str());
+  // path::c_str() is wchar_t* on Windows; the plugin C ABI is char*.
+  const std::string  source_path_str = source_path.string();
+  const cppup_status status          = vtable_->build(instance_.get(), source_path_str.c_str());
   if (status != CPPUP_OK)
   {
     return std::unexpected<std::string>{last_error_or(vtable_, instance_.get(), "build failed")};

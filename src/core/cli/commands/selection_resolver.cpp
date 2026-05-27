@@ -129,18 +129,43 @@ EarlySelection resolve_early_selection(const conf::BuildOptions&  options,
   return out;
 }
 
+namespace
+{
+
+void set_env_var(const char* name, const char* value)
+{
+#ifdef _WIN32
+  // _putenv_s mirrors setenv(name, value, /*overwrite=*/1).
+  ::_putenv_s(name, value);
+#else
+  ::setenv(name, value, 1);
+#endif
+}
+
+void unset_env_var(const char* name)
+{
+#ifdef _WIN32
+  // On Windows, passing an empty value to _putenv_s removes the variable.
+  ::_putenv_s(name, "");
+#else
+  ::unsetenv(name);
+#endif
+}
+
+}  // namespace
+
 void export_selection_env(const EarlySelection& selection)
 {
   // Empty profile leaves CPPUP_ACTIVE_PROFILE unset so when_profile()
   // blocks correctly don't fire on the absence of a selection.
-  ::setenv("CPPUP_ACTIVE_TOOLCHAIN", selection.toolchain.c_str(), 1);
+  set_env_var("CPPUP_ACTIVE_TOOLCHAIN", selection.toolchain.c_str());
   if (!selection.profile.empty())
   {
-    ::setenv("CPPUP_ACTIVE_PROFILE", selection.profile.c_str(), 1);
+    set_env_var("CPPUP_ACTIVE_PROFILE", selection.profile.c_str());
   }
   else
   {
-    ::unsetenv("CPPUP_ACTIVE_PROFILE");
+    unset_env_var("CPPUP_ACTIVE_PROFILE");
   }
 }
 

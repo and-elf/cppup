@@ -1,5 +1,15 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #include <sys/utsname.h>
+#endif
 
 #include <cstdlib>
 #include <expected>
@@ -105,10 +115,15 @@ fs::path make_temp_download_path()
 
 bool path_env_contains_dir(std::string_view path_env_value, std::string_view dir)
 {
+#ifdef _WIN32
+  constexpr char k_path_sep = ';';
+#else
+  constexpr char k_path_sep = ':';
+#endif
   std::size_t start = 0;
   while (start <= path_env_value.size())
   {
-    const auto end = path_env_value.find(':', start);
+    const auto end = path_env_value.find(k_path_sep, start);
     const auto len = (end == std::string_view::npos) ? path_env_value.size() - start : end - start;
     if (path_env_value.substr(start, len) == dir)
     {
@@ -192,6 +207,13 @@ namespace update_internal
 
 std::expected<std::string, std::string> detect_platform() noexcept
 {
+#ifdef _WIN32
+  // No prebuilt Windows asset is published yet, so even on a 64-bit
+  // Windows host the update command should steer the user to bootstrap.bat
+  // rather than report a phantom "windows-x86_64" tarball.
+  return std::unexpected(
+      "no prebuilt binary available for Windows; build from source via bootstrap.bat");
+#else
   utsname uts{};
   if (::uname(&uts) != 0)
   {
@@ -205,6 +227,7 @@ std::expected<std::string, std::string> detect_platform() noexcept
   }
   return std::unexpected("no prebuilt binary available for this platform (" + sysname + "/" +
                          machine + "); build from source via bootstrap.sh");
+#endif
 }
 
 std::expected<std::string, std::string> sha256_file(const fs::path& path) noexcept
@@ -270,12 +293,17 @@ std::expected<int, std::string> install_atomic(const fs::path& staged_binary,
       }
     }
 
-    // chmod 0755 on the staged binary before swapping it in.
+#ifndef _WIN32
+    // chmod 0755 on the staged binary before swapping it in. NTFS doesn't
+    // model a POSIX executable bit so this step is unnecessary on Windows —
+    // CreateProcess decides executability from the file's PE header and the
+    // .exe extension.
     constexpr mode_t k_exec_mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
     if (::chmod(staged_binary.c_str(), k_exec_mode) != 0)
     {
       return std::unexpected("chmod failed on " + staged_binary.string());
     }
+#endif
 
     fs::rename(staged_binary, target, error_code);
     if (error_code)

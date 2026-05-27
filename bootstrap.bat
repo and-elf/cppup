@@ -30,8 +30,11 @@ set "CXXFLAGS=-std=c++26 -O2 -DCPPUP_SLIM -DCPPUP_VERSION=0.1.0"
 set "INCLUDES=-Isrc/core/configuration -Isrc/core/cli -Isrc/core/cli/commands -Isrc/cli -Iinclude -Isrc"
 REM Windows link line — same shared libs as bootstrap.sh minus -ldl
 REM (no libdl on Windows; LoadLibrary lives in kernel32) plus the system
-REM libs that OpenSSL on MinGW pulls in transitively.
-set "LIBS=-lcppup_config -lsqlite3 -lcrypto -lpthread -lws2_32 -lcrypt32"
+REM libs that OpenSSL on MinGW pulls in transitively. -lstdc++exp provides
+REM std::__open_terminal / std::__write_to_terminal — std::print routes
+REM terminal writes through these in GCC 15+ libstdc++ on Windows and they
+REM live in the experimental lib, not libstdc++ proper.
+set "LIBS=-lcppup_config -lsqlite3 -lcrypto -lpthread -lws2_32 -lcrypt32 -lstdc++exp"
 
 echo === cppup Bootstrap (Windows) ===
 

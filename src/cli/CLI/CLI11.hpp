@@ -255,8 +255,8 @@
 // second
 #include <winbase.h>
 // third
-#include <processthreadsapi.hpp>
-#include <shellapi.hpp>
+#include <processthreadsapi.h>
+#include <shellapi.h>
 #endif
 
 namespace CLI
