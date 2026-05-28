@@ -1,0 +1,48 @@
+packages:
+  fmt:
+    description: A safe and fast alternative to printf and IOStreams.
+    homepage: https://github.com/fmtlib/fmt
+    kind: library
+    latest: 12.1.0
+    license: MIT
+    repository: https://github.com/conan-io/conan-center-index
+    versions:
+      10.0.0:
+        deprecated: null
+        manifest: recipes/fmt/10.0.0/package.toml
+        manifest_sha256: f034cd3fa6cc2b8d8c95d9d499874380e77abd5e9708e1b319490fa53da69b31
+        source_ref: 10.0.0
+        source_url: https://github.com/fmtlib/fmt/releases/download/10.0.0/fmt-10.0.0.zip
+        yanked: false
+      12.1.0:
+        deprecated: null
+        manifest: recipes/fmt/12.1.0/package.toml
+        manifest_sha256: 15eafd1d151822b043120ee097d4c4f36b0a1e1fa01814df81c1e3c994147659
+        source_ref: 12.1.0
+        source_url: https://github.com/fmtlib/fmt/releases/download/12.1.0/fmt-12.1.0.zip
+        yanked: false
+  spdlog:
+    description: Fast C++ logging library
+    homepage: https://github.com/gabime/spdlog
+    kind: library
+    latest: 1.17.0
+    license: MIT
+    repository: https://github.com/conan-io/conan-center-index
+    versions:
+      1.11.0:
+        deprecated: null
+        manifest: recipes/spdlog/1.11.0/package.toml
+        manifest_sha256: f67e40fa200cb9081066ad328519b1c42b15b111216c1b9ae7eddc5b26613b9f
+        source_ref: 1.11.0
+        source_url: https://github.com/gabime/spdlog/archive/v1.11.0.tar.gz
+        yanked: false
+      1.17.0:
+        deprecated: null
+        manifest: recipes/spdlog/1.17.0/package.toml
+        manifest_sha256: 39908b42ff403e90136c2d97ce62a4d07a1645b8fb7acdb339314da4f0980df6
+        source_ref: 1.17.0
+        source_url: https://github.com/gabime/spdlog/archive/v1.17.0.tar.gz
+        yanked: false
+registry:
+  generated_at: '2026-05-28T08:22:55+00:00'
+schema: 1

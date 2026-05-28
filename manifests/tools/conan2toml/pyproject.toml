@@ -1,0 +1,52 @@
+[project]
+name = "conan2toml"
+version = "0.1.0"
+description = "Convert Conan v2 conanfile.py recipes to cppup package.toml manifests."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "conan>=2.5,<3",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "ruff>=0.5",
+    "patch-ng>=1.18",
+]
+verify = [
+    "patch-ng>=1.18",
+]
+
+[project.scripts]
+conan2toml = "conan2toml.__main__:main"
+
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/conan2toml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pyflakes / pycodestyle
+    "I",             # isort
+    "B",             # bugbear
+    "UP",            # pyupgrade
+    "SIM",           # simplify
+    "RUF",           # ruff-specific
+]
+ignore = [
+    "E501",          # line length handled by formatter
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

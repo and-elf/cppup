@@ -1,0 +1,17 @@
+# uv / venvs
+.venv/
+.python-version
+
+# packaging
+dist/
+build/
+*.egg-info/
+
+# python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# tool state
+.conan2toml-progress

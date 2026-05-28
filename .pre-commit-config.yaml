@@ -1,0 +1,28 @@
+# Pre-commit hooks. Install with:
+#   pip install pre-commit && pre-commit install
+#
+# The conan2toml hooks use `uv run` so the version of ruff / pytest
+# matches what CI uses (pinned in manifests/tools/conan2toml/uv.lock),
+# avoiding the "works locally, breaks in CI" pre-commit-vs-uv split.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: conan2toml-ruff
+        name: conan2toml ruff
+        language: system
+        entry: bash -c 'cd manifests/tools/conan2toml && uv run --extra dev ruff check src tests'
+        files: ^manifests/tools/conan2toml/
+        pass_filenames: false
+
+      - id: conan2toml-pytest
+        name: conan2toml pytest
+        language: system
+        entry: bash -c 'cd manifests/tools/conan2toml && uv run --extra dev pytest -q'
+        files: ^manifests/tools/conan2toml/
+        pass_filenames: false
