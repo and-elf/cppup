@@ -187,12 +187,18 @@ main() {
     install_githooks
 
     if [[ -n "$bootstrap_command" ]]; then
+        # `build` requires materialized packages (no auto-sync since 791c4f3),
+        # so chain sync first when bootstrap.sh is asked to drive a full build.
+        if [[ "$bootstrap_command" == "build" ]]; then
+            log_info "Running: $BOOTSTRAP_BINARY sync"
+            "$BOOTSTRAP_BINARY" sync
+        fi
         log_info "Running: $BOOTSTRAP_BINARY $bootstrap_command"
         "$BOOTSTRAP_BINARY" "$bootstrap_command"
         return 0
     fi
 
-    log_info "Next: '$BOOTSTRAP_BINARY update' (prebuilt) or '$BOOTSTRAP_BINARY build' (from source)"
+    log_info "Next: '$BOOTSTRAP_BINARY update' (prebuilt), or '$BOOTSTRAP_BINARY sync && $BOOTSTRAP_BINARY build' (from source)"
 }
 
 main "$@"

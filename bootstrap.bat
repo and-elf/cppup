@@ -134,10 +134,15 @@ if exist %BOOTSTRAP_BINARY% (
 
 REM 6. Optional follow-up command.
 if "%~1"=="" (
-    echo [INFO] Next: '%BOOTSTRAP_BINARY% update' ^(prebuilt^) or '%BOOTSTRAP_BINARY% build' ^(from source^)
+    echo [INFO] Next: '%BOOTSTRAP_BINARY% update' ^(prebuilt^), or '%BOOTSTRAP_BINARY% sync ^&^& %BOOTSTRAP_BINARY% build' ^(from source^)
     exit /b 0
 )
 if /i "%~1"=="build" (
+    REM `build` requires materialized packages ^(no auto-sync since 791c4f3^),
+    REM so chain sync first when bootstrap.bat is asked to drive a full build.
+    echo [INFO] Running: %BOOTSTRAP_BINARY% sync
+    %BOOTSTRAP_BINARY% sync
+    if errorlevel 1 exit /b !ERRORLEVEL!
     echo [INFO] Running: %BOOTSTRAP_BINARY% build
     %BOOTSTRAP_BINARY% build
     exit /b !ERRORLEVEL!

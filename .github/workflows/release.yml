@@ -27,6 +27,9 @@ jobs:
       - name: Bootstrap slim cppup
         run: ./bootstrap.sh
 
+      - name: Sync packages from cppup.lock
+        run: ./bootstrap_build/cppup_bootstrap sync
+
       - name: Build full cppup
         run: ./bootstrap_build/cppup_bootstrap build
 

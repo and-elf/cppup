@@ -763,9 +763,9 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerVersionCommand(reg);
     registerUpdateCommand(reg);
     registerBuildCommand(reg);
+    registerSyncCommand(reg);
 #ifndef CPPUP_SLIM
     registerLockCommand(reg);
-    registerSyncCommand(reg);
     registerInitCommand(reg);
     registerCompileCommandsCommand(reg);
     registerCleanCommand(reg);

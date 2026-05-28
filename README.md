@@ -37,8 +37,8 @@ A clean checkout of a project with a committed `cppup.lock` needs an explicit `c
 
 cppup uses a two-stage bootstrap:
 
-1. `bootstrap.sh` compiles a **slim** `cppup_bootstrap` binary that only knows two commands: `build` (compile the full cppup from this source tree into `./build/cppup`) and `update` (download a released full cppup binary into `~/.cppup/bin/`).
-2. The slim binary then either downloads a prebuilt cppup or builds the full one from source.
+1. `bootstrap.sh` compiles a **slim** `cppup_bootstrap` binary that knows three commands: `sync` (materialize packages from `cppup.lock` into `.cppup/packages/`), `build` (compile the full cppup from this source tree into `./build/cppup`), and `update` (download a released full cppup binary into `~/.cppup/bin/`).
+2. The slim binary then either downloads a prebuilt cppup or syncs packages and builds the full one from source.
 
 ### Linux and macOS
 
@@ -46,8 +46,11 @@ cppup uses a two-stage bootstrap:
 ./bootstrap.sh                              # → bootstrap_build/cppup_bootstrap
 ./bootstrap_build/cppup_bootstrap update    # install prebuilt cppup (fast)
 # — or —
+./bootstrap_build/cppup_bootstrap sync      # materialize packages from cppup.lock
 ./bootstrap_build/cppup_bootstrap build     # build full cppup from source → build/cppup
 ```
+
+`bootstrap.sh build` and `bootstrap.bat build` chain `sync` automatically before `build` for the one-shot path.
 
 `bootstrap.sh` takes no arguments. It probes the compiler at `$CXX` (default `g++`) for C++23 support, then compiles the slim binary with `-std=c++26`. It also installs the tracked `.githooks/` (gitleaks + `cppup format --check` + `cppup tidy` on every commit) via `scripts/setup-hooks.sh` if the working copy is a git clone.
 
