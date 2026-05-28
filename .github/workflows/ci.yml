@@ -160,6 +160,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up MSYS2 / MinGW64 (provides g++, ar, bash on PATH)
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -175,13 +176,16 @@ jobs:
       - name: Make MSYS2 MinGW64 win the toolchain lookup in cmd.exe
         # windows-latest ships a standalone C:\mingw64 from a chocolatey
         # package that's higher up the inherited PATH than setup-msys2's
-        # C:\msys64\mingw64. That g++ knows nothing about MSYS2's
-        # sqlite3/openssl install trees, so the slim bootstrap fails with
+        # mingw64 bin. That g++ knows nothing about MSYS2's sqlite3/openssl
+        # install trees, so the slim bootstrap fails with
         # `fatal error: sqlite3.h: No such file or directory`. Prepend
         # MSYS2's bin so its toolchain (and its include/lib search paths)
-        # wins where it matters.
+        # wins where it matters. setup-msys2 extracts MSYS2 to a
+        # runner-specific path (often inside the workspace, NOT C:\msys64),
+        # so resolve it from the action's `msys2-location` output rather
+        # than hardcoding a path.
         shell: cmd
-        run: echo C:\msys64\mingw64\bin>>%GITHUB_PATH%
+        run: echo ${{ steps.msys2.outputs.msys2-location }}\mingw64\bin>>%GITHUB_PATH%
 
       - name: Verify toolchain visible from cmd.exe
         shell: cmd
