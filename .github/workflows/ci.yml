@@ -147,6 +147,17 @@ jobs:
             mingw-w64-x86_64-sqlite3
             mingw-w64-x86_64-openssl
 
+      - name: Make MSYS2 MinGW64 win the toolchain lookup in cmd.exe
+        # windows-latest ships a standalone C:\mingw64 from a chocolatey
+        # package that's higher up the inherited PATH than setup-msys2's
+        # C:\msys64\mingw64. That g++ knows nothing about MSYS2's
+        # sqlite3/openssl install trees, so the slim bootstrap fails with
+        # `fatal error: sqlite3.h: No such file or directory`. Prepend
+        # MSYS2's bin so its toolchain (and its include/lib search paths)
+        # wins where it matters.
+        shell: cmd
+        run: echo C:\msys64\mingw64\bin>>%GITHUB_PATH%
+
       - name: Verify toolchain visible from cmd.exe
         shell: cmd
         run: |
