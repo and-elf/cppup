@@ -1,9 +1,46 @@
-name: ci
+name: ci-cpp
 
+# Run on every change that can affect the C++ build/test/format/tidy result.
+# Python-only changes under manifests/tools/conan2toml/ are handled by
+# ci-python.yml and do not need to retrigger this workflow.
 on:
   push:
     branches: [master, main]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'templates/**'
+      - 'scripts/**'
+      - 'examples/**'
+      - 'manifests/recipes/**'
+      - 'manifests/examples/**'
+      - 'manifests/index.yaml'
+      - 'bootstrap.sh'
+      - 'bootstrap.bat'
+      - 'build.cpp'
+      - 'cppup_bootstrap.cpp'
+      - 'cppup.lock'
+      - '.clang-format'
+      - '.clang-tidy'
+      - '.github/workflows/ci-cpp.yml'
   pull_request:
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'templates/**'
+      - 'scripts/**'
+      - 'examples/**'
+      - 'manifests/recipes/**'
+      - 'manifests/examples/**'
+      - 'manifests/index.yaml'
+      - 'bootstrap.sh'
+      - 'bootstrap.bat'
+      - 'build.cpp'
+      - 'cppup_bootstrap.cpp'
+      - 'cppup.lock'
+      - '.clang-format'
+      - '.clang-tidy'
+      - '.github/workflows/ci-cpp.yml'
 
 jobs:
   build-test:
@@ -86,31 +123,6 @@ jobs:
           fi
       - name: Run tests with coverage
         run: ./build/cppup test --coverage
-
-  conan2toml:
-    # Lint + test the Python conanfile→package.toml translator under
-    # manifests/tools/conan2toml/. Independent of the C++ build, so it
-    # runs on the default GitHub runner with uv.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: manifests/tools/conan2toml
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-
-      - name: Sync dev dependencies
-        run: uv sync --extra dev
-
-      - name: Ruff (lint)
-        run: uv run ruff check src tests
-
-      - name: Pytest
-        run: uv run pytest -q
 
   windows-bootstrap:
     # Smoke test for the Windows bootstrap path: build the slim

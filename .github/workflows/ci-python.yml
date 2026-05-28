@@ -1,0 +1,38 @@
+name: ci-python
+
+# Lint + test the Python conanfile -> package.toml translator under
+# manifests/tools/conan2toml/. Independent of the C++ build, so we only
+# fire on changes inside the conan2toml tree (or this workflow itself).
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'manifests/tools/conan2toml/**'
+      - '.github/workflows/ci-python.yml'
+  pull_request:
+    paths:
+      - 'manifests/tools/conan2toml/**'
+      - '.github/workflows/ci-python.yml'
+
+jobs:
+  conan2toml:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: manifests/tools/conan2toml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dev dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff (lint)
+        run: uv run ruff check src tests
+
+      - name: Pytest
+        run: uv run pytest -q
