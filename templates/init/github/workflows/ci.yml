@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+
+    steps:
+      - name: Install toolchain
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            gcc gcc-c++ clang clang-tools-extra \
+            sqlite-devel openssl-devel \
+            gtest-devel gmock-devel \
+            git ca-certificates findutils which
+          command -v cppup >/dev/null || (echo "cppup not installed in image" && exit 1)
+
+      - uses: actions/checkout@v4
+
+      - name: Sync packages
+        run: cppup sync
+
+      - name: Build
+        run: cppup build
+
+      - name: Test
+        run: cppup test
+
+      - name: Format check
+        run: cppup format --check
+
+      - name: Tidy
+        run: cppup tidy
+        continue-on-error: true

@@ -1,4 +1,4 @@
-image: debian:trixie-slim
+image: fedora:43
 
 stages:
   - build
@@ -6,10 +6,10 @@ stages:
   - lint
 
 before_script:
-  - apt-get update -qq && apt-get install -y --no-install-recommends
-      build-essential g++ clang clang-tidy clang-format
-      libsqlite3-dev libssl-dev libgtest-dev libgmock-dev
-      ca-certificates git
+  - dnf install -y --setopt=install_weak_deps=False
+      gcc gcc-c++ clang clang-tools-extra
+      sqlite-devel openssl-devel gtest-devel gmock-devel
+      ca-certificates git which findutils
   - command -v cppup >/dev/null || (echo "cppup not installed in image" && exit 1)
 
 build:

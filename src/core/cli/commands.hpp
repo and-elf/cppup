@@ -40,6 +40,11 @@ enum class GitlabCi : unsigned char
   Off,
   On
 };
+enum class GithubActions : unsigned char
+{
+  Off,
+  On
+};
 
 // `cppup update --check` mode: compare running vs latest, do not install.
 enum class CheckOnly : unsigned char
@@ -50,10 +55,11 @@ enum class CheckOnly : unsigned char
 
 struct InitOptions
 {
-  Vscode       vscode       = Vscode::Off;
-  Devcontainer devcontainer = Devcontainer::Off;
-  Docker       docker       = Docker::Off;
-  GitlabCi     gitlab_ci    = GitlabCi::Off;
+  Vscode        vscode         = Vscode::Off;
+  Devcontainer  devcontainer   = Devcontainer::Off;
+  Docker        docker         = Docker::Off;
+  GitlabCi      gitlab_ci      = GitlabCi::Off;
+  GithubActions github_actions = GithubActions::Off;
 };
 
 [[nodiscard]] constexpr bool enabled(Vscode state) noexcept
@@ -71,6 +77,10 @@ struct InitOptions
 [[nodiscard]] constexpr bool enabled(GitlabCi state) noexcept
 {
   return state == GitlabCi::On;
+}
+[[nodiscard]] constexpr bool enabled(GithubActions state) noexcept
+{
+  return state == GithubActions::On;
 }
 [[nodiscard]] constexpr bool enabled(CheckOnly state) noexcept
 {

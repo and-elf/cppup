@@ -1,22 +1,22 @@
-FROM debian:trixie-slim
+FROM fedora:43
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        build-essential \
-        g++ \
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc \
+        gcc-c++ \
         clang \
-        clang-tidy \
-        clang-format \
-        clangd \
+        clang-tools-extra \
+        clang-devel \
         lldb \
         gdb \
         git \
         ca-certificates \
-        libsqlite3-dev \
-        libssl-dev \
-        libgtest-dev \
-        libgmock-dev \
+        sqlite-devel \
+        openssl-devel \
+        gtest-devel \
+        gmock-devel \
         sudo \
-    && rm -rf /var/lib/apt/lists/*
+        which \
+    && dnf clean all
 
 ARG USERNAME=vscode
 ARG USER_UID=1000

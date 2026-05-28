@@ -40,6 +40,7 @@ emit_entry() {
         devcontainer) rel_path=".devcontainer/${sub}";;
         docker)       rel_path="${sub}";;
         gitlab)       rel_path="${sub}";;
+        github)       rel_path=".github/${sub}";;
         *)
             echo "FATAL: unknown template category '${category}' (from ${file})" >&2
             exit 1

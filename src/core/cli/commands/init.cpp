@@ -64,6 +64,10 @@ bool category_enabled(std::string_view category, const InitOptions& options)
   {
     return enabled(options.gitlab_ci);
   }
+  if (category == "github")
+  {
+    return enabled(options.github_actions);
+  }
   return false;
 }
 

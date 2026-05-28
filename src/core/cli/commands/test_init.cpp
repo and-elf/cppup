@@ -43,10 +43,11 @@ std::string slurp(const fs::path& p)
 
 InitOptions all_on()
 {
-  return InitOptions{.vscode       = Vscode::On,
-                     .devcontainer = Devcontainer::On,
-                     .docker       = Docker::On,
-                     .gitlab_ci    = GitlabCi::On};
+  return InitOptions{.vscode         = Vscode::On,
+                     .devcontainer   = Devcontainer::On,
+                     .docker         = Docker::On,
+                     .gitlab_ci      = GitlabCi::On,
+                     .github_actions = GithubActions::On};
 }
 
 }  // namespace
@@ -70,6 +71,7 @@ TEST(Init, MinimalEmitsBaseFilesOnly)
   EXPECT_FALSE(fs::exists(root / ".devcontainer"));
   EXPECT_FALSE(fs::exists(root / "Dockerfile"));
   EXPECT_FALSE(fs::exists(root / ".gitlab-ci.yml"));
+  EXPECT_FALSE(fs::exists(root / ".github" / "workflows" / "ci.yml"));
 
   fs::remove_all(root);
 }
@@ -156,8 +158,8 @@ TEST(Init, WithDockerEmitsDockerfile)
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   EXPECT_TRUE(fs::exists(root / "Dockerfile"));
-  EXPECT_NE(slurp(root / "Dockerfile").find("debian:trixie-slim"), std::string::npos)
-      << "Dockerfile should be based on debian:trixie-slim per the org standard";
+  EXPECT_NE(slurp(root / "Dockerfile").find("fedora:43"), std::string::npos)
+      << "Dockerfile should be based on fedora:43 per the org standard";
 
   fs::remove_all(root);
 }
@@ -171,6 +173,27 @@ TEST(Init, WithGitlabCiEmitsGitlabCiYml)
   ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
 
   EXPECT_TRUE(fs::exists(root / ".gitlab-ci.yml"));
+  EXPECT_NE(slurp(root / ".gitlab-ci.yml").find("fedora:43"), std::string::npos)
+      << ".gitlab-ci.yml should be based on fedora:43 per the org standard";
+
+  fs::remove_all(root);
+}
+
+TEST(Init, WithGithubActionsEmitsWorkflow)
+{
+  auto       root = make_tmp_root("gh");
+  const auto ctx  = make_ctx(root);
+
+  InitOptions const opts{.github_actions = GithubActions::On};
+  ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
+
+  const auto workflow = root / ".github" / "workflows" / "ci.yml";
+  EXPECT_TRUE(fs::exists(workflow));
+  const auto body = slurp(workflow);
+  EXPECT_NE(body.find("fedora:43"), std::string::npos)
+      << "GitHub Actions workflow should run inside fedora:43 per the org standard";
+  EXPECT_NE(body.find("cppup build"), std::string::npos);
+  EXPECT_NE(body.find("cppup test"), std::string::npos);
 
   fs::remove_all(root);
 }
@@ -186,6 +209,7 @@ TEST(Init, FullEnablesAllFeatures)
   EXPECT_TRUE(fs::exists(root / ".devcontainer" / "devcontainer.json"));
   EXPECT_TRUE(fs::exists(root / "Dockerfile"));
   EXPECT_TRUE(fs::exists(root / ".gitlab-ci.yml"));
+  EXPECT_TRUE(fs::exists(root / ".github" / "workflows" / "ci.yml"));
 
   fs::remove_all(root);
 }

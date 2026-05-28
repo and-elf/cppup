@@ -18,9 +18,6 @@ RUN dnf update -y && dnf install -y \
     clang \
     clangd \
     clang-tools-extra \
-    make \
-    ninja-build \
-    cmake \
     git \
     curl \
     bash \
@@ -39,7 +36,25 @@ RUN dnf update -y && dnf install -y \
     mingw64-openssl \
     mingw64-winpthreads-static \
     wine \
+    python3 \
+    python3-pip \
     && dnf clean all
+
+# uv: Python package/venv manager used by manifests/tools/conan2toml/.
+# Conan itself is installed per-project via uv in a venv that
+# manifests/tools/conan2toml/ owns - not globally - so the devcontainer
+# stays agnostic to conan version pinning.
+RUN pip install --no-cache-dir uv
+
+# Load mounted GitHub token (see devcontainer.json mounts) into GH_TOKEN for gh CLI.
+RUN printf '%s\n' \
+    '# Load GitHub token if mounted by the devcontainer.' \
+    'if [ -r /run/secrets/github_token ]; then' \
+    '    GH_TOKEN="$(tr -d "[:space:]" < /run/secrets/github_token)"' \
+    '    export GH_TOKEN' \
+    'fi' \
+    > /etc/profile.d/github-token.sh \
+    && chmod 0644 /etc/profile.d/github-token.sh
 
 # Set working directory
 WORKDIR /workspaces

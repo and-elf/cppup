@@ -4,6 +4,9 @@
         "dockerfile": "Dockerfile"
     },
     "features": {},
+    "mounts": [
+        "source=${localEnv:HOME}/.github_pat,target=/run/secrets/github_token,type=bind,readonly"
+    ],
     "customizations": {
         "vscode": {
             "settings": {
@@ -14,7 +17,9 @@
                 "matepek.vscode-catch2-test-adapter",
                 "vadimcn.vscode-lldb",
                 "ms-vscode.cmake-tools",
-                "twxs.cmake"
+                "twxs.cmake",
+                "github.vscode-pull-request-github",
+                "anthropic.claude-code"
             ],
             "unwantedRecommendations": [
                 "ms-vscode.cpptools",

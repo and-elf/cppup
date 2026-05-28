@@ -111,7 +111,7 @@ bool prompt_yes_no(const std::string& question)
 }
 
 InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool with_devcontainer,
-                                 bool with_docker, bool with_gitlab_ci)
+                                 bool with_docker, bool with_gitlab_ci, bool with_github_actions)
 {
   if (minimal)
   {
@@ -119,20 +119,23 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   }
   if (full)
   {
-    return InitOptions{.vscode       = Vscode::On,
-                       .devcontainer = Devcontainer::On,
-                       .docker       = Docker::On,
-                       .gitlab_ci    = GitlabCi::On};
+    return InitOptions{.vscode         = Vscode::On,
+                       .devcontainer   = Devcontainer::On,
+                       .docker         = Docker::On,
+                       .gitlab_ci      = GitlabCi::On,
+                       .github_actions = GithubActions::On};
   }
 
   InitOptions opts;
-  const bool  any_with_flag = with_vscode || with_devcontainer || with_docker || with_gitlab_ci;
+  const bool  any_with_flag =
+      with_vscode || with_devcontainer || with_docker || with_gitlab_ci || with_github_actions;
   if (any_with_flag)
   {
-    opts.vscode       = with_vscode ? Vscode::On : Vscode::Off;
-    opts.devcontainer = with_devcontainer ? Devcontainer::On : Devcontainer::Off;
-    opts.docker       = with_docker ? Docker::On : Docker::Off;
-    opts.gitlab_ci    = with_gitlab_ci ? GitlabCi::On : GitlabCi::Off;
+    opts.vscode         = with_vscode ? Vscode::On : Vscode::Off;
+    opts.devcontainer   = with_devcontainer ? Devcontainer::On : Devcontainer::Off;
+    opts.docker         = with_docker ? Docker::On : Docker::Off;
+    opts.gitlab_ci      = with_gitlab_ci ? GitlabCi::On : GitlabCi::Off;
+    opts.github_actions = with_github_actions ? GithubActions::On : GithubActions::Off;
     return opts;
   }
 
@@ -153,13 +156,17 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   {
     opts.devcontainer = Devcontainer::On;
   }
-  if (prompt_yes_no("Scaffold Dockerfile (debian:trixie-slim)?"))
+  if (prompt_yes_no("Scaffold Dockerfile (fedora:43)?"))
   {
     opts.docker = Docker::On;
   }
   if (prompt_yes_no("Scaffold .gitlab-ci.yml?"))
   {
     opts.gitlab_ci = GitlabCi::On;
+  }
+  if (prompt_yes_no("Scaffold .github/workflows/ci.yml?"))
+  {
+    opts.github_actions = GithubActions::On;
   }
   return opts;
 }
@@ -184,12 +191,13 @@ void registerInitCommand(const CommandRegistration& reg)
   {
     std::string name;
     std::string path;
-    bool        full              = false;
-    bool        minimal           = false;
-    bool        with_vscode       = false;
-    bool        with_devcontainer = false;
-    bool        with_docker       = false;
-    bool        with_gitlab_ci    = false;
+    bool        full                = false;
+    bool        minimal             = false;
+    bool        with_vscode         = false;
+    bool        with_devcontainer   = false;
+    bool        with_docker         = false;
+    bool        with_gitlab_ci      = false;
+    bool        with_github_actions = false;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -199,15 +207,16 @@ void registerInitCommand(const CommandRegistration& reg)
   cmd->add_option("--path", opts->path, "Virtual environment path");
   cmd->add_flag("--full", opts->full,
                 "Scaffold all optional templates (.vscode, .devcontainer, Dockerfile, "
-                ".gitlab-ci.yml)");
+                ".gitlab-ci.yml, .github/workflows/ci.yml)");
   cmd->add_flag("--minimal", opts->minimal, "Scaffold only the base layout; skip the TTY prompt");
   cmd->add_flag("--with-vscode", opts->with_vscode, "Scaffold .vscode/ (tasks/launch/settings)");
   cmd->add_flag("--with-devcontainer", opts->with_devcontainer,
                 "Scaffold .devcontainer/devcontainer.json");
-  cmd->add_flag("--with-docker", opts->with_docker,
-                "Scaffold Dockerfile (debian:trixie-slim base)");
+  cmd->add_flag("--with-docker", opts->with_docker, "Scaffold Dockerfile (fedora:43 base)");
   cmd->add_flag("--with-gitlab-ci", opts->with_gitlab_ci,
                 "Scaffold .gitlab-ci.yml (cppup build/test/format/tidy pipeline)");
+  cmd->add_flag("--with-github-actions", opts->with_github_actions,
+                "Scaffold .github/workflows/ci.yml (cppup build/test/format/tidy pipeline)");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -217,9 +226,9 @@ void registerInitCommand(const CommandRegistration& reg)
         {
           path_opt = opts->path;
         }
-        const auto init_opts =
-            resolve_init_options(opts->full, opts->minimal, opts->with_vscode,
-                                 opts->with_devcontainer, opts->with_docker, opts->with_gitlab_ci);
+        const auto init_opts = resolve_init_options(
+            opts->full, opts->minimal, opts->with_vscode, opts->with_devcontainer,
+            opts->with_docker, opts->with_gitlab_ci, opts->with_github_actions);
         result.set(handleExpectedResult(executeInit(opts->name, path_opt, init_opts, ctx), "Init",
                                         ErrorHandler::ErrorCode::FileNotFound));
       });

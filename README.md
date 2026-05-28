@@ -186,6 +186,7 @@ cppup init <name>                    Scaffold a new project.
     --full                              Include all optional templates
     --minimal                           Base layout only, no prompts
     --with-vscode / --with-devcontainer / --with-docker / --with-gitlab-ci
+        / --with-github-actions
                                         Per-template opt-in (skips the TTY prompt)
     --path <dir>                        Create at <dir> instead of <name>/
 
