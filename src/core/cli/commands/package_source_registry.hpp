@@ -10,6 +10,7 @@
 
 #include "../git_interface.hpp"
 #include "lockfile.hpp"
+#include "progress_sink.hpp"
 
 namespace cppup::cli
 {
@@ -35,10 +36,13 @@ class PackageSourceRegistry
   // state at `install_path` is now valid for `entry`; return `false` on
   // failure (callbacks should also log a diagnostic via
   // `context.logger`). `verbosity` carries the user's `--verbose`
-  // preference so providers that shell out can honour it.
-  using Provider =
-      std::function<bool(const lockfile::Entry& entry, const std::filesystem::path& install_path,
-                         const CommandContext& context, GitVerbosity verbosity)>;
+  // preference so providers that shell out can honour it. `sink` is the
+  // per-worker progress channel — providers SHOULD emit `on_phase` at
+  // each major step and `on_progress` whenever they have a usable
+  // bytes-done/bytes-total pair; calling nothing is allowed.
+  using Provider = std::function<bool(
+      const lockfile::Entry& entry, const std::filesystem::path& install_path,
+      const CommandContext& context, GitVerbosity verbosity, ProgressSink& sink)>;
 
   PackageSourceRegistry()                                        = default;
   PackageSourceRegistry(const PackageSourceRegistry&)            = delete;

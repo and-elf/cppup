@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
@@ -14,10 +15,12 @@
 
 #include "../../configuration/build_configuration.hpp"
 #include "../../configuration/types.hpp"
+#include "../../logger/logger.hpp"
 #include "../command_context.hpp"
 #include "../commands.hpp"
 #include "lockfile.hpp"
 #include "package_source_registry.hpp"
+#include "progress_sink.hpp"
 
 namespace fs = std::filesystem;
 using cppup::cli::CommandContext;
@@ -43,6 +46,27 @@ CommandContext make_ctx(const fs::path& root)
   ctx.logger      = std::make_unique<cppup::logger::SilentLogger>();
   return ctx;
 }
+
+// Captures every log message so progress tests can assert that
+// per-package phase events surfaced through the renderer's log mode.
+class RecordingLogger final : public cppup::logger::Logger
+{
+ public:
+  void log(cppup::logger::LogLevel /*level*/, std::string_view message) const override
+  {
+    const std::scoped_lock lock(mutex_);
+    messages_.emplace_back(message);
+  }
+  std::vector<std::string> snapshot() const
+  {
+    const std::scoped_lock lock(mutex_);
+    return messages_;
+  }
+
+ private:
+  mutable std::mutex               mutex_;
+  mutable std::vector<std::string> messages_;
+};
 
 Entry make_git_entry(std::string name, std::string url)
 {
@@ -741,6 +765,87 @@ TEST(PackageSync, JobsOptionCapsConcurrencyAtRequestedLimit)
   EXPECT_LE(git_raw->peak_in_flight.load(), 2) << "--jobs=2 must never exceed 2 concurrent clones";
 }
 
+// Fixture that forces the renderer into Log mode so per-package progress
+// events appear as logger lines our `RecordingLogger` can capture. TTY
+// mode would write ANSI sequences to stdout that we can't easily
+// intercept from gtest.
+class SyncProgressLogMode : public ::testing::Test
+{
+ protected:
+  void SetUp() override
+  {
+    setenv("CI", "1", 1);
+  }
+  void TearDown() override
+  {
+    unsetenv("CI");
+  }
+};
+
+TEST_F(SyncProgressLogMode, BuiltinGitFetchEmitsCloningPhase)
+{
+  auto           root       = make_tmp_root("sync_progress_git");
+  auto           logger     = std::make_unique<RecordingLogger>();
+  auto*          logger_raw = logger.get();
+  CommandContext ctx;
+  ctx.projectRoot = root;
+  ctx.logger      = std::move(logger);
+  ctx.git         = std::make_unique<FakeGit>();
+
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
+
+  const auto recorded = logger_raw->snapshot();
+  const bool found_phase =
+      std::ranges::any_of(recorded, [](const std::string& line) noexcept
+                          { return line.find("fmt: cloning") != std::string::npos; });
+  EXPECT_TRUE(found_phase) << "expected a log line containing 'fmt: cloning' from built-in "
+                              "git fetch's on_phase event";
+}
+
+TEST_F(SyncProgressLogMode, ProviderSinkPhaseSurfacesInLogger)
+{
+  constexpr std::string_view kKind = "test-only-progress-kind";
+
+  auto& registry = cppup::cli::global_package_source_registry();
+  registry.register_provider(
+      kKind,
+      [](const lockfile::Entry& /*entry*/, const fs::path& install_path,
+         const cppup::cli::CommandContext& /*ctx*/, cppup::cli::GitVerbosity /*verbosity*/,
+         cppup::cli::ProgressSink& sink)
+      {
+        sink.on_phase("verifying");
+        std::error_code error_code;
+        fs::create_directories(install_path, error_code);
+        return !error_code;
+      });
+
+  auto           root       = make_tmp_root("sync_progress_custom");
+  auto           logger     = std::make_unique<RecordingLogger>();
+  auto*          logger_raw = logger.get();
+  CommandContext ctx;
+  ctx.projectRoot = root;
+  ctx.logger      = std::move(logger);
+  ctx.git         = std::make_unique<FakeGit>();
+
+  Entry entry;
+  entry.name    = "myaddon";
+  entry.version = "0.1.0";
+  entry.source  = std::string(kKind);
+  write_lockfile(root, {entry});
+
+  const auto rc = cppup::cli::executePackageSync({}, ctx);
+  registry.unregister_provider(kKind);
+  ASSERT_TRUE(rc.has_value()) << rc.error_or("");
+
+  const auto recorded = logger_raw->snapshot();
+  const bool found_phase =
+      std::ranges::any_of(recorded, [](const std::string& line) noexcept
+                          { return line.find("myaddon: verifying") != std::string::npos; });
+  EXPECT_TRUE(found_phase)
+      << "expected provider's sink.on_phase('verifying') to reach the logger via the renderer";
+}
+
 // A custom source kind that isn't built-in must be routed through the
 // PackageSourceRegistry. Proves the dispatcher honours plugin-registered
 // providers so new source types can be added without editing
@@ -755,7 +860,7 @@ TEST(PackageSync, DispatchesCustomKindToRegisteredProvider)
       kCustomKind,
       [&invocations](const lockfile::Entry& entry, const fs::path& install_path,
                      const cppup::cli::CommandContext& /*ctx*/,
-                     cppup::cli::GitVerbosity /*verbosity*/)
+                     cppup::cli::GitVerbosity /*verbosity*/, cppup::cli::ProgressSink& /*sink*/)
       {
         ++invocations;
         std::error_code error_code;

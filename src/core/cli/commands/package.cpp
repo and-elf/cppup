@@ -20,6 +20,8 @@
 #include "install_paths.hpp"
 #include "lockfile.hpp"
 #include "package_source_registry.hpp"
+#include "progress_sink.hpp"
+#include "sync_progress.hpp"
 
 namespace cppup::cli
 {
@@ -252,12 +254,14 @@ std::expected<cppup::configuration::BuildConfiguration, std::string> load_projec
 // Materialize one lockfile entry into `.cppup/packages/<name>/`. Returns
 // true if the on-disk state is now valid for the entry; false if the fetch
 // failed. Idempotent: if the destination already has content we leave it
-// alone and report success.
+// alone and report success. `sink` receives phase/progress events;
+// callers that don't care can pass `null_progress_sink()`.
 bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path& install_path,
-                       const CommandContext& context, GitVerbosity verbosity = GitVerbosity::Quiet)
+                       const CommandContext& context, GitVerbosity verbosity, ProgressSink& sink)
 {
   if (std::filesystem::exists(install_path) && !std::filesystem::is_empty(install_path))
   {
+    sink.on_phase("up-to-date");
     return true;
   }
   // Built-in handlers come first so behavior for existing kinds is
@@ -273,6 +277,7 @@ bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path
     }
     const std::optional<std::string> branch =
         entry.git_branch.empty() ? std::nullopt : std::optional{entry.git_branch};
+    sink.on_phase("cloning");
     return fetchGitPackage(*context.git, entry.url, install_path, branch, verbosity);
   }
   if (entry.source == lockfile::kSourceDirectory)
@@ -282,11 +287,12 @@ bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path
       context.logger->warning("directory source missing path; cannot sync " + entry.name);
       return false;
     }
+    sink.on_phase("copying");
     return copyLocalPackage(entry.url, install_path);
   }
   if (auto provider = global_package_source_registry().find(entry.source))
   {
-    return (*provider)(entry, install_path, context, verbosity);
+    return (*provider)(entry, install_path, context, verbosity, sink);
   }
   if (entry.source == lockfile::kSourceUrl || entry.source == lockfile::kSourceTar ||
       entry.source == lockfile::kSourceZip || entry.source == lockfile::kSourceRegistry)
@@ -295,6 +301,7 @@ bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path
     // Keep the original empty-directory behavior so lockfiles that use them
     // (e.g. registry sources from `package add`) continue to sync until a
     // plugin provider is registered.
+    sink.on_phase("placeholder");
     std::error_code error_code;
     std::filesystem::create_directories(install_path, error_code);
     return !error_code;
@@ -669,7 +676,6 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
       {
         plan.needs_fetch = true;
         fetch_indices.push_back(i);
-        context.logger->info("Syncing package: " + entry.name);
       }
     }
 
@@ -679,6 +685,18 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
     std::vector<std::optional<std::string>> errors_by_index(parsed->size());
     if (!fetch_indices.empty())
     {
+      // Hand each in-flight job a per-worker `ProgressSink`. The
+      // renderer routes their phase/progress events to TTY bars or to
+      // log lines depending on the environment.
+      std::vector<std::string> fetch_names;
+      fetch_names.reserve(fetch_indices.size());
+      for (const auto idx : fetch_indices)
+      {
+        fetch_names.push_back((*parsed)[idx].name);
+      }
+      SyncProgressRenderer renderer(SyncProgressRenderer::detect_mode(), *context.logger,
+                                    std::move(fetch_names));
+
       unsigned hw = std::thread::hardware_concurrency();
       if (hw == 0)
       {
@@ -703,7 +721,11 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
           }
           const auto  idx   = fetch_indices[slot];
           const auto& entry = (*parsed)[idx];
-          if (!materialize_entry(entry, plans[idx].install_path, context, git_verbosity))
+          auto&       sink  = renderer.sink_for(slot);
+          const bool  ok =
+              materialize_entry(entry, plans[idx].install_path, context, git_verbosity, sink);
+          renderer.mark_done(slot, ok);
+          if (!ok)
           {
             errors_by_index[idx] = "Failed to fetch package: " + entry.name;
           }
@@ -724,6 +746,7 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
         }
         // jthread destructors join here.
       }
+      renderer.finish();
 
       // Surface the first failure in lockfile order so error messages stay
       // reproducible across runs regardless of worker scheduling.
