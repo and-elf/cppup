@@ -20,6 +20,7 @@
 
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
+#include "commands/ref_parser.hpp"
 #include "core/logger/console/console_logger.hpp"
 
 namespace cppup::cli
@@ -252,6 +253,85 @@ void registerLockCommand(const CommandRegistration& reg)
                                         ErrorHandler::ErrorCode::UnknownError));
       });
 }
+
+#ifndef CPPUP_SLIM
+// `cppup add <ref>` — shorthand for `cppup package add`. One positional
+// instead of a wall of flags: a git URL, `github:owner/repo[@rev]`
+// shorthand, a directory path, an http URL, or a bare name. The ref is
+// dispatched through `RefParserRegistry` so plugins can claim novel
+// shapes (e.g. `conan:fmt/11`) without editing this file.
+void registerAddCommand(const CommandRegistration& reg)
+{
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  struct AddOpts
+  {
+    std::string ref;
+    std::string name_override;
+    std::string build_system;
+    std::string subdirectory;
+    bool        user_scope = false;
+  };
+  auto  opts = std::make_shared<AddOpts>();
+  auto* cmd  = app.add_subcommand(
+      "add", "Install a package by ref (URL, github:owner/repo, ./path, or name)");
+  cmd->add_option(
+         "ref", opts->ref,
+         "Package ref: git URL, github:/gitlab: shorthand, directory path, http URL, or bare name")
+      ->required();
+  cmd->add_option("--name", opts->name_override, "Override the name inferred from the ref");
+  cmd->add_option("--build-system", opts->build_system,
+                  "Override the inferred build system (cppup|cmake|make|header-only)")
+      ->check(CLI::IsMember({"cppup", "cmake", "make", "header-only"}));
+  cmd->add_option("--subdirectory", opts->subdirectory,
+                  "Path inside the fetched repo/archive to treat as the package root");
+  cmd->add_flag_function(
+      "-u,--user", [opts](std::int64_t /*count*/) { opts->user_scope = true; },
+      "Install into the user data dir instead of .cppup/");
+  cmd->callback(
+      [opts, &ctx, &result]
+      {
+        auto parsed = global_ref_parser_registry().parse(opts->ref);
+        if (!parsed)
+        {
+          result.set(
+              handleExpectedResult(std::expected<int, std::string>{std::unexpected{parsed.error()}},
+                                   "Add", ErrorHandler::ErrorCode::UnknownError));
+          return;
+        }
+        PackageAddOptions add_opts;
+        add_opts.name = opts->name_override.empty() ? parsed->name : opts->name_override;
+        if (parsed->git_url)
+        {
+          add_opts.git = *parsed->git_url;
+        }
+        if (parsed->git_branch)
+        {
+          add_opts.branch = *parsed->git_branch;
+        }
+        if (parsed->directory_path)
+        {
+          add_opts.dir = *parsed->directory_path;
+        }
+        if (parsed->http_url)
+        {
+          add_opts.url = *parsed->http_url;
+        }
+        if (!opts->build_system.empty())
+        {
+          add_opts.build_system = opts->build_system;
+        }
+        if (!opts->subdirectory.empty())
+        {
+          add_opts.subdirectory = opts->subdirectory;
+        }
+        add_opts.scope = opts->user_scope ? InstallScope::User : InstallScope::Project;
+        result.set(handleExpectedResult(executePackageAdd(add_opts, ctx), "Add",
+                                        ErrorHandler::ErrorCode::UnknownError));
+      });
+}
+#endif
 
 void registerSyncCommand(const CommandRegistration& reg)
 {
@@ -802,6 +882,7 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerBuildCommand(reg);
     registerSyncCommand(reg);
 #ifndef CPPUP_SLIM
+    registerAddCommand(reg);
     registerLockCommand(reg);
     registerInitCommand(reg);
     registerCompileCommandsCommand(reg);

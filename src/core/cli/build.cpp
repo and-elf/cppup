@@ -21,6 +21,7 @@ extern "C" BuildConfiguration configure()
                      "commands/package.cpp",
                      "commands/package_source_registry.cpp",
                      "commands/progress_sink.cpp",
+                     "commands/ref_parser.cpp",
                      "commands/sync_progress.cpp",
                      "commands/lockfile.cpp",
                      "commands/module.cpp",
@@ -53,6 +54,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_init", "commands/test_init.cpp");
   add_test("test_update", "commands/test_update.cpp");
   add_test("test_lockfile", "commands/test_lockfile.cpp");
+  add_test("test_ref_parser", "commands/test_ref_parser.cpp");
   add_test("test_install_paths", "commands/test_install_paths.cpp");
   add_test("test_package_user_scope", "commands/test_package_user_scope.cpp");
   add_test("test_toolchain_user_scope", "commands/test_toolchain_user_scope.cpp");

@@ -132,6 +132,24 @@ Add dependencies through the CLI or by populating `config.packages` directly. cp
 
 Backends — cppup-native (`build.cpp`), CMake (`CMakeLists.txt`), Make (`Makefile` / `GNUmakefile`), header-only — are inferred from the package's directory contents. If more than one marker is present cppup errors out and you pass `--build-system {cppup,cmake,make,header-only}` to disambiguate.
 
+**Short form** — one positional, ref shape inferred:
+
+```bash
+cppup add github:fmtlib/fmt@11.0.2          # github shorthand
+cppup add gitlab:group/proj@v1              # gitlab shorthand
+cppup add https://github.com/fmtlib/fmt.git # explicit git URL, optional @<ref> suffix
+cppup add git@github.com:fmtlib/fmt.git     # ssh-style git URL
+cppup add ./vendor/mylib                    # local directory
+cppup add fmt                                # bare name → registry placeholder
+cppup add https://example.com/foo.tar.gz    # archive URL (placeholder fetch)
+cppup add github:foo/bar --name custom_name # override the inferred name
+cppup add ./mylib --user                    # install into $XDG_DATA_HOME/cppup/
+```
+
+`cppup add` dispatches the ref through `RefParserRegistry`; plugins can register additional parsers for ref shapes they own (`conan:fmt/11`, `s3://...`, etc.).
+
+**Long form** — explicit fields, useful for scripting:
+
 ```bash
 cppup package add --name fmt    --git https://github.com/fmtlib/fmt.git --branch 11.0.2
 cppup package add --name mylib  --dir ../mylib                            # local directory
@@ -220,6 +238,14 @@ cppup tidy [files...]                Run clang-tidy (needs compile_commands.json
 
 cppup lock                           Alias of `cppup package lock`.
 cppup sync                           Alias of `cppup package sync`.
+
+cppup add <ref>                      Short form: install a package by ref.
+    <ref>                                git URL, github:/gitlab: shorthand,
+                                         directory path, http URL, or bare name
+    --name <override>                    Override the inferred name
+    --build-system <cppup|cmake|make|header-only>
+    --subdirectory <path>                Subpath within fetched repo
+    -u, --user                           Install into user data dir
 
 cppup package add <opts>             Install a package.
     --name <name>                       Required
