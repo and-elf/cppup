@@ -213,11 +213,18 @@ struct PackageAddOptions
 [[nodiscard]] std::expected<int, std::string> executePackageLock(
     const CommandContext& context) noexcept;
 
+// `cppup sync --verbose` streams the underlying fetch tool's output (e.g.
+// `git clone` progress) instead of capturing it. Default is quiet.
+struct PackageSyncOptions
+{
+  Verbose verbose = Verbose::Off;
+};
+
 // `cppup package sync` — reconcile `.cppup/packages/` and the local package
 // registry with `cppup.lock`. Idempotent: running twice on a project that
 // is already in-sync produces no changes.
 [[nodiscard]] std::expected<int, std::string> executePackageSync(
-    const CommandContext& context) noexcept;
+    const PackageSyncOptions& options, const CommandContext& context) noexcept;
 
 // Walk the project's `cppup.lock` and return the names of any entries
 // whose `.cppup/packages/<name>/` directory does not exist or is empty.

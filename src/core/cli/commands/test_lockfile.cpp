@@ -483,12 +483,15 @@ namespace
 class FakeGit final : public cppup::cli::GitInterface
 {
  public:
-  std::size_t clones = 0;
+  std::size_t              clones         = 0;
+  cppup::cli::GitVerbosity last_verbosity = cppup::cli::GitVerbosity::Quiet;
 
   bool clone_shallow(const std::string& url, const fs::path& destination,
-                     const std::optional<std::string>& /*branch*/) override
+                     const std::optional<std::string>& /*branch*/,
+                     cppup::cli::GitVerbosity verbosity) override
   {
     ++clones;
+    last_verbosity = verbosity;
     std::error_code error_code;
     fs::create_directories(destination, error_code);
     std::ofstream marker(destination / "FETCHED");
@@ -516,11 +519,42 @@ TEST(PackageSync, FetchesMissingPackageAndRegistersMetadata)
 
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
-  const auto rc = cppup::cli::executePackageSync(ctx);
+  const auto rc = cppup::cli::executePackageSync({}, ctx);
   ASSERT_TRUE(rc.has_value()) << rc.error_or("");
   EXPECT_EQ(git_raw->clones, 1U);
   EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "fmt" / "FETCHED"));
   EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "registry.txt"));
+}
+
+TEST(PackageSync, DefaultsToQuietGitVerbosity)
+{
+  auto  root     = make_tmp_root("sync_quiet_default");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
+  EXPECT_EQ(git_raw->last_verbosity, cppup::cli::GitVerbosity::Quiet)
+      << "sync defaults must hide the fetch tool's chatter from users";
+}
+
+TEST(PackageSync, VerboseOptionPropagatesToGitInterface)
+{
+  auto  root     = make_tmp_root("sync_verbose");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+
+  const cppup::cli::PackageSyncOptions opts{.verbose = cppup::configuration::Verbose::On};
+  ASSERT_TRUE(cppup::cli::executePackageSync(opts, ctx).has_value());
+  EXPECT_EQ(git_raw->last_verbosity, cppup::cli::GitVerbosity::Verbose)
+      << "--verbose must reach the git interface so users can debug fetches";
 }
 
 TEST(PackageSync, IsIdempotentAcrossRepeatedRuns)
@@ -533,10 +567,10 @@ TEST(PackageSync, IsIdempotentAcrossRepeatedRuns)
 
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
-  ASSERT_TRUE(cppup::cli::executePackageSync(ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
   const auto fetches_after_first = git_raw->clones;
 
-  ASSERT_TRUE(cppup::cli::executePackageSync(ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
   EXPECT_EQ(git_raw->clones, fetches_after_first) << "sync must not refetch existing packages";
 }
 
@@ -548,12 +582,12 @@ TEST(PackageSync, RestoresDeletedPackageDirectory)
 
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
-  ASSERT_TRUE(cppup::cli::executePackageSync(ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
   const auto install_path = root / ".cppup" / "packages" / "fmt";
   ASSERT_TRUE(fs::exists(install_path));
   fs::remove_all(install_path);
 
-  ASSERT_TRUE(cppup::cli::executePackageSync(ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
   EXPECT_TRUE(fs::exists(install_path / "FETCHED")) << "sync should refetch a deleted package";
 }
 
@@ -570,7 +604,7 @@ TEST(PackageSync, RepairsMissingRegistryMetadata)
 
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
-  ASSERT_TRUE(cppup::cli::executePackageSync(ctx).has_value());
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
   std::ifstream     ifs(root / ".cppup" / "packages" / "registry.txt");
   std::stringstream buf;
   buf << ifs.rdbuf();
@@ -582,7 +616,7 @@ TEST(PackageSync, FailsWithoutLockfile)
 {
   auto       root = make_tmp_root("sync_missing_lock");
   const auto ctx  = make_ctx(root);
-  const auto rc   = cppup::cli::executePackageSync(ctx);
+  const auto rc   = cppup::cli::executePackageSync({}, ctx);
   EXPECT_FALSE(rc.has_value());
 }
 

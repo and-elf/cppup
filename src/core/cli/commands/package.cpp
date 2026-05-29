@@ -169,9 +169,10 @@ std::string describePackageSource(const PackageAddOptions& options)
 }
 
 bool fetchGitPackage(GitInterface& git, const std::string& url, const std::filesystem::path& dest,
-                     const std::optional<std::string>& branch)
+                     const std::optional<std::string>& branch,
+                     GitVerbosity                      verbosity = GitVerbosity::Quiet)
 {
-  return git.clone_shallow(url, dest, branch);
+  return git.clone_shallow(url, dest, branch, verbosity);
 }
 
 bool copyLocalPackage(const std::filesystem::path& src, const std::filesystem::path& dest)
@@ -248,7 +249,7 @@ std::expected<cppup::configuration::BuildConfiguration, std::string> load_projec
 // failed. Idempotent: if the destination already has content we leave it
 // alone and report success.
 bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path& install_path,
-                       const CommandContext& context)
+                       const CommandContext& context, GitVerbosity verbosity = GitVerbosity::Quiet)
 {
   if (std::filesystem::exists(install_path) && !std::filesystem::is_empty(install_path))
   {
@@ -265,7 +266,7 @@ bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path
       }
       const std::optional<std::string> branch =
           entry.git_branch.empty() ? std::nullopt : std::optional{entry.git_branch};
-      return fetchGitPackage(*context.git, entry.url, install_path, branch);
+      return fetchGitPackage(*context.git, entry.url, install_path, branch, verbosity);
     }
     case lockfile::SourceKind::Directory:
     {
@@ -588,7 +589,8 @@ std::expected<int, std::string> executePackageLock(const CommandContext& context
   }
 }
 
-std::expected<int, std::string> executePackageSync(const CommandContext& context) noexcept
+std::expected<int, std::string> executePackageSync(const PackageSyncOptions& options,
+                                                   const CommandContext&     context) noexcept
 {
   try
   {
@@ -619,6 +621,9 @@ std::expected<int, std::string> executePackageSync(const CommandContext& context
           records, [&](const PackageRecord& rec) noexcept { return rec.name == name; });
     };
 
+    const GitVerbosity git_verbosity =
+        options.verbose == Verbose::On ? GitVerbosity::Verbose : GitVerbosity::Quiet;
+
     std::size_t fetched{};
     std::size_t repaired_metadata{};
     std::size_t unchanged{};
@@ -640,7 +645,7 @@ std::expected<int, std::string> executePackageSync(const CommandContext& context
       if (!dir_present)
       {
         context.logger->info("Syncing package: " + entry.name);
-        if (!materialize_entry(entry, install_path, context))
+        if (!materialize_entry(entry, install_path, context, git_verbosity))
         {
           return std::unexpected("Failed to fetch package: " + entry.name);
         }
