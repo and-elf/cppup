@@ -53,6 +53,7 @@ src/core/cli/commands/build.cpp
 src/core/cli/commands/update.cpp
 src/core/cli/commands/lockfile.cpp
 src/core/cli/commands/package.cpp
+src/core/cli/commands/package_source_plugin_bridge.cpp
 src/core/cli/commands/package_source_registry.cpp
 src/core/cli/commands/progress_sink.cpp
 src/core/cli/commands/ref_parser.cpp

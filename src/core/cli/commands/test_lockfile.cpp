@@ -16,9 +16,14 @@
 #include "../../configuration/build_configuration.hpp"
 #include "../../configuration/types.hpp"
 #include "../../logger/logger.hpp"
+#include "../../package/archive/archive_plugin.hpp"
+#include "../../package/http/http_plugin.hpp"
+#include "../../package/registry/registry_plugin.hpp"
+#include "../../plugin/static_registry.hpp"
 #include "../command_context.hpp"
 #include "../commands.hpp"
 #include "lockfile.hpp"
+#include "package_source_plugin_bridge.hpp"
 #include "package_source_registry.hpp"
 #include "progress_sink.hpp"
 
@@ -915,6 +920,48 @@ TEST(PackageSync, ReportsFirstFailingPackageInLockfileOrder)
   ASSERT_FALSE(rc.has_value());
   EXPECT_EQ(rc.error(), "Failed to fetch package: b")
       << "expected first-in-lockfile-order failure ('b'), got: " << rc.error();
+}
+
+// Once `register_package_source_plugin_bridges()` runs after the C-ABI
+// plugins have registered themselves, the in-process
+// `PackageSourceRegistry` must carry one provider per known kind. This
+// is what makes `cppup sync` actually call into the tar/zip/http/registry
+// plugins instead of falling through to the empty-dir placeholder.
+class PackageSourcePluginBridge : public ::testing::Test
+{
+ protected:
+  void SetUp() override
+  {
+    // Start from a clean registry so we don't trip the
+    // duplicate-name guard when other tests run in this binary.
+    cppup::plugin::global_registry().clear();
+    cppup::package::archive::register_static_plugin();
+    cppup::package::http::register_static_plugin();
+    cppup::package::registry::register_static_plugin();
+  }
+  void TearDown() override
+  {
+    auto& provider_registry = cppup::cli::global_package_source_registry();
+    for (const auto* kind : {"tar", "zip", "http", "url", "registry"})
+    {
+      provider_registry.unregister_provider(kind);
+    }
+    cppup::plugin::global_registry().clear();
+  }
+};
+
+TEST_F(PackageSourcePluginBridge, RegistersProvidersForKnownKinds)
+{
+  cppup::cli::register_package_source_plugin_bridges();
+
+  auto& provider_registry = cppup::cli::global_package_source_registry();
+  EXPECT_TRUE(provider_registry.find("tar").has_value()) << "archive plugin should bind 'tar'";
+  EXPECT_TRUE(provider_registry.find("zip").has_value()) << "archive plugin should bind 'zip'";
+  EXPECT_TRUE(provider_registry.find("registry").has_value())
+      << "registry plugin should bind 'registry'";
+  EXPECT_TRUE(provider_registry.find("http").has_value()) << "http plugin should bind 'http'";
+  EXPECT_TRUE(provider_registry.find("url").has_value())
+      << "http plugin should also bind the 'url' alias used in cppup.lock";
 }
 
 TEST(RegistrySet, RejectsEmptyLocation)

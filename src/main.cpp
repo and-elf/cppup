@@ -13,6 +13,7 @@
 #include "core/buildsystems/cmake/cmake_plugin.hpp"
 #include "core/buildsystems/header_only/header_only_plugin.hpp"
 #include "core/buildsystems/make/make_plugin.hpp"
+#include "core/cli/commands/package_source_plugin_bridge.hpp"
 #include "core/package/archive/archive_plugin.hpp"
 #include "core/package/directory/directory_plugin.hpp"
 #include "core/package/git/git_plugin.hpp"
@@ -39,6 +40,10 @@ int main(int argc, char* argv[])
     cppup::buildsystems::make::register_static_plugin();
     cppup::buildsystems::header_only::register_static_plugin();
     cppup::plugin::register_builtin_test_frameworks();
+    // Bridge the C-ABI package-source plugins into the in-process
+    // PackageSourceRegistry so `cppup sync` actually dispatches to
+    // them instead of falling back to the empty-dir placeholder.
+    cppup::cli::register_package_source_plugin_bridges();
 #endif
 
     // Create command context

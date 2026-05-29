@@ -19,6 +19,7 @@ extern "C" BuildConfiguration configure()
                      "commands/tidy.cpp",
                      "commands/source_selection.cpp",
                      "commands/package.cpp",
+                     "commands/package_source_plugin_bridge.cpp",
                      "commands/package_source_registry.cpp",
                      "commands/progress_sink.cpp",
                      "commands/ref_parser.cpp",
