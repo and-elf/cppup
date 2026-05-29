@@ -229,9 +229,12 @@ struct PackageAddOptions
 
 // `cppup sync --verbose` streams the underlying fetch tool's output (e.g.
 // `git clone` progress) instead of capturing it. Default is quiet.
+// `jobs` caps the number of concurrent fetches; 0 means "auto" (the
+// implementation picks a sensible default from hardware_concurrency).
 struct PackageSyncOptions
 {
-  Verbose verbose = Verbose::Off;
+  Verbose  verbose = Verbose::Off;
+  unsigned jobs    = 0;
 };
 
 // `cppup package sync` — reconcile `.cppup/packages/` and the local package

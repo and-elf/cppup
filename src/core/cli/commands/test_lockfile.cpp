@@ -1,11 +1,16 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "../../configuration/build_configuration.hpp"
 #include "../../configuration/types.hpp"
@@ -480,18 +485,57 @@ TEST(LockfileFromConfiguration, FrameworksWithPluginButNoDefaultPackageAreSkippe
 namespace
 {
 
+// Thread-safe FakeGit. The atomics let parallel-sync tests track concurrent
+// entry into clone_shallow without TSan complaints; `hold` synthesizes a
+// slow fetch so overlap is observable; `fail_substrings` lets a test mark a
+// specific entry as a fetch failure to exercise error-ordering guarantees.
 class FakeGit final : public cppup::cli::GitInterface
 {
  public:
-  std::size_t              clones         = 0;
-  cppup::cli::GitVerbosity last_verbosity = cppup::cli::GitVerbosity::Quiet;
+  std::atomic<std::size_t>              clones{0};
+  std::atomic<cppup::cli::GitVerbosity> last_verbosity{cppup::cli::GitVerbosity::Quiet};
+
+  std::atomic<int>          in_flight{0};
+  std::atomic<int>          peak_in_flight{0};
+  std::chrono::milliseconds hold{0};
+
+  // Read-only after setup, so no mutex needed in clone_shallow.
+  std::vector<std::string> fail_substrings;
 
   bool clone_shallow(const std::string& url, const fs::path& destination,
                      const std::optional<std::string>& /*branch*/,
                      cppup::cli::GitVerbosity verbosity) override
   {
-    ++clones;
-    last_verbosity = verbosity;
+    clones.fetch_add(1);
+    last_verbosity.store(verbosity);
+
+    const int now  = in_flight.fetch_add(1) + 1;
+    int       prev = peak_in_flight.load();
+    while (now > prev && !peak_in_flight.compare_exchange_weak(prev, now))
+    {
+    }
+
+    if (hold.count() > 0)
+    {
+      std::this_thread::sleep_for(hold);
+    }
+
+    bool should_fail = false;
+    for (const auto& needle : fail_substrings)
+    {
+      if (url.find(needle) != std::string::npos)
+      {
+        should_fail = true;
+        break;
+      }
+    }
+
+    in_flight.fetch_sub(1);
+    if (should_fail)
+    {
+      return false;
+    }
+
     std::error_code error_code;
     fs::create_directories(destination, error_code);
     std::ofstream marker(destination / "FETCHED");
@@ -521,7 +565,7 @@ TEST(PackageSync, FetchesMissingPackageAndRegistersMetadata)
 
   const auto rc = cppup::cli::executePackageSync({}, ctx);
   ASSERT_TRUE(rc.has_value()) << rc.error_or("");
-  EXPECT_EQ(git_raw->clones, 1U);
+  EXPECT_EQ(git_raw->clones.load(), 1U);
   EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "fmt" / "FETCHED"));
   EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "registry.txt"));
 }
@@ -537,7 +581,7 @@ TEST(PackageSync, DefaultsToQuietGitVerbosity)
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
   ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
-  EXPECT_EQ(git_raw->last_verbosity, cppup::cli::GitVerbosity::Quiet)
+  EXPECT_EQ(git_raw->last_verbosity.load(), cppup::cli::GitVerbosity::Quiet)
       << "sync defaults must hide the fetch tool's chatter from users";
 }
 
@@ -553,7 +597,7 @@ TEST(PackageSync, VerboseOptionPropagatesToGitInterface)
 
   const cppup::cli::PackageSyncOptions opts{.verbose = cppup::configuration::Verbose::On};
   ASSERT_TRUE(cppup::cli::executePackageSync(opts, ctx).has_value());
-  EXPECT_EQ(git_raw->last_verbosity, cppup::cli::GitVerbosity::Verbose)
+  EXPECT_EQ(git_raw->last_verbosity.load(), cppup::cli::GitVerbosity::Verbose)
       << "--verbose must reach the git interface so users can debug fetches";
 }
 
@@ -568,10 +612,11 @@ TEST(PackageSync, IsIdempotentAcrossRepeatedRuns)
   write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
 
   ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
-  const auto fetches_after_first = git_raw->clones;
+  const auto fetches_after_first = git_raw->clones.load();
 
   ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
-  EXPECT_EQ(git_raw->clones, fetches_after_first) << "sync must not refetch existing packages";
+  EXPECT_EQ(git_raw->clones.load(), fetches_after_first)
+      << "sync must not refetch existing packages";
 }
 
 TEST(PackageSync, RestoresDeletedPackageDirectory)
@@ -618,6 +663,111 @@ TEST(PackageSync, FailsWithoutLockfile)
   const auto ctx  = make_ctx(root);
   const auto rc   = cppup::cli::executePackageSync({}, ctx);
   EXPECT_FALSE(rc.has_value());
+}
+
+// With multiple lockfile entries to fetch and a slow fake fetcher, sync should
+// overlap clones so the wall-clock cost is the slowest single fetch, not the
+// sum. We assert peak in-flight >= 2 instead of a wall-clock bound to keep
+// the check robust against scheduler hiccups in CI.
+TEST(PackageSync, ParallelizesFetchesAcrossLockfileEntries)
+{
+  auto root      = make_tmp_root("sync_parallel");
+  auto ctx       = make_ctx(root);
+  auto fake_git  = std::make_unique<FakeGit>();
+  fake_git->hold = std::chrono::milliseconds(75);
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {
+                           make_git_entry("a", "https://example.com/a.git"),
+                           make_git_entry("b", "https://example.com/b.git"),
+                           make_git_entry("c", "https://example.com/c.git"),
+                           make_git_entry("d", "https://example.com/d.git"),
+                       });
+
+  ASSERT_TRUE(cppup::cli::executePackageSync({}, ctx).has_value());
+  EXPECT_GE(git_raw->peak_in_flight.load(), 2)
+      << "sync must overlap fetches: default cap should allow at least 2 concurrent clones";
+  EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "a" / "FETCHED"));
+  EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "b" / "FETCHED"));
+  EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "c" / "FETCHED"));
+  EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "d" / "FETCHED"));
+}
+
+// Setting --jobs=1 forces serial fetching for users who want deterministic
+// output or are constrained on disk / network bandwidth.
+TEST(PackageSync, JobsOptionOneSerializesFetches)
+{
+  auto root      = make_tmp_root("sync_jobs_one");
+  auto ctx       = make_ctx(root);
+  auto fake_git  = std::make_unique<FakeGit>();
+  fake_git->hold = std::chrono::milliseconds(10);
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {
+                           make_git_entry("a", "https://example.com/a.git"),
+                           make_git_entry("b", "https://example.com/b.git"),
+                           make_git_entry("c", "https://example.com/c.git"),
+                           make_git_entry("d", "https://example.com/d.git"),
+                       });
+
+  const cppup::cli::PackageSyncOptions opts{.verbose = cppup::configuration::Verbose::Off,
+                                            .jobs    = 1};
+  ASSERT_TRUE(cppup::cli::executePackageSync(opts, ctx).has_value());
+  EXPECT_EQ(git_raw->peak_in_flight.load(), 1) << "--jobs=1 must serialize fetches";
+}
+
+// --jobs=N must be an upper bound on concurrency, not just a hint.
+TEST(PackageSync, JobsOptionCapsConcurrencyAtRequestedLimit)
+{
+  auto root      = make_tmp_root("sync_jobs_two");
+  auto ctx       = make_ctx(root);
+  auto fake_git  = std::make_unique<FakeGit>();
+  fake_git->hold = std::chrono::milliseconds(50);
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {
+                           make_git_entry("a", "https://example.com/a.git"),
+                           make_git_entry("b", "https://example.com/b.git"),
+                           make_git_entry("c", "https://example.com/c.git"),
+                           make_git_entry("d", "https://example.com/d.git"),
+                       });
+
+  const cppup::cli::PackageSyncOptions opts{.verbose = cppup::configuration::Verbose::Off,
+                                            .jobs    = 2};
+  ASSERT_TRUE(cppup::cli::executePackageSync(opts, ctx).has_value());
+  EXPECT_LE(git_raw->peak_in_flight.load(), 2) << "--jobs=2 must never exceed 2 concurrent clones";
+}
+
+// When several fetches fail in parallel, the surfaced error must always name
+// the first failure in lockfile order — not whichever worker happened to
+// finish first. This keeps error messages reproducible across runs.
+// Note: `lockfile::serialize` sorts entries by name alphabetically, so the
+// names below double as the on-disk order. Names "b" and "d" fail; "b"
+// must surface.
+TEST(PackageSync, ReportsFirstFailingPackageInLockfileOrder)
+{
+  auto fake_git             = std::make_unique<FakeGit>();
+  fake_git->fail_substrings = {"/b.git", "/d.git"};
+  fake_git->hold            = std::chrono::milliseconds(10);
+
+  auto root = make_tmp_root("sync_first_error");
+  auto ctx  = make_ctx(root);
+  ctx.git   = std::move(fake_git);
+
+  write_lockfile(root, {
+                           make_git_entry("a", "https://example.com/a.git"),
+                           make_git_entry("b", "https://example.com/b.git"),
+                           make_git_entry("c", "https://example.com/c.git"),
+                           make_git_entry("d", "https://example.com/d.git"),
+                       });
+
+  const auto rc = cppup::cli::executePackageSync({}, ctx);
+  ASSERT_FALSE(rc.has_value());
+  EXPECT_EQ(rc.error(), "Failed to fetch package: b")
+      << "expected first-in-lockfile-order failure ('b'), got: " << rc.error();
 }
 
 TEST(RegistrySet, RejectsEmptyLocation)

@@ -149,7 +149,7 @@ cppup package sync                    # alias: cppup sync
 `cppup.lock` is a small line-based file at the project root that pins everything needed to reproduce the build. It captures the closure of `config.packages` (with transitive `dependencies` walked from each `PackageInfo`) plus the active selection (`selected_toolchain`, `selected_profile`, `selected_registry`). Commit it.
 
 - `cppup lock` regenerates the package section from `build.cpp` (deterministic byte output).
-- `cppup sync` materializes `.cppup/packages/<name>/` from the lockfile; idempotent.
+- `cppup sync` materializes `.cppup/packages/<name>/` from the lockfile; idempotent. Fetches run in parallel up to `--jobs N` (default: hardware_concurrency).
 - `cppup build` auto-runs sync when `cppup.lock` is present.
 - `cppup toolchain select`, `cppup profile select`, `cppup registry set` only touch the selection keys; package entries are preserved.
 
@@ -236,6 +236,8 @@ cppup package list                   List installed packages (project + user, ta
 cppup package remove <name>          Remove a package (searches both scopes).
 cppup package lock                   Regenerate cppup.lock from build.cpp.
 cppup package sync                   Materialize .cppup/packages/ from cppup.lock.
+    -j, --jobs <N>                      Parallel fetches (0 = auto / hardware_concurrency)
+    -V, --verbose                       Stream the underlying fetch tool's output
 
 cppup toolchain add <opts>           Install a toolchain.
     -u, --user                          User-scope install

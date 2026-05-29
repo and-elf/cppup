@@ -1,10 +1,14 @@
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../../configuration/compiler.hpp"
@@ -624,38 +628,121 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
     const GitVerbosity git_verbosity =
         options.verbose == Verbose::On ? GitVerbosity::Verbose : GitVerbosity::Quiet;
 
-    std::size_t fetched{};
-    std::size_t repaired_metadata{};
-    std::size_t unchanged{};
-
-    for (const auto& entry : *parsed)
+    // Phase 1: classify every lockfile entry from a snapshot of on-disk state.
+    // We do this serially so the user-visible "Syncing package: <name>" lines
+    // come out in lockfile order, and so the fetch worker pool sees a stable
+    // job list.
+    struct EntryPlan
     {
-      const auto install_path = registry.packages_dir() / entry.name;
-      const bool dir_present =
-          std::filesystem::exists(install_path) && !std::filesystem::is_empty(install_path);
-      const auto record_it        = lookup(entry.name);
-      const bool metadata_present = record_it != records.end();
+      std::filesystem::path install_path;
+      bool                  needs_fetch{false};
+      bool                  needs_metadata_reconcile{false};
+      bool                  had_metadata_at_start{false};
+    };
+    std::vector<EntryPlan>   plans(parsed->size());
+    std::vector<std::size_t> fetch_indices;
+    std::size_t              unchanged{};
 
-      if (dir_present && metadata_present)
+    for (std::size_t i = 0; i < parsed->size(); ++i)
+    {
+      const auto& entry      = (*parsed)[i];
+      auto&       plan       = plans[i];
+      plan.install_path      = registry.packages_dir() / entry.name;
+      const bool dir_present = std::filesystem::exists(plan.install_path) &&
+                               !std::filesystem::is_empty(plan.install_path);
+      plan.had_metadata_at_start = (lookup(entry.name) != records.end());
+
+      if (dir_present && plan.had_metadata_at_start)
       {
         ++unchanged;
         continue;
       }
-
+      plan.needs_metadata_reconcile = true;
       if (!dir_present)
       {
+        plan.needs_fetch = true;
+        fetch_indices.push_back(i);
         context.logger->info("Syncing package: " + entry.name);
-        if (!materialize_entry(entry, install_path, context, git_verbosity))
-        {
-          return std::unexpected("Failed to fetch package: " + entry.name);
-        }
-        ++fetched;
+      }
+    }
+
+    // Phase 2: fan fetches out across a worker pool. Cap by the user's
+    // --jobs setting (0 = hardware_concurrency), then by the actual job
+    // count, then by 1 as a floor for hosts that report 0 cores.
+    std::vector<std::optional<std::string>> errors_by_index(parsed->size());
+    if (!fetch_indices.empty())
+    {
+      unsigned hw = std::thread::hardware_concurrency();
+      if (hw == 0)
+      {
+        hw = 4;
+      }
+      unsigned cap = options.jobs > 0 ? options.jobs : hw;
+      cap          = std::min<unsigned>(cap, static_cast<unsigned>(fetch_indices.size()));
+      if (cap == 0)
+      {
+        cap = 1;
       }
 
-      // Reconcile the local registry record. We treat the lockfile as
-      // truth: name/version/source/build_system come from there, and the
-      // installed_at timestamp is reset on repair so users can see when
-      // the local copy was last touched.
+      std::atomic<std::size_t> next{0};
+      const auto               worker = [&]
+      {
+        for (;;)
+        {
+          const auto slot = next.fetch_add(1, std::memory_order_relaxed);
+          if (slot >= fetch_indices.size())
+          {
+            return;
+          }
+          const auto  idx   = fetch_indices[slot];
+          const auto& entry = (*parsed)[idx];
+          if (!materialize_entry(entry, plans[idx].install_path, context, git_verbosity))
+          {
+            errors_by_index[idx] = "Failed to fetch package: " + entry.name;
+          }
+        }
+      };
+
+      if (cap == 1)
+      {
+        worker();
+      }
+      else
+      {
+        std::vector<std::jthread> workers;
+        workers.reserve(cap);
+        for (unsigned t = 0; t < cap; ++t)
+        {
+          workers.emplace_back(worker);
+        }
+        // jthread destructors join here.
+      }
+
+      // Surface the first failure in lockfile order so error messages stay
+      // reproducible across runs regardless of worker scheduling.
+      for (const auto& maybe_err : errors_by_index)
+      {
+        if (maybe_err)
+        {
+          return std::unexpected(*maybe_err);
+        }
+      }
+    }
+
+    // Phase 3: reconcile registry metadata in lockfile order. Single-threaded
+    // because `records` is a plain vector and `lookup` walks it linearly.
+    std::size_t fetched = fetch_indices.size();
+    std::size_t repaired_metadata{};
+    for (std::size_t i = 0; i < parsed->size(); ++i)
+    {
+      if (!plans[i].needs_metadata_reconcile)
+      {
+        continue;
+      }
+      const auto& entry = (*parsed)[i];
+      // We treat the lockfile as truth: name/version/source/build_system come
+      // from there, and installed_at is reset on repair so users can see
+      // when the local copy was last touched.
       PackageRecord record;
       record.name    = entry.name;
       record.version = entry.version.empty() ? "latest" : entry.version;
@@ -667,15 +754,16 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
       record.build_system = entry.build_system;
       record.installed_at = now_epoch();
 
-      if (metadata_present)
+      if (plans[i].had_metadata_at_start)
       {
-        *record_it = std::move(record);
-        ++repaired_metadata;
+        if (auto it = lookup(entry.name); it != records.end())
+        {
+          *it = std::move(record);
+          ++repaired_metadata;
+          continue;
+        }
       }
-      else
-      {
-        records.push_back(std::move(record));
-      }
+      records.push_back(std::move(record));
     }
 
     if (!registry.save(records))

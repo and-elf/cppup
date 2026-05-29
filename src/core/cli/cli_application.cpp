@@ -255,17 +255,25 @@ void registerLockCommand(const CommandRegistration& reg)
 
 void registerSyncCommand(const CommandRegistration& reg)
 {
-  auto& app     = *reg.app;
-  auto& ctx     = *reg.ctx;
-  auto& result  = *reg.result;
-  auto  verbose = std::make_shared<bool>(false);
-  auto* cmd     = app.add_subcommand("sync", "Reconcile local package state with cppup.lock");
-  cmd->add_flag("--verbose,-V", *verbose,
+  auto& app    = *reg.app;
+  auto& ctx    = *reg.ctx;
+  auto& result = *reg.result;
+  struct Opts
+  {
+    bool     verbose = false;
+    unsigned jobs    = 0;
+  };
+  auto  opts = std::make_shared<Opts>();
+  auto* cmd  = app.add_subcommand("sync", "Reconcile local package state with cppup.lock");
+  cmd->add_flag("--verbose,-V", opts->verbose,
                 "Stream the underlying fetch tool's output (e.g. git clone progress)");
+  cmd->add_option("-j,--jobs", opts->jobs,
+                  "Parallel package fetches (0 = auto / hardware_concurrency)");
   cmd->callback(
-      [verbose, &ctx, &result]
+      [opts, &ctx, &result]
       {
-        const PackageSyncOptions sync_opts{.verbose = to_enum<Verbose>(*verbose)};
+        const PackageSyncOptions sync_opts{.verbose = to_enum<Verbose>(opts->verbose),
+                                           .jobs    = opts->jobs};
         result.set(handleExpectedResult(executePackageSync(sync_opts, ctx), "Sync",
                                         ErrorHandler::ErrorCode::UnknownError));
       });
@@ -547,14 +555,22 @@ void registerPackageCommands(const CommandRegistration& reg)
                                         ErrorHandler::ErrorCode::UnknownError));
       });
 
-  auto  sync_verbose = std::make_shared<bool>(false);
+  struct SyncOpts
+  {
+    bool     verbose = false;
+    unsigned jobs    = 0;
+  };
+  auto  sync_opts_ptr = std::make_shared<SyncOpts>();
   auto* sync_cmd = group->add_subcommand("sync", "Reconcile local package state with cppup.lock");
-  sync_cmd->add_flag("--verbose,-V", *sync_verbose,
+  sync_cmd->add_flag("--verbose,-V", sync_opts_ptr->verbose,
                      "Stream the underlying fetch tool's output (e.g. git clone progress)");
+  sync_cmd->add_option("-j,--jobs", sync_opts_ptr->jobs,
+                       "Parallel package fetches (0 = auto / hardware_concurrency)");
   sync_cmd->callback(
-      [sync_verbose, &ctx, &result]
+      [sync_opts_ptr, &ctx, &result]
       {
-        const PackageSyncOptions sync_opts{.verbose = to_enum<Verbose>(*sync_verbose)};
+        const PackageSyncOptions sync_opts{.verbose = to_enum<Verbose>(sync_opts_ptr->verbose),
+                                           .jobs    = sync_opts_ptr->jobs};
         result.set(handleExpectedResult(executePackageSync(sync_opts, ctx), "Package sync",
                                         ErrorHandler::ErrorCode::UnknownError));
       });
