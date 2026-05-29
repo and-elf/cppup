@@ -19,6 +19,7 @@
 #include "embedded_configuration_header.hpp"
 #include "install_paths.hpp"
 #include "lockfile.hpp"
+#include "package_source_registry.hpp"
 
 namespace cppup::cli
 {
@@ -259,41 +260,47 @@ bool materialize_entry(const lockfile::Entry& entry, const std::filesystem::path
   {
     return true;
   }
-  switch (entry.source)
+  // Built-in handlers come first so behavior for existing kinds is
+  // unchanged. Anything we don't recognize is dispatched through the
+  // PackageSourceRegistry, which lets plugins add new source kinds without
+  // editing this function.
+  if (entry.source == lockfile::kSourceGit)
   {
-    case lockfile::SourceKind::Git:
+    if (context.git == nullptr)
     {
-      if (context.git == nullptr)
-      {
-        context.logger->warning("git interface not configured; cannot sync " + entry.name);
-        return false;
-      }
-      const std::optional<std::string> branch =
-          entry.git_branch.empty() ? std::nullopt : std::optional{entry.git_branch};
-      return fetchGitPackage(*context.git, entry.url, install_path, branch, verbosity);
+      context.logger->warning("git interface not configured; cannot sync " + entry.name);
+      return false;
     }
-    case lockfile::SourceKind::Directory:
-    {
-      if (entry.url.empty())
-      {
-        context.logger->warning("directory source missing path; cannot sync " + entry.name);
-        return false;
-      }
-      return copyLocalPackage(entry.url, install_path);
-    }
-    case lockfile::SourceKind::Url:
-    case lockfile::SourceKind::Tar:
-    case lockfile::SourceKind::Zip:
-    case lockfile::SourceKind::Registry:
-    {
-      // Match `package add`'s behaviour for these sources: create an empty
-      // placeholder so the registry stays consistent. Real fetch support
-      // for archives lands separately.
-      std::error_code error_code;
-      std::filesystem::create_directories(install_path, error_code);
-      return !error_code;
-    }
+    const std::optional<std::string> branch =
+        entry.git_branch.empty() ? std::nullopt : std::optional{entry.git_branch};
+    return fetchGitPackage(*context.git, entry.url, install_path, branch, verbosity);
   }
+  if (entry.source == lockfile::kSourceDirectory)
+  {
+    if (entry.url.empty())
+    {
+      context.logger->warning("directory source missing path; cannot sync " + entry.name);
+      return false;
+    }
+    return copyLocalPackage(entry.url, install_path);
+  }
+  if (auto provider = global_package_source_registry().find(entry.source))
+  {
+    return (*provider)(entry, install_path, context, verbosity);
+  }
+  if (entry.source == lockfile::kSourceUrl || entry.source == lockfile::kSourceTar ||
+      entry.source == lockfile::kSourceZip || entry.source == lockfile::kSourceRegistry)
+  {
+    // Legacy placeholder: these built-in kinds have no fetcher wired yet.
+    // Keep the original empty-directory behavior so lockfiles that use them
+    // (e.g. registry sources from `package add`) continue to sync until a
+    // plugin provider is registered.
+    std::error_code error_code;
+    std::filesystem::create_directories(install_path, error_code);
+    return !error_code;
+  }
+  context.logger->warning("no provider registered for source kind '" + entry.source +
+                          "' (package " + entry.name + ")");
   return false;
 }
 
@@ -746,7 +753,7 @@ std::expected<int, std::string> executePackageSync(const PackageSyncOptions& opt
       PackageRecord record;
       record.name    = entry.name;
       record.version = entry.version.empty() ? "latest" : entry.version;
-      record.source  = std::string(lockfile::to_string(entry.source));
+      record.source  = entry.source;
       if (!entry.url.empty())
       {
         record.source += ":" + entry.url;

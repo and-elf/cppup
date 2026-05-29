@@ -17,11 +17,11 @@
 #include "../command_context.hpp"
 #include "../commands.hpp"
 #include "lockfile.hpp"
+#include "package_source_registry.hpp"
 
 namespace fs = std::filesystem;
 using cppup::cli::CommandContext;
 using cppup::cli::lockfile::Entry;
-using cppup::cli::lockfile::SourceKind;
 namespace lockfile = cppup::cli::lockfile;
 
 namespace
@@ -49,7 +49,7 @@ Entry make_git_entry(std::string name, std::string url)
   Entry entry;
   entry.name         = std::move(name);
   entry.version      = "1.0.0";
-  entry.source       = SourceKind::Git;
+  entry.source       = std::string(lockfile::kSourceGit);
   entry.url          = std::move(url);
   entry.git_branch   = "main";
   entry.build_system = "cmake";
@@ -282,7 +282,7 @@ TEST(LockfileFromConfiguration, DerivesGitEntryFromConfigPackages)
   ASSERT_TRUE(entries.has_value()) << entries.error_or("");
   ASSERT_EQ(entries->size(), 1U);
   EXPECT_EQ((*entries)[0].name, "fmt");
-  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+  EXPECT_EQ((*entries)[0].source, lockfile::kSourceGit);
   EXPECT_EQ((*entries)[0].url, "https://example.com/fmt.git");
   EXPECT_EQ((*entries)[0].git_branch, "main");
 }
@@ -377,7 +377,7 @@ TEST(LockfileFromConfiguration, IncludesTestFrameworkPackages)
   ASSERT_TRUE(entries.has_value()) << entries.error_or("");
   ASSERT_EQ(entries->size(), 1U);
   EXPECT_EQ((*entries)[0].name, "googletest");
-  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+  EXPECT_EQ((*entries)[0].source, lockfile::kSourceGit);
 }
 
 // Synthetic plugin used to drive the default_package() fallback without
@@ -443,7 +443,7 @@ TEST(LockfileFromConfiguration, FrameworksFallBackToPluginDefaultPackage)
   ASSERT_TRUE(entries.has_value()) << entries.error_or("");
   ASSERT_EQ(entries->size(), 1U);
   EXPECT_EQ((*entries)[0].name, "gtest");
-  EXPECT_EQ((*entries)[0].source, SourceKind::Git);
+  EXPECT_EQ((*entries)[0].source, lockfile::kSourceGit);
   EXPECT_EQ((*entries)[0].url, "https://example.test/gt.git");
   EXPECT_EQ((*entries)[0].git_branch, "v9.9.9");
   EXPECT_EQ((*entries)[0].version, "9.9.9");
@@ -739,6 +739,48 @@ TEST(PackageSync, JobsOptionCapsConcurrencyAtRequestedLimit)
                                             .jobs    = 2};
   ASSERT_TRUE(cppup::cli::executePackageSync(opts, ctx).has_value());
   EXPECT_LE(git_raw->peak_in_flight.load(), 2) << "--jobs=2 must never exceed 2 concurrent clones";
+}
+
+// A custom source kind that isn't built-in must be routed through the
+// PackageSourceRegistry. Proves the dispatcher honours plugin-registered
+// providers so new source types can be added without editing
+// `materialize_entry`.
+TEST(PackageSync, DispatchesCustomKindToRegisteredProvider)
+{
+  constexpr std::string_view kCustomKind = "test-only-custom-kind";
+
+  auto&            registry = cppup::cli::global_package_source_registry();
+  std::atomic<int> invocations{0};
+  registry.register_provider(
+      kCustomKind,
+      [&invocations](const lockfile::Entry& entry, const fs::path& install_path,
+                     const cppup::cli::CommandContext& /*ctx*/,
+                     cppup::cli::GitVerbosity /*verbosity*/)
+      {
+        ++invocations;
+        std::error_code error_code;
+        fs::create_directories(install_path, error_code);
+        std::ofstream marker(install_path / "PROVIDER_FETCHED");
+        marker << entry.name;
+        return !error_code;
+      });
+
+  auto root = make_tmp_root("sync_custom_kind");
+  auto ctx  = make_ctx(root);
+  ctx.git   = std::make_unique<FakeGit>();
+
+  Entry entry;
+  entry.name    = "exotic";
+  entry.version = "0.1.0";
+  entry.source  = std::string(kCustomKind);
+  write_lockfile(root, {entry});
+
+  const auto rc = cppup::cli::executePackageSync({}, ctx);
+  registry.unregister_provider(kCustomKind);
+
+  ASSERT_TRUE(rc.has_value()) << rc.error_or("");
+  EXPECT_EQ(invocations.load(), 1) << "custom-kind provider must be invoked exactly once";
+  EXPECT_TRUE(fs::exists(root / ".cppup" / "packages" / "exotic" / "PROVIDER_FETCHED"));
 }
 
 // When several fetches fail in parallel, the surfaced error must always name

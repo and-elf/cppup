@@ -19,6 +19,7 @@ extern "C" BuildConfiguration configure()
                      "commands/tidy.cpp",
                      "commands/source_selection.cpp",
                      "commands/package.cpp",
+                     "commands/package_source_registry.cpp",
                      "commands/lockfile.cpp",
                      "commands/module.cpp",
                      "commands/toolchain.cpp",

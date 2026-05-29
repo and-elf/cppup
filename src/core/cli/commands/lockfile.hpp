@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <optional>
@@ -36,28 +35,30 @@ struct Selection
   bool operator==(const Selection&) const = default;
 };
 
-// What kind of source a package was fetched from. Mirrors
-// `cppup::configuration::SourceType` but is serialized as a stable string
-// in the lockfile rather than the numeric enum value.
-enum class SourceKind : std::uint8_t
-{
-  Registry,
-  Git,
-  Directory,
-  Url,
-  Tar,
-  Zip,
-};
+// Canonical names for the source kinds cppup ships with built-in handlers.
+// `Entry::source` is a free-form string so plugin-defined kinds round-trip
+// without code changes; these constants keep magic strings out of call sites
+// that reference the built-ins.
+inline constexpr std::string_view kSourceRegistry  = "registry";
+inline constexpr std::string_view kSourceGit       = "git";
+inline constexpr std::string_view kSourceDirectory = "directory";
+inline constexpr std::string_view kSourceUrl       = "url";
+inline constexpr std::string_view kSourceTar       = "tar";
+inline constexpr std::string_view kSourceZip       = "zip";
 
 // One package's resolved state. Strings are empty when unknown / not
 // applicable (e.g. a directory package has no git_commit). `dependencies`
 // is the names of transitive packages this one pulls in; empty for now
 // until the project resolver is wired through `package lock`.
+//
+// `source` is the kind name (free-form string). Built-ins use the
+// `kSource*` constants above; plugins may define additional kinds and the
+// lockfile will round-trip them verbatim.
 struct Entry
 {
   std::string              name;
   std::string              version;
-  SourceKind               source = SourceKind::Registry;
+  std::string              source = std::string{kSourceRegistry};
   std::string              url;
   std::string              git_branch;
   std::string              git_commit;
@@ -68,10 +69,6 @@ struct Entry
 
   bool operator==(const Entry&) const = default;
 };
-
-[[nodiscard]] std::string_view                       to_string(SourceKind kind) noexcept;
-[[nodiscard]] std::expected<SourceKind, std::string> parse_source_kind(
-    std::string_view text) noexcept;
 
 // Produce the canonical text representation. Entries are emitted in
 // lexicographic order by name with a fixed key order so repeated runs on
