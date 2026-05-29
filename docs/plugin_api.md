@@ -695,6 +695,14 @@ shape is likely to change once the host's package-source plugin path
 matures enough to also drive test-framework binaries, at which point a
 `cppup_test_system_vtable_v1` can freeze.
 
+`cppup test [filter]` walks `config.tests`, looks each entry's
+`framework` up in `TestFrameworkRegistry`, and calls
+`plugin->run(binary, filter, runner)`. The plugin translates `filter`
+into its native spelling (e.g. gtest's `--gtest_filter=<glob>`), so the
+host stays out of framework-specific syntax. Tests with an empty
+`framework` are exec'd directly; if a `filter` is supplied they are
+skipped with a warning, since there is no plugin to translate it.
+
 ## 12. Lockfile integration
 
 The plugin layer contributes one piece of state to `cppup.lock`: when a

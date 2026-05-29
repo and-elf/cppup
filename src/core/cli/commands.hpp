@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "../configuration/build_configuration.hpp"
 #include "../configuration/build_options.hpp"
 #include "command_context.hpp"
 #include "commands/install_paths.hpp"
@@ -130,6 +131,13 @@ struct UpdateOptions
   return files;
 }
 
+// Compile and load `build.cpp` (with subprojects merged) for the project
+// rooted at `project_root`, using `cppup_dir` as the include / artifact
+// staging root. Aborts via CPPUP_CHECK on configuration compile failures —
+// callers that need recoverable handling should not use this entry point.
+[[nodiscard]] cppup::configuration::BuildConfiguration load_build_configuration(
+    const std::filesystem::path& project_root, const std::filesystem::path& cppup_dir);
+
 // Command implementation functions
 
 [[nodiscard]] std::expected<int, std::string> executeInit(
@@ -142,7 +150,13 @@ struct UpdateOptions
 [[nodiscard]] std::expected<int, std::string> executeCompileCommands(
     const BuildOptions& options, const CommandContext& context) noexcept;
 
+// `filter` is passed verbatim to each test's `TestFramework` plugin
+// (e.g. translated into `--gtest_filter=` for gtest). When empty, the
+// plugin runs every case; tests with no configured framework are
+// executed directly. When non-empty, tests without a framework are
+// skipped — there's no plugin to translate the filter for them.
 [[nodiscard]] std::expected<int, std::string> executeTest(const BuildOptions&   options,
+                                                          std::string_view      filter,
                                                           const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeFormat(

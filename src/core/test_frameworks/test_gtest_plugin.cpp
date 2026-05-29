@@ -161,6 +161,38 @@ TEST(GtestFrameworkPlugin, RunPassesFilterAsGtestFilterFlag)
   EXPECT_EQ(runner.invocations()[0].args[0], "--gtest_filter=Foo.*");
 }
 
+TEST(GtestFrameworkPlugin, RunWrapsPlainIdentifierAsSubstringMatch)
+{
+  // `cppup test SomeTest` should DTRT — gtest's filter grammar needs
+  // wildcards, so a plain identifier gets wrapped as *...* so it matches
+  // `Suite.SomeTest` without making the user learn the glob spelling.
+  cppup::plugin::GtestFrameworkPlugin const plugin;
+  RecordingRunner                           runner;
+
+  EXPECT_EQ(plugin.run("/path/to/test_bin", "DetectPlatform", runner), 0);
+  ASSERT_EQ(runner.invocations().size(), 1U);
+  ASSERT_EQ(runner.invocations()[0].args.size(), 1U);
+  EXPECT_EQ(runner.invocations()[0].args[0], "--gtest_filter=*DetectPlatform*");
+}
+
+TEST(GtestFrameworkPlugin, RunPassesGtestGrammarThroughUnchanged)
+{
+  // Filters containing wildcards, alternation, negation, or a suite dot
+  // are clearly using gtest's native grammar — pass them through
+  // verbatim so power users keep full control.
+  cppup::plugin::GtestFrameworkPlugin const plugin;
+  for (const auto& spelling :
+       {"Suite.case_a", "Foo*", "Foo?", "Foo:Bar", "-FailingCase", "Suite.*"})
+  {
+    RecordingRunner runner;
+    EXPECT_EQ(plugin.run("/path/to/test_bin", spelling, runner), 0);
+    ASSERT_EQ(runner.invocations().size(), 1U);
+    ASSERT_EQ(runner.invocations()[0].args.size(), 1U);
+    EXPECT_EQ(runner.invocations()[0].args[0], std::string{"--gtest_filter="} + spelling)
+        << "filter '" << spelling << "' should pass through verbatim";
+  }
+}
+
 TEST(GtestFrameworkPlugin, RunOmitsFilterArgWhenFilterEmpty)
 {
   cppup::plugin::GtestFrameworkPlugin const plugin;

@@ -14,6 +14,7 @@ extern "C" BuildConfiguration configure()
                      "commands/clean.cpp",
                      "commands/compile_commands_cmd.cpp",
                      "commands/test.cpp",
+                     "commands/test_dispatch.cpp",
                      "commands/format.cpp",
                      "commands/tidy.cpp",
                      "commands/source_selection.cpp",
@@ -55,6 +56,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_coverage_parser", "commands/test_coverage_parser.cpp");
   add_test("test_subproject_runner", "commands/test_subproject_runner.cpp");
   add_test("test_toolchain_probe", "commands/test_toolchain_probe.cpp");
+  add_test("test_test_dispatch", "commands/test_test_dispatch.cpp");
 
   return config;
 }

@@ -805,20 +805,25 @@ void materialize_configuration_header(const std::filesystem::path& cppup_dir)
   std::filesystem::remove_all(config_cache, error_code);
 }
 
-conf::BuildConfiguration load_build_configuration(const std::filesystem::path& project_root,
-                                                  const std::filesystem::path& cppup_dir)
+}  // namespace
+
+cppup::configuration::BuildConfiguration load_build_configuration(
+    const std::filesystem::path& project_root, const std::filesystem::path& cppup_dir)
 {
-  conf::CompilerOptions compiler_opts{};
+  cppup::configuration::CompilerOptions compiler_opts{};
   compiler_opts.include_paths.push_back((cppup_dir / "include").string());
   compiler_opts.include_paths.push_back((project_root / "include").string());
   compiler_opts.include_paths.push_back((project_root / "src").string());
   compiler_opts.output_directory = (cppup_dir / "build" / "config").string();
 
-  conf::ConfigurationCompiler compiler{compiler_opts};
-  auto                        config_result = conf::load_with_subprojects(project_root, compiler);
+  cppup::configuration::ConfigurationCompiler compiler{compiler_opts};
+  auto config_result = cppup::configuration::load_with_subprojects(project_root, compiler);
   CPPUP_CHECK(config_result.has_value(), "configuration compilation failed");
   return *config_result;
 }
+
+namespace
+{
 
 // Selection helpers (read_persisted_selection, migrate_legacy_toolchain_file,
 // resolve_selection, apply_selection) live in selection_resolver.{hpp,cpp}

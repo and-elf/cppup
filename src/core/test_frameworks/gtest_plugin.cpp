@@ -54,6 +54,27 @@ bool archive_lib(const fs::path& lib_out, const std::vector<fs::path>& objects,
   return runner.run({.command = "ar", .args = std::move(args), .working_dir = ""}) == 0;
 }
 
+// Translate the host's filter into a --gtest_filter= value. A plain
+// identifier (no glob/separator chars) is treated as a substring and
+// wrapped with leading + trailing `*` so `cppup test DetectPlatform...`
+// matches `Suite.DetectPlatform...` without the user having to know
+// gtest's glob spelling. Filters that already use gtest grammar
+// (wildcards, ':' alternation, '-' negation, or a '.' suite separator)
+// pass through verbatim.
+std::string translate_filter(std::string_view filter)
+{
+  if (filter.empty())
+  {
+    return {};
+  }
+  const bool has_gtest_grammar = filter.find_first_of("*?:-.") != std::string_view::npos;
+  if (has_gtest_grammar)
+  {
+    return std::string{filter};
+  }
+  return "*" + std::string{filter} + "*";
+}
+
 }  // namespace
 
 std::string_view GtestFrameworkPlugin::name() const noexcept
@@ -126,10 +147,11 @@ std::expected<TestBuildFlags, std::string> GtestFrameworkPlugin::build_and_get_f
 std::expected<std::vector<std::string>, std::string> GtestFrameworkPlugin::list_test_cases(
     const fs::path& binary, std::string_view filter, ProcessRunner& runner) const
 {
-  std::vector<std::string> args = {"--gtest_list_tests"};
-  if (!filter.empty())
+  std::vector<std::string> args      = {"--gtest_list_tests"};
+  const auto               gt_filter = translate_filter(filter);
+  if (!gt_filter.empty())
   {
-    args.push_back("--gtest_filter=" + std::string{filter});
+    args.push_back("--gtest_filter=" + gt_filter);
   }
   const auto result =
       runner.run_capture({.command = binary.string(), .args = std::move(args), .working_dir = ""});
@@ -179,9 +201,10 @@ int GtestFrameworkPlugin::run(const fs::path& binary, std::string_view filter,
                               ProcessRunner& runner) const
 {
   std::vector<std::string> args;
-  if (!filter.empty())
+  const auto               gt_filter = translate_filter(filter);
+  if (!gt_filter.empty())
   {
-    args.push_back("--gtest_filter=" + std::string{filter});
+    args.push_back("--gtest_filter=" + gt_filter);
   }
   return runner.run({.command = binary.string(), .args = std::move(args), .working_dir = ""});
 }

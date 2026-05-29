@@ -199,8 +199,12 @@ cppup build                          Build libraries and binaries.
     -V, --verbose                       Echo compile/link commands as they run
     -j, --jobs <N>                      Parallel compile jobs (0 = auto)
 
-cppup test                           Run tests (compiles them if needed).
+cppup test [filter]                  Run tests (compiles them if needed).
     --asan, --coverage, --toolchain, --profile
+    [filter]                            Pass-through filter handed verbatim to each test's
+                                        TestFramework plugin (gtest: glob like 'Suite.*').
+                                        Tests without a configured framework are skipped
+                                        when a filter is supplied.
 
 cppup compile-commands               Emit compile_commands.json for clangd/tooling.
     --asan, --coverage                  Mirror those flags in the emitted commands

@@ -8,9 +8,11 @@
 #include <vector>
 
 #include "../../configuration/build_options.hpp"
+#include "../../plugin/test_framework_plugin.hpp"
 #include "command_context.hpp"
 #include "commands.hpp"
 #include "coverage_parser.hpp"
+#include "test_dispatch.hpp"
 
 namespace cppup::cli
 {
@@ -225,9 +227,56 @@ std::expected<CoverageSummary, std::string> collect_coverage(const CoveragePaths
   return summary;
 }
 
+// Fallback when `build.cpp` declares no `Test` entries: enumerate every
+// executable under build/tests/ and exec them directly. Mirrors the
+// pre-plugin behavior so a project that has tests on disk but never wired
+// them through `config.tests` still runs them. When `filter` is non-empty
+// we skip the whole fallback — without a plugin there's no way to apply
+// it, and silently running everything would lie about the filter.
+TestRunCounts run_discovered_binaries(const fs::path& tests_dir, std::string_view filter,
+                                      ProcessRunner& runner, Logger& logger)
+{
+  TestRunCounts counts;
+  const auto    binaries = discoverExecutableFiles(tests_dir);
+
+  if (binaries.empty())
+  {
+    return counts;
+  }
+
+  if (!filter.empty())
+  {
+    logger.warning("filter '" + std::string{filter} +
+                   "' ignored: project declared no `config.tests` entries with a TestFramework, "
+                   "so there is no plugin to translate the filter");
+    counts.skipped = static_cast<int>(binaries.size());
+    return counts;
+  }
+
+  for (const auto& test_bin : binaries)
+  {
+    logger.info("Running: " + test_bin.filename().string());
+    const int exit_code =
+        runner.run(ProcessRunRequest{.command = test_bin.string(), .args = {}, .working_dir = ""});
+    if (exit_code == 0)
+    {
+      logger.info("  PASS: " + test_bin.filename().string());
+      ++counts.passed;
+    }
+    else
+    {
+      logger.error("  FAIL: " + test_bin.filename().string() + " (exit " +
+                   std::to_string(exit_code) + ")");
+      ++counts.failed;
+    }
+  }
+  return counts;
+}
+
 }  // namespace
 
 std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
+                                            std::string_view          filter,
                                             const CommandContext&     context) noexcept
 {
   try
@@ -263,13 +312,6 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
 
     const fs::path build_dir = context.projectRoot / "build";
     const fs::path tests_dir = build_dir / "tests";
-    const auto     binaries  = discoverExecutableFiles(tests_dir);
-
-    if (binaries.empty())
-    {
-      logger.info("No test binaries found in " + tests_dir.string());
-      return 0;
-    }
 
     if (conf::enabled(options.asan))
     {
@@ -280,56 +322,62 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
       logger.info("Coverage enabled (tests must be built with --coverage)");
     }
 
-    int passed = 0;
-    int failed = 0;
+    // The same machinery executeBuild used a moment ago: this is a cache
+    // hit on the configuration DSO, so the second compile is a no-op.
+    // Re-loaded here (instead of threaded through executeBuild's return
+    // value) to keep executeBuild's signature focused on success/exit.
+    const auto cppup_dir = context.projectRoot / ".cppup";
+    const auto config    = load_build_configuration(context.projectRoot, cppup_dir);
 
-    for (const auto& test_bin : binaries)
+    TestRunCounts counts;
+    if (config.tests.empty())
     {
-      logger.info("Running: " + test_bin.filename().string());
-
-      const int test_exit_code = context.processRunner->run(
-          ProcessRunRequest{.command = test_bin.string(), .args = {}, .working_dir = ""});
-      if (test_exit_code == 0)
+      counts = run_discovered_binaries(tests_dir, filter, *context.processRunner, logger);
+      if (counts.passed + counts.failed + counts.skipped == 0)
       {
-        logger.info("  PASS: " + test_bin.filename().string());
-        ++passed;
-      }
-      else
-      {
-        logger.error("  FAIL: " + test_bin.filename().string() + " (exit " +
-                     std::to_string(test_exit_code) + ")");
-        ++failed;
+        logger.info("No test binaries found in " + tests_dir.string());
       }
     }
+    else
+    {
+      counts = dispatchConfiguredTests(config.tests, tests_dir, filter,
+                                       cppup::plugin::global_test_framework_registry(),
+                                       *context.processRunner, logger);
+    }
 
-    logger.info("Test summary: " + std::to_string(passed) + " passed, " + std::to_string(failed) +
-                " failed");
+    std::string summary = "Test summary: " + std::to_string(counts.passed) + " passed, " +
+                          std::to_string(counts.failed) + " failed";
+    if (counts.skipped > 0)
+    {
+      summary += ", " + std::to_string(counts.skipped) + " skipped";
+    }
+    logger.info(summary);
 
     if (conf::enabled(options.coverage))
     {
-      const fs::path coverage_dir = build_dir / "coverage";
-      auto           summary      = collect_coverage({.build_dir    = build_dir,
-                                                      .coverage_dir = coverage_dir,
-                                                      .project_root = context.projectRoot},
-                                                     context);
-      if (!summary)
+      const fs::path coverage_dir   = build_dir / "coverage";
+      auto           summary_result = collect_coverage({.build_dir    = build_dir,
+                                                        .coverage_dir = coverage_dir,
+                                                        .project_root = context.projectRoot},
+                                                       context);
+      if (!summary_result)
       {
-        logger.warning("coverage: " + summary.error());
+        logger.warning("coverage: " + summary_result.error());
       }
       else
       {
         std::ostringstream pct;
         pct.precision(2);
-        pct << std::fixed << summary->total_pct;
+        pct << std::fixed << summary_result->total_pct;
         logger.info("Coverage: " + pct.str() + "% line coverage across " +
-                    std::to_string(summary->files_seen) + " files; reports in " +
+                    std::to_string(summary_result->files_seen) + " files; reports in " +
                     coverage_dir.string());
       }
     }
 
-    if (failed > 0)
+    if (counts.failed > 0)
     {
-      return std::unexpected(std::to_string(failed) + " test(s) failed");
+      return std::unexpected(std::to_string(counts.failed) + " test(s) failed");
     }
 
     return 0;

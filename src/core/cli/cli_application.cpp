@@ -400,6 +400,7 @@ void registerTestCommand(const CommandRegistration& reg)
     bool        coverage = false;
     std::string toolchain;
     std::string profile;
+    std::string filter;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -409,6 +410,9 @@ void registerTestCommand(const CommandRegistration& reg)
                 "Collect gcov coverage after tests (build with --coverage first)");
   cmd->add_option("--toolchain", opts->toolchain, "Override the active toolchain for this build");
   cmd->add_option("--profile", opts->profile, "Override the active build profile for this build");
+  cmd->add_option("filter", opts->filter,
+                  "Pass-through filter (e.g. gtest glob 'Suite.*') handed verbatim to each "
+                  "test's TestFramework plugin");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -428,7 +432,7 @@ void registerTestCommand(const CommandRegistration& reg)
         {
           test_opts.profile = opts->profile;
         }
-        result.set(handleExpectedResult(executeTest(test_opts, ctx), "Test",
+        result.set(handleExpectedResult(executeTest(test_opts, opts->filter, ctx), "Test",
                                         ErrorHandler::ErrorCode::TestFailure));
       });
 }
