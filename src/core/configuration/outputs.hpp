@@ -90,6 +90,40 @@ struct TestFramework
 };
 
 /**
+ * Build phase at which an external script runs.
+ *
+ * `PreBuild` scripts run before any compilation, `PostBuild` scripts run after
+ * all libraries, binaries and tests have been built.
+ */
+enum class ScriptPhase : uint8_t
+{
+  PreBuild,
+  PostBuild
+};
+
+/**
+ * Declares an external script/command to run at a defined build phase.
+ *
+ * The command is executed with an explicit argument vector — `command` is the
+ * program to run and `args` are passed as separate argv entries. It is never
+ * routed through a shell (`sh -c`), so values in `command`/`args` are not
+ * subject to shell word-splitting, glob expansion or string interpolation.
+ *
+ * `working_dir` (optional) is the directory the script runs in; a relative path
+ * is resolved against the project root, an empty value means the project root.
+ * `name` (optional) is used purely for reporting; when empty the command is
+ * shown instead.
+ */
+struct Script
+{
+  std::string              command;
+  std::vector<std::string> args        = {};
+  ScriptPhase              phase       = ScriptPhase::PreBuild;
+  std::string              working_dir = {};
+  std::string              name        = {};
+};
+
+/**
  * Represents a custom build step with dependencies
  */
 struct BuildStep

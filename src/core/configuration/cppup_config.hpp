@@ -60,6 +60,8 @@ using LibraryType = configuration::LibraryType;
 using Binary      = configuration::Binary;
 using Library     = configuration::Library;
 using Test        = configuration::Test;
+using ScriptPhase = configuration::ScriptPhase;
+using Script      = configuration::Script;
 using BuildStep   = configuration::BuildStep;
 
 // Profile and main configuration
@@ -147,6 +149,46 @@ inline Profile test_profile(const std::string&       test_framework   = "catch2"
                                additional_flags.end());
   profile.definitions = {Definition{"TESTING", "1"}};
   return profile;
+}
+
+/**
+ * Create a script that runs before compilation.
+ *
+ * The command is invoked with an explicit argument vector and never through a
+ * shell, so arguments are not subject to shell interpolation or word-splitting.
+ *
+ * @param command     Program to execute
+ * @param args        Arguments passed as separate argv entries
+ * @param working_dir Directory to run in (relative to project root; empty = root)
+ * @return A `Script` bound to the pre-build phase
+ */
+inline Script pre_build_script(std::string command, std::vector<std::string> args = {},
+                               std::string working_dir = {})
+{
+  return Script{.command     = std::move(command),
+                .args        = std::move(args),
+                .phase       = ScriptPhase::PreBuild,
+                .working_dir = std::move(working_dir)};
+}
+
+/**
+ * Create a script that runs after all outputs have been built.
+ *
+ * The command is invoked with an explicit argument vector and never through a
+ * shell, so arguments are not subject to shell interpolation or word-splitting.
+ *
+ * @param command     Program to execute
+ * @param args        Arguments passed as separate argv entries
+ * @param working_dir Directory to run in (relative to project root; empty = root)
+ * @return A `Script` bound to the post-build phase
+ */
+inline Script post_build_script(std::string command, std::vector<std::string> args = {},
+                                std::string working_dir = {})
+{
+  return Script{.command     = std::move(command),
+                .args        = std::move(args),
+                .phase       = ScriptPhase::PostBuild,
+                .working_dir = std::move(working_dir)};
 }
 
 /**

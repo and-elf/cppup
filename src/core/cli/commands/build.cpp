@@ -21,6 +21,7 @@
 #include "../../configuration/compiler.hpp"
 #include "../../configuration/link_resolution.hpp"
 #include "../../configuration/platform.hpp"
+#include "../../configuration/script_executor.hpp"
 #include "../../configuration/subproject_loader.hpp"
 #include "../../configuration/toolchain_flags.hpp"
 #include "../../logger/console/console_logger.hpp"
@@ -1065,6 +1066,20 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
 
     BuildCounters counts;
 
+    // Pre-build scripts run before any compilation, so they can generate
+    // sources, fetch assets, etc. Executed with an explicit argv vector via
+    // the process runner — never through a shell.
+    if (!config.scripts.empty())
+    {
+      logger.debug("running pre-build scripts");
+      auto pre_result = conf::ScriptExecutor::run_phase(config.scripts, conf::ScriptPhase::PreBuild,
+                                                        *context.processRunner, paths.project_root);
+      if (!pre_result.success)
+      {
+        return std::unexpected("pre-build " + pre_result.error_message);
+      }
+    }
+
     // Libraries: flat-queue build. Phase A plans every non-cached library
     // into a single CompileTask list, Phase B compiles all sources at once
     // (saturating cores even when one library has 16 fat TUs), Phase C
@@ -1123,6 +1138,19 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
       if (!step_result.success)
       {
         return std::unexpected("build step failed: " + step_result.error_message);
+      }
+    }
+
+    // Post-build scripts run after every output (libraries, binaries, tests)
+    // and custom build step has completed — e.g. packaging or signing.
+    if (!config.scripts.empty())
+    {
+      logger.debug("running post-build scripts");
+      auto post_result = conf::ScriptExecutor::run_phase(
+          config.scripts, conf::ScriptPhase::PostBuild, *context.processRunner, paths.project_root);
+      if (!post_result.success)
+      {
+        return std::unexpected("post-build " + post_result.error_message);
       }
     }
 

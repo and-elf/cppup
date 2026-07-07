@@ -141,3 +141,28 @@ TEST(BuildStep, ConstructionAndDependencies)
   EXPECT_EQ(step.dependencies[0], "dep1");
   EXPECT_EQ(step.dependencies[1], "dep2");
 }
+
+TEST(Script, DefaultsToPreBuildWithEmptyArgsAndWorkingDir)
+{
+  Script const script{.command = "gen"};
+  EXPECT_EQ(script.command, "gen");
+  EXPECT_TRUE(script.args.empty());
+  EXPECT_EQ(script.phase, ScriptPhase::PreBuild);
+  EXPECT_TRUE(script.working_dir.empty());
+  EXPECT_TRUE(script.name.empty());
+}
+
+TEST(Script, FieldsPopulatedViaDesignatedInit)
+{
+  Script const script{.command     = "codegen.py",
+                      .args        = {"--out", "gen"},
+                      .phase       = ScriptPhase::PostBuild,
+                      .working_dir = "tools",
+                      .name        = "codegen"};
+  EXPECT_EQ(script.command, "codegen.py");
+  ASSERT_EQ(script.args.size(), 2U);
+  EXPECT_EQ(script.args[0], "--out");
+  EXPECT_EQ(script.phase, ScriptPhase::PostBuild);
+  EXPECT_EQ(script.working_dir, "tools");
+  EXPECT_EQ(script.name, "codegen");
+}

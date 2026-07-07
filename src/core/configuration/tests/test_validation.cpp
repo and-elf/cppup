@@ -58,6 +58,28 @@ TEST(ConfigurationValidator, EmptyBuildStepNameIsInvalid)
   EXPECT_TRUE(result.has_errors());
 }
 
+TEST(ConfigurationValidator, EmptyScriptCommandIsInvalid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.scripts.push_back(Script{.command = "", .phase = ScriptPhase::PreBuild});
+
+  auto result = validator.validate(config);
+  EXPECT_FALSE(result.is_valid);
+  EXPECT_TRUE(result.has_errors());
+}
+
+TEST(ConfigurationValidator, ScriptWithCommandIsValid)
+{
+  ConfigurationValidator const validator;
+  BuildConfiguration           config;
+  config.scripts.push_back(
+      Script{.command = "codegen.py", .args = {"--out", "gen"}, .phase = ScriptPhase::PostBuild});
+
+  auto result = validator.validate(config);
+  EXPECT_TRUE(result.is_valid);
+}
+
 TEST(ConfigurationValidator, TestWithEmptyFrameworkIsValid)
 {
   ConfigurationValidator const validator;
