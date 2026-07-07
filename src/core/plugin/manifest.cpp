@@ -12,7 +12,14 @@
 // Vendored toml++ v3.4.0 trips a couple of C++23/26 deprecation warnings
 // (the literal-operator space, std::is_trivial_v). Silence around the
 // upstream header only — our own code stays under -Werror.
+//
+// -Wdeprecated-literal-operator only exists on GCC 15+ / Clang; GCC 14
+// (Debian 13's default compiler) rejects the unknown option under
+// -Werror=pragmas. Suppress -Wpragmas (GCC) / -Wunknown-warning-option
+// (Clang) first so the ignore below is portable across all three.
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
 #pragma GCC diagnostic ignored "-Wdeprecated-literal-operator"
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <toml++/toml.hpp>
