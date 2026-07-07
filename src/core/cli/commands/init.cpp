@@ -139,6 +139,28 @@ std::expected<int, std::string> executeInit(const std::string&                pr
     context.logger->info("Project created at: " + project_dir.string() + " (" +
                          std::to_string(emitted) + " files)");
 
+    // Optional: initialize a git repository in the new project. Skip when the
+    // directory is already a repo so re-running init stays idempotent.
+    if (enabled(options.git))
+    {
+      if (fs::exists(project_dir / ".git"))
+      {
+        context.logger->info("Git repository already present; skipping git init");
+      }
+      else if (context.git == nullptr)
+      {
+        context.logger->warning("Git option selected but no git interface available; skipping");
+      }
+      else if (context.git->init(project_dir))
+      {
+        context.logger->info("Initialized git repository in: " + project_dir.string());
+      }
+      else
+      {
+        context.logger->warning("git init failed in: " + project_dir.string());
+      }
+    }
+
     // Advisory-only toolchain probe: we never mutate state based on the
     // result. Tells the user up-front whether `cppup build` will work as-is
     // or whether they need to install a compiler first. Once toolchains can

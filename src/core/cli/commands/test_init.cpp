@@ -9,12 +9,37 @@
 #include "../../../ProcessRunner.h"
 #include "../command_context.hpp"
 #include "../commands.hpp"
+#include "../git_interface.hpp"
 
 namespace fs = std::filesystem;
 using namespace cppup::cli;
 
 namespace
 {
+
+// Records `git init` invocations without touching the filesystem or shelling
+// out. `clone_shallow` is unused by `cppup init` but must be implemented to
+// satisfy the interface.
+class FakeGit final : public GitInterface
+{
+ public:
+  int      init_calls = 0;
+  fs::path last_init_dir;
+
+  bool clone_shallow(const std::string& /*url*/, const fs::path& /*destination*/,
+                     const std::optional<std::string>& /*branch*/,
+                     GitVerbosity /*verbosity*/) override
+  {
+    return true;
+  }
+
+  bool init(const fs::path& directory, GitVerbosity /*verbosity*/) override
+  {
+    ++init_calls;
+    last_init_dir = directory;
+    return true;
+  }
+};
 
 fs::path make_tmp_root(std::string_view tag)
 {
@@ -239,6 +264,59 @@ TEST(Init, EmptyNameDefaultsToCwdBasename)
   const auto build_cpp = slurp(root / "build.cpp");
   EXPECT_NE(build_cpp.find(root.filename().string()), std::string::npos)
       << "build.cpp should substitute the cwd basename when no name is passed";
+
+  fs::remove_all(root);
+}
+
+TEST(Init, WithGitRunsGitInitInProjectDir)
+{
+  auto  root     = make_tmp_root("git_on");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  InitOptions const opts{.git = Git::On};
+  ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
+
+  EXPECT_EQ(git_raw->init_calls, 1) << "git init should run once when --with-git is selected";
+  EXPECT_EQ(git_raw->last_init_dir, root) << "git init should target the created project directory";
+
+  fs::remove_all(root);
+}
+
+TEST(Init, WithoutGitDoesNotRunGitInit)
+{
+  auto  root     = make_tmp_root("git_off");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  ASSERT_TRUE(executeInit("p", std::nullopt, InitOptions{}, ctx).has_value());
+
+  EXPECT_EQ(git_raw->init_calls, 0) << "git init should not run unless the git option is selected";
+
+  fs::remove_all(root);
+}
+
+TEST(Init, WithGitSkipsInitWhenAlreadyRepo)
+{
+  auto  root     = make_tmp_root("git_existing");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  // Pre-existing .git marks the directory as an established repo; init must
+  // stay idempotent and skip re-initializing it.
+  fs::create_directories(root / ".git");
+
+  InitOptions const opts{.git = Git::On};
+  ASSERT_TRUE(executeInit("p", std::nullopt, opts, ctx).has_value());
+
+  EXPECT_EQ(git_raw->init_calls, 0)
+      << "git init should be skipped when the directory is already a git repo";
 
   fs::remove_all(root);
 }

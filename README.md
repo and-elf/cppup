@@ -201,11 +201,12 @@ The full spec — ABI, manifest schema, host services, validation rules — live
 
 ```
 cppup init <name>                    Scaffold a new project.
-    --full                              Include all optional templates
+    --full                              Include all optional templates and run git init
     --minimal                           Base layout only, no prompts
     --with-vscode / --with-devcontainer / --with-docker / --with-gitlab-ci
-        / --with-github-actions
-                                        Per-template opt-in (skips the TTY prompt)
+        / --with-github-actions / --with-git
+                                        Per-option opt-in (skips the TTY prompt);
+                                        --with-git runs `git init` in the new project
     --path <dir>                        Create at <dir> instead of <name>/
 
 cppup build                          Build libraries and binaries.

@@ -112,7 +112,8 @@ bool prompt_yes_no(const std::string& question)
 }
 
 InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool with_devcontainer,
-                                 bool with_docker, bool with_gitlab_ci, bool with_github_actions)
+                                 bool with_docker, bool with_gitlab_ci, bool with_github_actions,
+                                 bool with_git)
 {
   if (minimal)
   {
@@ -124,12 +125,13 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
                        .devcontainer   = Devcontainer::On,
                        .docker         = Docker::On,
                        .gitlab_ci      = GitlabCi::On,
-                       .github_actions = GithubActions::On};
+                       .github_actions = GithubActions::On,
+                       .git            = Git::On};
   }
 
   InitOptions opts;
-  const bool  any_with_flag =
-      with_vscode || with_devcontainer || with_docker || with_gitlab_ci || with_github_actions;
+  const bool  any_with_flag = with_vscode || with_devcontainer || with_docker || with_gitlab_ci ||
+                             with_github_actions || with_git;
   if (any_with_flag)
   {
     opts.vscode         = with_vscode ? Vscode::On : Vscode::Off;
@@ -137,6 +139,7 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
     opts.docker         = with_docker ? Docker::On : Docker::Off;
     opts.gitlab_ci      = with_gitlab_ci ? GitlabCi::On : GitlabCi::Off;
     opts.github_actions = with_github_actions ? GithubActions::On : GithubActions::Off;
+    opts.git            = with_git ? Git::On : Git::Off;
     return opts;
   }
 
@@ -169,6 +172,10 @@ InitOptions resolve_init_options(bool full, bool minimal, bool with_vscode, bool
   {
     opts.github_actions = GithubActions::On;
   }
+  if (prompt_yes_no("Initialize a git repository (git init)?"))
+  {
+    opts.git = Git::On;
+  }
   return opts;
 }
 #endif  // !CPPUP_SLIM
@@ -199,6 +206,7 @@ void registerInitCommand(const CommandRegistration& reg)
     bool        with_docker         = false;
     bool        with_gitlab_ci      = false;
     bool        with_github_actions = false;
+    bool        with_git            = false;
   };
   auto opts = std::make_shared<Opts>();
 
@@ -208,7 +216,7 @@ void registerInitCommand(const CommandRegistration& reg)
   cmd->add_option("--path", opts->path, "Virtual environment path");
   cmd->add_flag("--full", opts->full,
                 "Scaffold all optional templates (.vscode, .devcontainer, Dockerfile, "
-                ".gitlab-ci.yml, .github/workflows/ci.yml)");
+                ".gitlab-ci.yml, .github/workflows/ci.yml) and run git init");
   cmd->add_flag("--minimal", opts->minimal, "Scaffold only the base layout; skip the TTY prompt");
   cmd->add_flag("--with-vscode", opts->with_vscode, "Scaffold .vscode/ (tasks/launch/settings)");
   cmd->add_flag("--with-devcontainer", opts->with_devcontainer,
@@ -218,6 +226,8 @@ void registerInitCommand(const CommandRegistration& reg)
                 "Scaffold .gitlab-ci.yml (cppup build/test/format/tidy pipeline)");
   cmd->add_flag("--with-github-actions", opts->with_github_actions,
                 "Scaffold .github/workflows/ci.yml (cppup build/test/format/tidy pipeline)");
+  cmd->add_flag("--with-git", opts->with_git,
+                "Initialize a git repository in the new project (git init)");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -229,7 +239,7 @@ void registerInitCommand(const CommandRegistration& reg)
         }
         const auto init_opts = resolve_init_options(
             opts->full, opts->minimal, opts->with_vscode, opts->with_devcontainer,
-            opts->with_docker, opts->with_gitlab_ci, opts->with_github_actions);
+            opts->with_docker, opts->with_gitlab_ci, opts->with_github_actions, opts->with_git);
         result.set(handleExpectedResult(executeInit(opts->name, path_opt, init_opts, ctx), "Init",
                                         ErrorHandler::ErrorCode::FileNotFound));
       });

@@ -31,6 +31,10 @@ class GitInterface
                                            const std::filesystem::path&      destination,
                                            const std::optional<std::string>& branch,
                                            GitVerbosity verbosity = GitVerbosity::Quiet) = 0;
+
+  // Initialize a new git repository in `directory` (runs `git init`).
+  [[nodiscard]] virtual bool init(const std::filesystem::path& directory,
+                                  GitVerbosity                 verbosity = GitVerbosity::Quiet) = 0;
 };
 
 }  // namespace cppup::cli
