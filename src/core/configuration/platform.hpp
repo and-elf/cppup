@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <string_view>
 
 #include "outputs.hpp"
@@ -25,6 +26,16 @@ constexpr std::string_view target_arch = "arm64";
 #else
 constexpr std::string_view target_arch = "unknown";
 #endif
+
+// Cross-platform current-host tag combining the compile-time OS and
+// architecture as "<os>-<arch>" (e.g. "linux-x86_64", "macos-arm64",
+// "windows-x86_64"). Derived from the compiler's target macros, so it works
+// on Windows, Linux and macOS without POSIX `uname()`. Used to select the
+// matching release asset when self-updating.
+[[nodiscard]] inline std::string current_platform_tag()
+{
+  return std::string{target_os} + "-" + std::string{target_arch};
+}
 
 // Compile-time platform queries
 [[nodiscard]] constexpr bool is_windows() noexcept
