@@ -175,4 +175,16 @@ CoverageSummary parse_gcov_reports(const CoverageScan& scan)
   return summary;
 }
 
+bool coverage_meets_threshold(double total_pct, double threshold) noexcept
+{
+  if (threshold <= 0.0)
+  {
+    return true;
+  }
+  // Percentages here are ratios of small line counts, so a modest tolerance
+  // is enough to keep "exactly at the bar" from tripping on rounding.
+  constexpr double tolerance = 1e-6;
+  return total_pct + tolerance >= threshold;
+}
+
 }  // namespace cppup::cli

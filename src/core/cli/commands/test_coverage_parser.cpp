@@ -145,3 +145,34 @@ TEST(ParseGcovReports, AggregatesAcrossMultipleProjectSources)
 
   fs::remove_all(root);
 }
+
+TEST(CoverageMeetsThreshold, PassesWhenAboveThreshold)
+{
+  EXPECT_TRUE(coverage_meets_threshold(90.0, 80.0));
+}
+
+TEST(CoverageMeetsThreshold, FailsWhenBelowThreshold)
+{
+  EXPECT_FALSE(coverage_meets_threshold(70.0, 80.0));
+}
+
+TEST(CoverageMeetsThreshold, PassesWhenExactlyAtThreshold)
+{
+  EXPECT_TRUE(coverage_meets_threshold(80.0, 80.0));
+}
+
+TEST(CoverageMeetsThreshold, AbsorbsFloatingPointRoundingAtTheBar)
+{
+  // A report computed as 2/3 lines is 66.666...%. A threshold typed as the
+  // same fraction must not be rejected by a sub-ulp shortfall.
+  const double measured = 100.0 * 2.0 / 3.0;
+  EXPECT_TRUE(coverage_meets_threshold(measured, measured));
+}
+
+TEST(CoverageMeetsThreshold, NonPositiveThresholdIsAlwaysSatisfied)
+{
+  // A zero (or negative) threshold means the gate is disabled: even a report
+  // with no covered lines passes.
+  EXPECT_TRUE(coverage_meets_threshold(0.0, 0.0));
+  EXPECT_TRUE(coverage_meets_threshold(0.0, -1.0));
+}

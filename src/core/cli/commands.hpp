@@ -155,8 +155,15 @@ struct UpdateOptions
 // plugin runs every case; tests with no configured framework are
 // executed directly. When non-empty, tests without a framework are
 // skipped — there's no plugin to translate the filter for them.
+//
+// `min_coverage`, when set, is a minimum total line-coverage percentage the
+// run must reach. It only applies alongside `options.coverage`; supplying it
+// without coverage instrumentation is an error. When the measured coverage
+// falls below it (or coverage cannot be computed) the command fails, so CI
+// can gate merges on a coverage floor.
 [[nodiscard]] std::expected<int, std::string> executeTest(const BuildOptions&   options,
                                                           std::string_view      filter,
+                                                          std::optional<double> min_coverage,
                                                           const CommandContext& context) noexcept;
 
 [[nodiscard]] std::expected<int, std::string> executeFormat(
