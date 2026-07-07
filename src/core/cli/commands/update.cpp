@@ -8,7 +8,6 @@
 #include <windows.h>
 #else
 #include <sys/stat.h>
-#include <sys/utsname.h>
 #endif
 
 #include <algorithm>
@@ -24,6 +23,7 @@
 #include <vector>
 
 #include "../../../SystemProcessRunner.hpp"
+#include "../../configuration/platform.hpp"
 #include "../command_context.hpp"
 #include "../commands.hpp"
 
@@ -241,27 +241,28 @@ namespace update_internal
 
 std::expected<std::string, std::string> detect_platform() noexcept
 {
-#ifdef _WIN32
-  // No prebuilt Windows asset is published yet, so even on a 64-bit
-  // Windows host the update command should steer the user to bootstrap.bat
-  // rather than report a phantom "windows-x86_64" tarball.
-  return std::unexpected(
-      "no prebuilt binary available for Windows; build from source via bootstrap.bat");
-#else
-  utsname uts{};
-  if (::uname(&uts) != 0)
+  namespace cfg = cppup::configuration;
+
+  if constexpr (cfg::is_windows())
   {
-    return std::unexpected("uname() failed");
+    // No prebuilt Windows asset is published yet, so even on a 64-bit
+    // Windows host the update command should steer the user to bootstrap.bat
+    // rather than report a phantom "windows-x86_64" tarball.
+    return std::unexpected(
+        "no prebuilt binary available for Windows; build from source via bootstrap.bat");
   }
-  const std::string sysname = uts.sysname;
-  const std::string machine = uts.machine;
-  if (sysname == "Linux" && (machine == "x86_64" || machine == "amd64"))
+  else if constexpr (cfg::is_linux() && cfg::is_x86_64())
   {
-    return std::string{"linux-x86_64"};
+    // Cross-platform host detection via the configuration platform API
+    // (compiler target macros) instead of POSIX uname(). Yields the exact
+    // "linux-x86_64" tag the release workflow publishes.
+    return cfg::current_platform_tag();
   }
-  return std::unexpected("no prebuilt binary available for this platform (" + sysname + "/" +
-                         machine + "); build from source via bootstrap.sh");
-#endif
+  else
+  {
+    return std::unexpected("no prebuilt binary available for this platform (" +
+                           cfg::current_platform_tag() + "); build from source via bootstrap.sh");
+  }
 }
 
 std::expected<std::string, std::string> sha256_file(const fs::path& path) noexcept

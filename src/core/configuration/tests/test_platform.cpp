@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
 
 #include "../platform.hpp"
 
@@ -122,6 +123,18 @@ TEST(Platform, ConditionalCompilationRunsExactlyOneArchBranch)
   {
     EXPECT_TRUE(arm64_executed);
   }
+}
+
+TEST(Platform, CurrentPlatformTagCombinesOsAndArch)
+{
+  const std::string tag = current_platform_tag();
+  EXPECT_EQ(tag, std::string{target_os} + "-" + std::string{target_arch});
+
+  // The tag is what selects release assets, so it must match the exact strings
+  // the release workflow publishes (e.g. "linux-x86_64").
+#if defined(__linux__) && defined(__x86_64__)
+  EXPECT_EQ(tag, "linux-x86_64");
+#endif
 }
 
 TEST(Platform, ToolchainTargetsWindowsRecognizesKnownNames)
