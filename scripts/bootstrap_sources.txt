@@ -23,6 +23,7 @@ src/core/configuration/package_resolver.cpp
 src/core/configuration/toolchain_flags.cpp
 src/core/configuration/profile_processor.cpp
 src/core/configuration/build_step_executor.cpp
+src/core/configuration/script_executor.cpp
 
 [main]
 src/main.cpp
