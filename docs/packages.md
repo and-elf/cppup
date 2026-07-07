@@ -160,6 +160,13 @@ See [plugin_api.md](plugin_api.md#12-lockfile-integration).
 - Repairs partial state: deleting `.cppup/packages/<name>/` and
   re-running `sync` re-fetches it; deleting the metadata while keeping
   the directory restores the registry record from the lockfile.
+- **Version hint**: before reconciling, `sync` runs a best-effort check
+  for a newer released cppup and prints a one-line upgrade hint if one
+  exists (the same check `cppup update --check` performs, mirroring
+  `pip`/`uv`). It never downloads or self-updates. The check is strictly
+  non-fatal: any network, rate-limit, or parse failure is swallowed and
+  the sync proceeds. Set `CPPUP_NO_VERSION_CHECK` (any non-empty value)
+  to suppress it entirely (e.g. in CI or air-gapped environments).
 
 ### What "fetch" actually does today
 

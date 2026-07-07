@@ -167,7 +167,7 @@ cppup package sync                    # alias: cppup sync
 `cppup.lock` is a small line-based file at the project root that pins everything needed to reproduce the build. It captures the closure of `config.packages` (with transitive `dependencies` walked from each `PackageInfo`) plus the active selection (`selected_toolchain`, `selected_profile`, `selected_registry`). Commit it.
 
 - `cppup lock` regenerates the package section from `build.cpp` (deterministic byte output).
-- `cppup sync` materializes `.cppup/packages/<name>/` from the lockfile; idempotent. Fetches run in parallel up to `--jobs N` (default: hardware_concurrency).
+- `cppup sync` materializes `.cppup/packages/<name>/` from the lockfile; idempotent. Fetches run in parallel up to `--jobs N` (default: hardware_concurrency). It also prints a one-line hint if a newer released cppup is available (like `pip`/`uv`); the check is best-effort and never fails or delays the sync, and can be disabled with `CPPUP_NO_VERSION_CHECK=1`.
 - `cppup build` auto-runs sync when `cppup.lock` is present.
 - `cppup toolchain select`, `cppup profile select`, `cppup registry set` only touch the selection keys; package entries are preserved.
 
@@ -295,7 +295,8 @@ cppup --version                      Same.
 User-set:
 
 - `CXX`, `CC` — compiler probe during `./bootstrap.sh` and a fallback in toolchain selection. Default `g++`.
-- `CPPUP_RELEASE_REPO` — override the GitHub `owner/repo` that `cppup update` pulls from.
+- `CPPUP_RELEASE_REPO` — override the GitHub `owner/repo` that `cppup update` and the `cppup sync` version-check pull from.
+- `CPPUP_NO_VERSION_CHECK` — when set (any non-empty value), suppress the best-effort "new version available" hint that `cppup sync` prints.
 - `XDG_DATA_HOME` — when set and non-empty, `--user` installs land at `$XDG_DATA_HOME/cppup/`. Otherwise cppup falls back to `$HOME/.cppup/`.
 - `HOME` — fallback root for user-scope installs.
 - `CPPUP_SKIP_HOOKS=1` — skip the entire pre-commit hook for one commit.

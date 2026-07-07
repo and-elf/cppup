@@ -2,8 +2,10 @@
 
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "../configuration/build_configuration.hpp"
@@ -237,11 +239,27 @@ struct PackageSyncOptions
   unsigned jobs    = 0;
 };
 
+// Best-effort check for a newer released cppup, printing an informational
+// upgrade hint (like pip/uv do on install) when one is available. Never
+// throws and never reports failure: any network, parse, or configuration
+// error is swallowed so it cannot disrupt the surrounding command. A no-op
+// when the `CPPUP_NO_VERSION_CHECK` env var is set, on dev/source builds
+// whose version is "unknown", or when the context lacks a process runner or
+// logger.
+void notifyIfUpdateAvailable(const CommandContext& context) noexcept;
+
+// Injection seam for `executePackageSync`: the hook it runs first to surface a
+// new-version hint. Defaults to `notifyIfUpdateAvailable`; tests substitute a
+// fake to assert the check is invoked without touching the network.
+using VersionCheckHook = std::function<void(const CommandContext&)>;
+
 // `cppup package sync` — reconcile `.cppup/packages/` and the local package
 // registry with `cppup.lock`. Idempotent: running twice on a project that
-// is already in-sync produces no changes.
+// is already in-sync produces no changes. Runs `version_check` first as a
+// best-effort upgrade notice; a failing check never fails the sync.
 [[nodiscard]] std::expected<int, std::string> executePackageSync(
-    const PackageSyncOptions& options, const CommandContext& context) noexcept;
+    const PackageSyncOptions& options, const CommandContext& context,
+    const VersionCheckHook& version_check = notifyIfUpdateAvailable) noexcept;
 
 // Walk the project's `cppup.lock` and return the names of any entries
 // whose `.cppup/packages/<name>/` directory does not exist or is empty.
@@ -344,6 +362,17 @@ namespace update_internal
 // std::unexpected when no releases are present.
 [[nodiscard]] std::expected<std::string, std::string> parse_latest_tag(
     std::string_view releases_json) noexcept;
+
+// Compare two dotted version strings (an optional leading `v`/`V` and any
+// non-numeric suffix such as `-rc1` are ignored). Returns true iff `latest`
+// is strictly greater than `running`. Missing trailing components count as 0,
+// so "1.2" == "1.2.0".
+[[nodiscard]] bool is_newer_version(std::string_view latest, std::string_view running) noexcept;
+
+// Core of `notifyIfUpdateAvailable` with the running version injected so it is
+// testable independently of the compile-time `CPPUP_VERSION`. Best-effort:
+// swallows every error and returns void.
+void check_and_notify(std::string_view running_version, const CommandContext& context) noexcept;
 
 }  // namespace update_internal
 
