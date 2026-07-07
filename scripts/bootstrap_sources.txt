@@ -46,6 +46,7 @@ src/core/plugin/manifest.cpp
 src/core/plugin/descriptor_validation.cpp
 src/core/plugin/plugin_build_system.cpp
 src/core/plugin/plugin_host_services.cpp
+src/core/plugin/plugin_package_source.cpp
 src/core/plugin/test_framework_plugin.cpp
 src/core/cli/cli_application.cpp
 src/core/cli/commands.cpp

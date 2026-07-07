@@ -69,3 +69,15 @@ EOF
 } > "${OUT}"
 
 echo "wrote ${OUT}"
+
+# Also emit a portable byte-list include next to the header. `#embed` would
+# be the natural way to bake these bytes into the binary, but it needs
+# GCC 15 / Clang 19; Debian 13 still ships GCC 14. embedded_configuration_
+# header.hpp #includes this file inside an array initializer instead, so the
+# content must be a bare comma-separated list of integer byte values (a
+# trailing comma is fine in a C++ initializer). Regenerated in lockstep with
+# the header above so the embedded bytes always match the on-disk file.
+BYTES_OUT="$(dirname "${OUT}")/configuration_bytes.inc"
+od -An -v -tu1 "${OUT}" | tr -s ' ' '\n' | grep -v '^$' | sed 's/$/,/' > "${BYTES_OUT}"
+
+echo "wrote ${BYTES_OUT}"

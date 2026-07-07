@@ -769,7 +769,7 @@ std::size_t count_planned_steps(const BuildContext& ctx)
   return total;
 }
 
-// Write .cppup/include/cppup/configuration.hpp from the bytes #embed-ed into
+// Write .cppup/include/cppup/configuration.hpp from the bytes baked into
 // the cppup binary at compile time. Idempotent: skip the write when on-disk
 // contents already match, so `cppup build` doesn't churn the file's mtime
 // on every invocation.
