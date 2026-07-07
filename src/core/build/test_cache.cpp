@@ -181,3 +181,68 @@ TEST(BuildCache, MissWhenOutputDeleted)
 
   fs::remove_all(L.root);
 }
+
+TEST(CacheTriplet, CombinesOsArchAndNormalizedCompiler)
+{
+  EXPECT_EQ(cache_triplet("linux", "x86_64", "g++"), "linux-x86_64-gcc");
+  EXPECT_EQ(cache_triplet("linux", "arm64", "clang++"), "linux-arm64-clang");
+  EXPECT_EQ(cache_triplet("windows", "x86_64", "cl"), "windows-x86_64-msvc");
+}
+
+TEST(CacheTriplet, NormalizesCompilerFamilyFromCrossAndVersionedNames)
+{
+  // Versioned and cross-prefixed drivers collapse to their bare family so the
+  // key stays stable across host toolchain revisions.
+  EXPECT_EQ(cache_triplet("linux", "arm64", "aarch64-linux-gnu-g++"), "linux-arm64-gcc");
+  EXPECT_EQ(cache_triplet("linux", "x86_64", "gcc-14"), "linux-x86_64-gcc");
+  EXPECT_EQ(cache_triplet("linux", "x86_64", "clang-18"), "linux-x86_64-clang");
+}
+
+TEST(CacheTriplet, FillsBlankComponentsWithUnknown)
+{
+  EXPECT_EQ(cache_triplet("", "", ""), "unknown-unknown-unknown");
+  EXPECT_EQ(cache_triplet("linux", "x86_64", ""), "linux-x86_64-unknown");
+}
+
+TEST(CacheTriplet, ProducesASingleFilesystemSafeSegment)
+{
+  const auto key = cache_triplet("Linux", "x86 64", "some/weird cc");
+  EXPECT_EQ(key.find('/'), std::string::npos) << "must stay a single path segment";
+  EXPECT_EQ(key.find(' '), std::string::npos) << "no spaces allowed in a cache key";
+  // Whole key must be exactly one relative path component.
+  const fs::path as_path{key};
+  auto           it = as_path.begin();
+  ASSERT_NE(it, as_path.end());
+  ++it;
+  EXPECT_EQ(it, as_path.end()) << "must not split into multiple path components";
+}
+
+TEST(TripletCacheDir, AppendsTripletToBase)
+{
+  const fs::path base = fs::path{"/proj"} / ".cppup" / "cache";
+  EXPECT_EQ(triplet_cache_dir(base, "linux", "x86_64", "g++"), base / "linux-x86_64-gcc");
+  EXPECT_NE(triplet_cache_dir(base, "linux", "x86_64", "g++"),
+            triplet_cache_dir(base, "linux", "arm64", "clang++"));
+}
+
+TEST(BuildCache, DifferentTripletsDoNotShareEntries)
+{
+  auto L = make_layout("triplet_isolation");
+
+  const auto host_dir  = triplet_cache_dir(L.cache_dir, "linux", "x86_64", "g++");
+  const auto cross_dir = triplet_cache_dir(L.cache_dir, "linux", "arm64", "clang++");
+
+  auto host_cache = create_build_cache(host_dir);
+  ASSERT_NE(host_cache, nullptr);
+  fill_source_checksum(L, *host_cache);
+  host_cache->cache_build_result(L.target, L.deps);
+  ASSERT_FALSE(host_cache->needs_rebuild(L.target)) << "same triplet must hit";
+
+  // A cache keyed to a different triplet has never seen this target: miss.
+  auto cross_cache = create_build_cache(cross_dir);
+  ASSERT_NE(cross_cache, nullptr);
+  EXPECT_TRUE(cross_cache->needs_rebuild(L.target))
+      << "a different triplet must not reuse another triplet's cached result";
+
+  fs::remove_all(L.root);
+}

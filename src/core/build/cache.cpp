@@ -5,6 +5,7 @@
 #include <sqlite3.h>
 
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -13,6 +14,8 @@
 #include <optional>
 #include <regex>
 #include <sstream>
+#include <string>
+#include <string_view>
 
 #include "../dependency/database.hpp"
 #include "../panic.hpp"
@@ -418,6 +421,54 @@ sqlite3* open_cache_db(const std::filesystem::path& db_path)
   return database;
 }
 
+// Lowercase + squash to a single filesystem-safe path segment: any character
+// outside [a-z0-9._] becomes '-'. Empty input yields "unknown" so a component
+// is never blank in the composed triplet.
+std::string sanitize_component(std::string_view value)
+{
+  if (value.empty())
+  {
+    return "unknown";
+  }
+  std::string out;
+  out.reserve(value.size());
+  for (const char ch : value)
+  {
+    const auto lowered = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    const bool keep    = (lowered >= 'a' && lowered <= 'z') || (lowered >= '0' && lowered <= '9') ||
+                      lowered == '.' || lowered == '_';
+    out.push_back(keep ? lowered : '-');
+  }
+  return out;
+}
+
+// Collapse a compiler/driver name to a bare family so versioned and
+// cross-prefixed drivers key the same cache. Order matters: `clang++` and
+// `clang-cl` contain neither "gcc" nor "g++", and a bare `cl` must not match
+// the "cl" inside "clang".
+std::string normalize_compiler(std::string_view compiler)
+{
+  const std::string lowered = sanitize_component(compiler);
+  if (lowered == "unknown")
+  {
+    return lowered;
+  }
+  if (lowered.find("clang") != std::string::npos)
+  {
+    return "clang";
+  }
+  // "g++" sanitizes to "g--"; treat it as the gcc family.
+  if (lowered.find("gcc") != std::string::npos || lowered.find("g--") != std::string::npos)
+  {
+    return "gcc";
+  }
+  if (lowered == "cl" || lowered == "cl.exe" || lowered.find("msvc") != std::string::npos)
+  {
+    return "msvc";
+  }
+  return lowered;
+}
+
 }  // namespace
 
 std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem::path& source_file)
@@ -440,6 +491,20 @@ std::vector<std::string> DependencyScanner::scan_includes(const std::filesystem:
     }
   }
   return includes;
+}
+
+std::string cache_triplet(std::string_view target_os, std::string_view target_arch,
+                          std::string_view compiler)
+{
+  return sanitize_component(target_os) + "-" + sanitize_component(target_arch) + "-" +
+         normalize_compiler(compiler);
+}
+
+std::filesystem::path triplet_cache_dir(const std::filesystem::path& base_cache_dir,
+                                        std::string_view target_os, std::string_view target_arch,
+                                        std::string_view compiler)
+{
+  return base_cache_dir / cache_triplet(target_os, target_arch, compiler);
 }
 
 std::unique_ptr<BuildCache> create_build_cache(

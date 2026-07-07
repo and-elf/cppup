@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "../dependency/database.hpp"
@@ -74,6 +75,28 @@ struct DependencyScanner
   // Empty vector on file-open failure.
   static std::vector<std::string> scan_includes(const std::filesystem::path& source_file);
 };
+
+// Build a filesystem-safe cache key of the form "os-arch-compiler" that
+// identifies one cross-compilation target. Each distinct triplet gets its own
+// cache subdirectory so build artifacts / freshness records for e.g.
+// `linux-x86_64-gcc` never clobber or get reused for `linux-arm64-clang`.
+//
+// Blank components collapse to "unknown". The compiler string is normalized to
+// a bare family name so versioned and cross-prefixed drivers stay stable:
+// g++ / gcc-14 / aarch64-linux-gnu-g++ -> "gcc", clang++ / clang-18 ->
+// "clang", cl / cl.exe -> "msvc". Any remaining character outside
+// [a-z0-9._] is replaced with '-' so the result is always a single, valid
+// path segment.
+[[nodiscard]] std::string cache_triplet(std::string_view target_os, std::string_view target_arch,
+                                        std::string_view compiler);
+
+// `base_cache_dir / cache_triplet(...)`: the per-triplet cache directory to
+// hand to `create_build_cache`. Keeps triplet keying in one place so callers
+// don't reconstruct the path convention.
+[[nodiscard]] std::filesystem::path triplet_cache_dir(const std::filesystem::path& base_cache_dir,
+                                                      std::string_view             target_os,
+                                                      std::string_view             target_arch,
+                                                      std::string_view             compiler);
 
 // Returns nullptr when the cache dir or SQLite DB can't be opened; callers
 // proceed without caching in that case.

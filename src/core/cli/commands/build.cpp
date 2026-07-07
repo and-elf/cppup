@@ -984,12 +984,6 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
     std::filesystem::create_directories(build_dir);
     const BuildPaths paths{.project_root = context.projectRoot, .build_dir = build_dir};
 
-    auto cache = bld::create_build_cache(cppup_dir / "cache", nullptr);
-    if (!cache)
-    {
-      logger.warning("build cache unavailable");
-    }
-
     materialize_configuration_header(cppup_dir);
 
     migrate_legacy_toolchain_file(context.projectRoot, logger);
@@ -1016,6 +1010,28 @@ std::expected<int, std::string> executeBuild(const conf::BuildOptions& options,
       return std::unexpected(applied.error());
     }
     const auto& config = base_config;
+
+    // Give each cross-compilation target its own cache subdirectory so build
+    // artifacts / freshness records for one triplet never clobber or get
+    // reused for another. OS/arch come from the resolved config when it pins
+    // them, otherwise the host platform; the compiler is the selected
+    // toolchain (default g++, matching the compiler the planner invokes).
+    const std::string triplet_os =
+        config.target_os.empty() ? std::string{conf::target_os} : config.target_os;
+    const std::string triplet_arch =
+        config.target_arch.empty() ? std::string{conf::target_arch} : config.target_arch;
+    const std::string triplet_compiler =
+        config.toolchain ? config.toolchain->name : std::string{"g++"};
+    const auto cache_dir =
+        bld::triplet_cache_dir(cppup_dir / "cache", triplet_os, triplet_arch, triplet_compiler);
+    logger.debug("build cache triplet: " +
+                 bld::cache_triplet(triplet_os, triplet_arch, triplet_compiler));
+
+    auto cache = bld::create_build_cache(cache_dir, nullptr);
+    if (!cache)
+    {
+      logger.warning("build cache unavailable");
+    }
 
     logger.info(format_project_summary(config));
 
