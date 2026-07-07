@@ -64,6 +64,43 @@ class ProcessRunnerGitInterface final : public GitInterface
     return result.exit_code == 0;
   }
 
+  [[nodiscard]] bool init(const std::filesystem::path& directory,
+                          GitVerbosity                 verbosity = GitVerbosity::Quiet) override
+  {
+    if (process_runner_ == nullptr)
+    {
+      return false;
+    }
+
+    const bool        quiet = verbosity == GitVerbosity::Quiet;
+    ProcessRunRequest request;
+    request.command = "git";
+    request.args    = {"init"};
+    if (quiet)
+    {
+      request.args.emplace_back("--quiet");
+    }
+    request.working_dir = directory.string();
+
+    if (!quiet)
+    {
+      return process_runner_->run(request) == 0;
+    }
+
+    // Mirror clone_shallow: stay silent on success, surface git's message on
+    // failure so the user gets an actionable error.
+    const auto result = process_runner_->run_capture(request);
+    if (result.exit_code != 0 && !result.output.empty())
+    {
+      std::fputs(result.output.c_str(), stderr);
+      if (result.output.back() != '\n')
+      {
+        std::fputc('\n', stderr);
+      }
+    }
+    return result.exit_code == 0;
+  }
+
  private:
   ProcessRunner* process_runner_;
 };

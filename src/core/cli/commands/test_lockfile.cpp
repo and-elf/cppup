@@ -571,6 +571,12 @@ class FakeGit final : public cppup::cli::GitInterface
     marker << url;
     return true;
   }
+
+  bool init(const fs::path& /*directory*/,
+            cppup::cli::GitVerbosity /*verbosity*/ = cppup::cli::GitVerbosity::Quiet) override
+  {
+    return true;
+  }
 };
 
 void write_lockfile(const fs::path& project_root, const std::vector<Entry>& entries)
