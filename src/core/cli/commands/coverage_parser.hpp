@@ -37,4 +37,13 @@ struct CoverageScan
 // `#include`s the STL.
 [[nodiscard]] CoverageSummary parse_gcov_reports(const CoverageScan& scan);
 
+// Coverage gate decision: true when the measured line-coverage percentage
+// `total_pct` satisfies the required `threshold` (both expressed on a 0..100
+// scale). A small tolerance absorbs floating-point rounding so a report that
+// is effectively at the bar is not rejected by a sub-ulp shortfall. A
+// non-positive `threshold` means the gate is disabled and is always
+// satisfied. Pure and side-effect free so the CI gate logic is unit-testable
+// without generating gcov reports.
+[[nodiscard]] bool coverage_meets_threshold(double total_pct, double threshold) noexcept;
+
 }  // namespace cppup::cli

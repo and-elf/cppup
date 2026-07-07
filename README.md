@@ -219,6 +219,9 @@ cppup build                          Build libraries and binaries.
 
 cppup test [filter]                  Run tests (compiles them if needed).
     --asan, --coverage, --toolchain, --profile
+    --fail-under <pct>                  Exit non-zero if total line coverage is below <pct>
+                                        (0..100). Requires --coverage. Use in CI to gate
+                                        merges on a coverage floor.
     [filter]                            Pass-through filter handed verbatim to each test's
                                         TestFramework plugin (gtest: glob like 'Suite.*').
                                         Tests without a configured framework are skipped

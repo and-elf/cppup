@@ -14,6 +14,7 @@
 
 #include <cppup/configuration.hpp>
 #include <memory>
+#include <optional>
 #include <print>
 #include <string>
 #include <vector>
@@ -484,8 +485,9 @@ void registerTestCommand(const CommandRegistration& reg)
   auto& result = *reg.result;
   struct Opts
   {
-    bool        asan     = false;
-    bool        coverage = false;
+    bool        asan       = false;
+    bool        coverage   = false;
+    double      fail_under = 0.0;
     std::string toolchain;
     std::string profile;
     std::string filter;
@@ -496,6 +498,11 @@ void registerTestCommand(const CommandRegistration& reg)
   cmd->add_flag("--asan", opts->asan, "Enable AddressSanitizer");
   cmd->add_flag("--coverage", opts->coverage,
                 "Collect gcov coverage after tests (build with --coverage first)");
+  auto* fail_under_opt =
+      cmd->add_option("--fail-under", opts->fail_under,
+                      "Fail (non-zero exit) if total line coverage is below this percentage "
+                      "(0..100); requires --coverage");
+  fail_under_opt->check(CLI::Range(0.0, 100.0));
   cmd->add_option("--toolchain", opts->toolchain, "Override the active toolchain for this build");
   cmd->add_option("--profile", opts->profile, "Override the active build profile for this build");
   cmd->add_option("filter", opts->filter,
@@ -503,7 +510,7 @@ void registerTestCommand(const CommandRegistration& reg)
                   "test's TestFramework plugin");
 
   cmd->callback(
-      [opts, &ctx, &result]
+      [opts, fail_under_opt, &ctx, &result]
       {
         BuildOptions test_opts{.asan       = to_enum<Asan>(opts->asan),
                                .coverage   = to_enum<Coverage>(opts->coverage),
@@ -520,8 +527,15 @@ void registerTestCommand(const CommandRegistration& reg)
         {
           test_opts.profile = opts->profile;
         }
-        result.set(handleExpectedResult(executeTest(test_opts, opts->filter, ctx), "Test",
-                                        ErrorHandler::ErrorCode::TestFailure));
+        // Only gate when the user actually passed --fail-under; an unset
+        // option leaves the coverage run purely informational.
+        std::optional<double> min_coverage;
+        if (fail_under_opt->count() > 0)
+        {
+          min_coverage = opts->fail_under;
+        }
+        result.set(handleExpectedResult(executeTest(test_opts, opts->filter, min_coverage, ctx),
+                                        "Test", ErrorHandler::ErrorCode::TestFailure));
       });
 }
 

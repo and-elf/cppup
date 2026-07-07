@@ -277,6 +277,7 @@ TestRunCounts run_discovered_binaries(const fs::path& tests_dir, std::string_vie
 
 std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
                                             std::string_view          filter,
+                                            std::optional<double>     min_coverage,
                                             const CommandContext&     context) noexcept
 {
   try
@@ -284,6 +285,11 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
     if (context.processRunner == nullptr)
     {
       return std::unexpected("No process runner configured");
+    }
+
+    if (min_coverage && !conf::enabled(options.coverage))
+    {
+      return std::unexpected("--fail-under requires --coverage");
     }
 
     auto& logger = *context.logger;
@@ -353,6 +359,9 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
     }
     logger.info(summary);
 
+    // Deferred so a coverage-gate failure never masks a test failure: an
+    // actual test failure is the more actionable signal and is reported first.
+    std::optional<std::string> coverage_gate_error;
     if (conf::enabled(options.coverage))
     {
       const fs::path coverage_dir   = build_dir / "coverage";
@@ -363,6 +372,13 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
       if (!summary_result)
       {
         logger.warning("coverage: " + summary_result.error());
+        // Can't verify the floor if we couldn't measure coverage, so the gate
+        // fails closed rather than letting an unmeasured run slip past CI.
+        if (min_coverage)
+        {
+          coverage_gate_error =
+              "coverage gate: unable to compute coverage (" + summary_result.error() + ")";
+        }
       }
       else
       {
@@ -372,12 +388,26 @@ std::expected<int, std::string> executeTest(const conf::BuildOptions& options,
         logger.info("Coverage: " + pct.str() + "% line coverage across " +
                     std::to_string(summary_result->files_seen) + " files; reports in " +
                     coverage_dir.string());
+
+        if (min_coverage && !coverage_meets_threshold(summary_result->total_pct, *min_coverage))
+        {
+          std::ostringstream threshold;
+          threshold.precision(2);
+          threshold << std::fixed << *min_coverage;
+          coverage_gate_error = "coverage " + pct.str() + "% is below the required minimum of " +
+                                threshold.str() + "%";
+        }
       }
     }
 
     if (counts.failed > 0)
     {
       return std::unexpected(std::to_string(counts.failed) + " test(s) failed");
+    }
+
+    if (coverage_gate_error)
+    {
+      return std::unexpected(*coverage_gate_error);
     }
 
     return 0;

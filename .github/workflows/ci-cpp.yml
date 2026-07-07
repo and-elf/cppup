@@ -122,7 +122,10 @@ jobs:
             echo "No matching files changed"
           fi
       - name: Run tests with coverage
-        run: ./build/cppup test --coverage
+        # Gate merges on a minimum total line-coverage percentage. The floor
+        # is set below the current level (~61%) to leave headroom for
+        # environment differences; raise it as coverage improves.
+        run: ./build/cppup test --coverage --fail-under 55
 
   windows-bootstrap:
     # Smoke test for the Windows bootstrap path: build the slim
