@@ -42,7 +42,7 @@ src/core/configuration/
 ├── profile.hpp               # Profile + ProfileProcessor
 ├── platform.hpp              # compile-time when_windows / when_linux / when_macos / when_x86_64 / when_arm64
 ├── runtime.hpp               # when_toolchain / when_profile / when_feature / when_env*
-├── cppup_config.hpp          # legacy convenience helpers (warnings::, optimization::, debug_profile() …)
+├── cppup_config.hpp          # legacy convenience helpers (warnings::, optimization::, linker::, debug_profile() …)
 └── toolchain_flags.hpp       # CxxStandard / WarningLevel expansion per compiler family
 ```
 
@@ -271,6 +271,7 @@ config.compile_flags = warnings::extra();            // -Wall -Wextra
 config.compile_flags = warnings::pedantic();         // + -Wpedantic
 config.compile_flags = optimization::aggressive();   // -O3 -flto
 config.compile_flags = cpp_standard::cpp23();        // -std=c++23
+config.link_flags    = {linker::mold()};             // -fuse-ld=mold
 
 config.profiles = {
     debug_profile({Flag{"-fsanitize=address"}}),

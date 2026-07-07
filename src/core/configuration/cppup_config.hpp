@@ -18,8 +18,8 @@
  *     return BuildConfiguration{
  *         .toolchain = Toolchain{"gcc-13"},
  *         .packages = {
- *             Package{"boost", "1.82.0"},
- *             Package{"fmt"}
+ *             configuration::package_helpers::from_registry("boost", "1.82.0"),
+ *             configuration::package_helpers::from_registry("fmt")
  *         },
  *         .sources = {"src/main.cpp"},
  *         .compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}},
@@ -270,6 +270,32 @@ inline Flag latest()
   return Flag{"-std=c++2b"};
 }
 }  // namespace cpp_standard
+
+/**
+ * Select the linker via the compiler's -fuse-ld driver flag.
+ *
+ * These are link flags and belong in BuildConfiguration::link_flags, e.g.
+ *   config.link_flags = {linker::mold()};
+ */
+namespace linker
+{
+inline Flag bfd()
+{
+  return Flag{"-fuse-ld=bfd"};
+}
+inline Flag gold()
+{
+  return Flag{"-fuse-ld=gold"};
+}
+inline Flag lld()
+{
+  return Flag{"-fuse-ld=lld"};
+}
+inline Flag mold()
+{
+  return Flag{"-fuse-ld=mold"};
+}
+}  // namespace linker
 
 /**
  * Platform-specific helper functions
