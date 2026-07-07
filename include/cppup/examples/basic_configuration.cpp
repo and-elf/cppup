@@ -4,11 +4,18 @@
  */
 
 #include <cppup/configuration.hpp>
+#include <cppup_config.hpp>
 
 using namespace cppup::configuration;
 
 extern "C" BuildConfiguration configure()
 {
+  // Compiler flags — built from the legacy convenience helpers
+  // (cppup::config::warnings / cppup::config::cpp_standard) instead of
+  // spelling out the raw -Wall/-Wextra/-std flags.
+  auto compile_flags = cppup::config::warnings::extra();
+  compile_flags.push_back(cppup::config::cpp_standard::cpp23());
+
   return BuildConfiguration{
       // Specify toolchain
       .toolchain = Toolchain{"gcc-13"},
@@ -32,7 +39,7 @@ extern "C" BuildConfiguration configure()
           },
 
       // Compiler flags
-      .compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}, Flag{"-std=c++23"}},
+      .compile_flags = compile_flags,
 
       // Linker flags
       .link_flags = {Flag{"-pthread"}},

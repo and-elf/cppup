@@ -21,7 +21,7 @@
  *             Package{"boost", "1.82.0"},
  *             Package{"fmt"}
  *         },
- *         .sources = {"src/*.cpp"},
+ *         .sources = {"src/main.cpp"},
  *         .compile_flags = {Flag{"-Wall"}, Flag{"-Wextra"}},
  *         .binaries = {Binary{"myapp", {"src/main.cpp"}}}
  *     };
@@ -141,7 +141,7 @@ inline Profile test_profile(const std::string&       test_framework   = "catch2"
                             const std::vector<Flag>& additional_flags = {})
 {
   Profile profile("test");
-  profile.packages      = {Package{test_framework}};
+  profile.packages      = {configuration::package_helpers::from_registry(test_framework)};
   profile.compile_flags = {Flag{"-g"}, Flag{"-O0"}, Flag{"-DTESTING"}};
   profile.compile_flags.insert(profile.compile_flags.end(), additional_flags.begin(),
                                additional_flags.end());
@@ -218,6 +218,10 @@ inline Flag cpp20()
 inline Flag cpp23()
 {
   return Flag{"-std=c++23"};
+}
+inline Flag cpp26()
+{
+  return Flag{"-std=c++26"};
 }
 inline Flag latest()
 {
@@ -298,8 +302,3 @@ inline void add_platform_flags(BuildConfiguration&      config,
 }  // namespace platform
 
 }  // namespace cppup::config
-
-/**
- * Convenience namespace alias for shorter code
- */
-namespace cppup_config = cppup::config;
