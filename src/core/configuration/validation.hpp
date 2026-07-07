@@ -188,6 +188,11 @@ class ConfigurationValidator
   static void validate_build_steps(const BuildConfiguration& config, ValidationResult& result);
 
   /**
+   * Validate external scripts (each must declare a non-empty command)
+   */
+  static void validate_scripts(const BuildConfiguration& config, ValidationResult& result);
+
+  /**
    * Validate that every `Test::framework` reference resolves to a declared
    * `TestFramework`, that frameworks have non-empty names, and that no two
    * frameworks share a name.

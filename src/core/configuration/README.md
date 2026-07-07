@@ -38,7 +38,7 @@ The implementation is split across this directory:
 src/core/configuration/
 ├── build_configuration.hpp   # struct BuildConfiguration
 ├── types.hpp                 # Package / Module / Toolchain / Flag / Definition / TestFramework
-├── outputs.hpp               # Binary / Library / Test / BuildStep
+├── outputs.hpp               # Binary / Library / Test / Script / BuildStep
 ├── profile.hpp               # Profile + ProfileProcessor
 ├── platform.hpp              # compile-time when_windows / when_linux / when_macos / when_x86_64 / when_arm64
 ├── runtime.hpp               # when_toolchain / when_profile / when_feature / when_env*
@@ -68,6 +68,7 @@ struct BuildConfiguration {
   std::vector<Subproject>     subprojects;
   std::vector<Profile>        profiles;
   std::vector<BuildStep>      build_steps;
+  std::vector<Script>         scripts;
 
   // Filled by the host before configure() runs:
   std::string                        target_os;
@@ -95,6 +96,7 @@ struct BuildConfiguration {
 | `tests` | `Test{.name, .sources, .framework = "gtest"}` — `.framework` selects which `TestFramework` to link against. |
 | `test_frameworks` | Registered framework integrations (gtest is built in). When a `TestFramework` has no explicit `.package`, the framework plugin's `default_package()` is used and recorded in `cppup.lock`. |
 | `build_steps` | Custom steps with declared dependencies, executed in order before/after the main build. |
+| `scripts` | External commands run at a fixed build phase — see [External scripts](#external-scripts). |
 | `subprojects` | Nested projects whose libraries/binaries get merged into this build. Backend (cppup / CMake / Make / header-only) is inferred from directory contents and can be overridden. |
 
 ### Profiles
@@ -115,6 +117,30 @@ via `cppup profile select X` to `cppup.lock`. The CLI exports it as
 `CPPUP_ACTIVE_PROFILE` before compiling `build.cpp` so `when_profile`
 can branch on it from inside `configure()`. Selection precedence and
 selection mechanics live in [docs/packages.md](../../../docs/packages.md).
+
+### External scripts
+
+`scripts` runs external commands at a fixed build phase — `ScriptPhase::PreBuild`
+before any compilation, `ScriptPhase::PostBuild` after every library, binary and
+test (and any `build_steps`) have been built. Use them for code generation,
+asset preparation, packaging or signing.
+
+```cpp
+config.scripts = {
+    Script{.command     = "python3",
+           .args        = {"scripts/gen.py", "--out", "generated"},
+           .phase       = ScriptPhase::PreBuild,
+           .working_dir = "tools"},  // relative to project root; empty = root
+    pre_build_script("./configure", {"--enable-foo"}),  // helper from cppup_config.hpp
+    post_build_script("./package.sh"),
+};
+```
+
+Each script is executed with an explicit argument vector — `command` is the
+program and `args` are passed as separate argv entries. The command is **never**
+routed through a shell (`sh -c`), so values in `command`/`args` are not subject
+to shell word-splitting, glob expansion or string interpolation. Scripts of a
+phase run in declaration order; the build fails fast on the first non-zero exit.
 
 ### Platform queries
 

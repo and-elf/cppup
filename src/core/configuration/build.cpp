@@ -26,7 +26,7 @@ extern "C" BuildConfiguration configure()
       .name       = "cppup_config",
       .sources    = {"compiler.cpp", "compile_commands.cpp", "loader.cpp", "validation.cpp",
                      "package_resolver.cpp", "toolchain_flags.cpp", "profile_processor.cpp",
-                     "build_step_executor.cpp"},
+                     "build_step_executor.cpp", "script_executor.cpp"},
       .type       = LibraryType::Static,
       .link_flags = {Flag{"-ldl"}},
   });
@@ -48,6 +48,7 @@ extern "C" BuildConfiguration configure()
   add_gtest(config, "test_validation", "tests/test_validation.cpp", true);
   add_gtest(config, "test_compiler", "tests/test_compiler.cpp", true);
   add_gtest(config, "test_build_step_executor", "tests/test_build_step_executor.cpp", true);
+  add_gtest(config, "test_script_executor", "tests/test_script_executor.cpp", true);
 
   return config;
 }

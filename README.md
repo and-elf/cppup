@@ -103,7 +103,7 @@ extern "C" BuildConfiguration configure()
 
 `Toolchain` carries the dialect and warning policy as strong enums (`CxxStandard::{Cxx17,Cxx20,Cxx23,Cxx26}`, `WarningLevel::{None,Standard,Strict,Werror}`); the toolchain expander maps them to family-specific flags (`-std=c++23 -Wall -Wextra -Wpedantic -Werror` on gcc/clang, the MSVC equivalents elsewhere). Anything compiler-specific that doesn't fit goes verbatim in `Toolchain::extra_flags`.
 
-`BuildConfiguration` also carries `test_frameworks` (registered test runners — see [docs/plugin_api.md](docs/plugin_api.md)), `subprojects`, `build_steps` (custom steps with dependencies), and a `target_os` / `target_arch` / `environment` / `features` set populated by the host before `configure()` runs.
+`BuildConfiguration` also carries `test_frameworks` (registered test runners — see [docs/plugin_api.md](docs/plugin_api.md)), `subprojects`, `build_steps` (custom steps with dependencies), `scripts` (external commands run pre-/post-build with an explicit argv vector, never via a shell), and a `target_os` / `target_arch` / `environment` / `features` set populated by the host before `configure()` runs.
 
 The `when_*` helpers come in two families:
 

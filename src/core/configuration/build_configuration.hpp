@@ -48,6 +48,9 @@ struct BuildConfiguration
   // Custom build steps
   std::vector<BuildStep> build_steps;
 
+  // External scripts run at defined build phases (pre-/post-build)
+  std::vector<Script> scripts;
+
   // Platform queries (filled by system)
   std::string                        target_os;
   std::string                        target_arch;

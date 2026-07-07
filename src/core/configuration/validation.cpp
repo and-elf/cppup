@@ -29,6 +29,9 @@ ValidationResult ConfigurationValidator::validate(const BuildConfiguration&     
   // Validate build steps
   validate_build_steps(config, result);
 
+  // Validate external scripts
+  validate_scripts(config, result);
+
   // Validate test frameworks + every Test::framework reference
   validate_test_frameworks(config, result);
 
@@ -110,6 +113,19 @@ void ConfigurationValidator::validate_build_steps(const BuildConfiguration& conf
     if (step.name.empty())
     {
       result.add_error(ValidationErrorType::InvalidOutput, "Build step with empty name found");
+    }
+  }
+}
+
+void ConfigurationValidator::validate_scripts(const BuildConfiguration& config,
+                                              ValidationResult&         result)
+{
+  for (const auto& script : config.scripts)
+  {
+    if (script.command.empty())
+    {
+      result.add_error(ValidationErrorType::InvalidOutput, "Script with empty command found",
+                       "Set `command` on the Script entry");
     }
   }
 }
