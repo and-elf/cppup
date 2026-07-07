@@ -7,6 +7,7 @@
  */
 
 #include <cppup/configuration.hpp>
+#include <cppup_config.hpp>
 
 using namespace cppup::configuration;
 
@@ -50,7 +51,10 @@ extern "C" BuildConfiguration configure()
 
   // === Build Configuration ===
   config.sources       = {"src/*.cpp"};
-  config.compile_flags = {Flag{"-std=c++23"}, Flag{"-Wall"}, Flag{"-Wextra"}};
+  config.compile_flags = {cppup::config::cpp_standard::cpp23()};
+  auto warning_flags   = cppup::config::warnings::extra();
+  config.compile_flags.insert(config.compile_flags.end(), warning_flags.begin(),
+                              warning_flags.end());
 
   config.binaries = {Binary{"modular_demo", {"src/main.cpp"}}};
 

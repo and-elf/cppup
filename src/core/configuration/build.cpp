@@ -41,6 +41,7 @@ extern "C" BuildConfiguration configure()
   add_gtest(config, "test_link_resolution", "tests/test_link_resolution.cpp");
   add_gtest(config, "test_subproject", "tests/test_subproject.cpp");
   add_gtest(config, "test_subproject_loader", "tests/test_subproject_loader.cpp");
+  add_gtest(config, "test_cppup_config", "tests/test_cppup_config.cpp");
 
   add_gtest(config, "test_compile_commands", "tests/test_compile_commands.cpp", true);
   add_gtest(config, "test_loader", "tests/test_loader.cpp", true);

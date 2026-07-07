@@ -4,6 +4,7 @@
  */
 
 #include <cppup/configuration.hpp>
+#include <cppup_config.hpp>
 
 using namespace cppup::configuration;
 
@@ -26,8 +27,10 @@ extern "C" BuildConfiguration configure()
   when_linux(
       [&]()
       {
-        config.compile_flags.insert(config.compile_flags.end(),
-                                    {Flag{"-Wall"}, Flag{"-Wextra"}, Flag{"-std=c++23"}});
+        auto linux_flags = cppup::config::warnings::extra();
+        linux_flags.push_back(cppup::config::cpp_standard::cpp23());
+        config.compile_flags.insert(config.compile_flags.end(), linux_flags.begin(),
+                                    linux_flags.end());
         config.link_flags.push_back(Flag{"-pthread"});
         config.packages.push_back(Package{"linux-headers"});
         config.definitions.push_back(Definition{"LINUX_BUILD"});
@@ -36,8 +39,10 @@ extern "C" BuildConfiguration configure()
   when_macos(
       [&]()
       {
-        config.compile_flags.insert(config.compile_flags.end(),
-                                    {Flag{"-Wall"}, Flag{"-Wextra"}, Flag{"-std=c++23"}});
+        auto macos_flags = cppup::config::warnings::extra();
+        macos_flags.push_back(cppup::config::cpp_standard::cpp23());
+        config.compile_flags.insert(config.compile_flags.end(), macos_flags.begin(),
+                                    macos_flags.end());
         config.link_flags.push_back(Flag{"-framework Foundation"});
         config.packages.push_back(Package{"macos-sdk"});
         config.definitions.push_back(Definition{"MACOS_BUILD"});
