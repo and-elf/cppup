@@ -7,7 +7,9 @@ are landed. `cppup plugin add` is still a scaffolding stub — the
 validation pipeline described in §6 has not been wired through. Built-in
 extensions (cppup-native build system, console logger, gtest test
 framework) register through the same plugin pipeline rather than ad-hoc
-factories.
+factories. §6.6 answers "how do I get a source-form plugin fetched,
+compiled, and loaded" and documents exactly which of those steps exist
+today.
 
 This document is the source of truth for the plugin system. The ABI
 header is the ultimate reference for byte-level layout; this document
@@ -440,6 +442,112 @@ added_at    = "2026-05-21T11:32:18Z"
 Order in the file is install order. Load order at build time follows
 this order; plugins that need to be loaded earlier must be added
 earlier. (Topological dependency-aware ordering is a v1.1 feature.)
+
+### 6.6 Fetching and compiling a plugin from source
+
+A plugin does not have to arrive as a pre-built shared object. The
+package-manifest format under [manifests/](../manifests/) (design home
+for the registry format; see [manifests/README.md](../manifests/README.md))
+reserves `kind = "plugin"` so a plugin can be described exactly like a
+library or a tool: a `[source]` table says how to fetch it, a `[build]`
+table says how to compile it.
+[manifests/examples/plugin-ninja-builder.toml](../manifests/examples/plugin-ninja-builder.toml)
+is the canonical example:
+
+```toml
+schema = 1
+
+[package]
+name         = "ninja-builder"
+version      = "0.1.0"
+kind         = "plugin"
+cppup_compat = ">=0.5.0"
+
+[source]
+type = "directory"           # git | tar | zip | http | directory
+url  = "./plugins/ninja-builder"
+
+[build]
+system = "cmake"             # name of a registered build-system plugin
+
+[plugin]
+build_hash  = ""              # filled by the build pipeline, see §5
+commit_hash = ""
+
+[[plugin.entries]]
+id             = "ninja"
+kind           = "build_system"
+vtable_version = 1
+
+[plugin.dependencies]
+system = ["ninja"]
+```
+
+The end-to-end pipeline this implies is the same fetch → compile → load
+sequence every other package kind uses, applied to the plugin
+infrastructure already specified above:
+
+1. **Manifest.** `[source]` names a fetch mechanism; `[build]` names the
+   build-system plugin that will compile the fetched tree.
+2. **Fetch source.** The host resolves `[source]` the same way it
+   resolves any package's source (see [docs/packages.md](packages.md)):
+   it dispatches `source.type` to the matching
+   `cppup_package_source_vtable_v1` plugin (§3.4) — `git` to the
+   built-in git plugin ([src/core/package/git/](../src/core/package/git/)),
+   `tar`/`zip`/`http` to the archive/http plugins, `directory` to a
+   no-op that uses the path in place. `resolve_source()` returns the
+   on-disk path of the fetched tree.
+3. **Compile to a shared object.** The host hands that path to the
+   named `[build].system` plugin's `build(instance, source_path)`
+   (§3.4, `cppup_build_system_vtable_v1`). For the example above that's
+   the built-in cmake plugin
+   ([src/core/buildsystems/cmake/](../src/core/buildsystems/cmake/)),
+   which runs a normal CMake configure+build against the fetched tree.
+   The build produces a `.so` (`.dylib` / `.dll`) — no different from
+   compiling a library, except this particular artifact implements the
+   plugin ABI instead of exporting arbitrary symbols.
+4. **Stamp.** The produced `.so` is run through the §5 stamping step to
+   attach `build_hash` / `commit_hash` / `build_date` and emit the
+   `<so>.toml` sidecar.
+5. **Install.** The `.so` + sidecar feed into the `cppup plugin add`
+   pipeline (§6.2) — `dlopen`, entry-point lookup, embedded-vs-sidecar
+   comparison, hash verification, compat check — and on success land
+   under `.cppup/plugins/<name>/` with an `installed.toml` entry.
+6. **Load via the ABI.** The next `cppup build` runs the §7 load
+   lifecycle: `dlopen` the SO, `dlsym` the two entry points,
+   re-validate, and register each descriptor's vtable into the matching
+   per-kind registry. From that point the plugin's C functions are
+   reachable through [abi.h](../include/cppup/plugin/abi.h) exactly like
+   a built-in plugin's.
+
+#### Current implementation status
+
+Steps 2–6 above are the *target* design, not current behaviour. Checked
+against the code as it stands:
+
+| Piece | Where | Status |
+| --- | --- | --- |
+| ABI, manifest parser, descriptor validator | [abi.h](../include/cppup/plugin/abi.h), [manifest.cpp](../src/core/plugin/manifest.cpp), [descriptor_validation.cpp](../src/core/plugin/descriptor_validation.cpp) | Implemented, unit-tested |
+| `dlopen`/`dlsym` wrapper + validated load (`load_plugin`) | [libdl_loader.cpp](../src/core/plugin/libdl_loader.cpp), [loader.cpp](../src/core/plugin/loader.cpp) | Implemented and unit-tested (`test_plugin_loader.cpp`, via a fake loader) — but **not called from anywhere in the CLI or build path**; nothing in `cppup` invokes `LibdlLoader` outside its own tests |
+| In-process static registration | [static_registry.cpp](../src/core/plugin/static_registry.cpp); e.g. [git_plugin.cpp](../src/core/package/git/git_plugin.cpp), [cmake_plugin.cpp](../src/core/buildsystems/cmake/cmake_plugin.cpp) | Implemented and in production use — this is how every built-in package-source, build-system, and logger plugin actually reaches the host today, registered from `main.cpp` |
+| `cppup plugin add <source>` fetching a source-form manifest, invoking a build-system plugin, stamping the result | [plugin.cpp](../src/core/cli/commands/plugin.cpp) | **Not implemented.** `executePluginAdd` only creates `.cppup/plugins/<name>/manifest.json`; the `--dir` / `--url` branches log a message and do nothing further — no copy, no download, no compile, no `dlopen` |
+| `cppup-plugin-stamp` | — | **Not implemented** — no such tool exists in the tree |
+| Registry-aware fetch of a `kind = "plugin"` `package.toml` | [manifests/](../manifests/) | **Design only.** [manifests/README.md](../manifests/README.md) states the parser, registry client, and `[exports]` → build-system wiring "are not yet integrated with `cppup build`" |
+| Build-time load loop that `dlopen`s installed plugins (§7) | — | **Not implemented.** No command reads `.cppup/plugins/installed.toml` or calls `load_plugin()`; `cppup build` never touches the plugins directory |
+
+Net effect: **there is currently no supported way to hand `cppup` a
+plugin in source form and have it fetch, compile, and load it.** The
+only way a plugin's vtable is actually reachable by the host today is to
+statically link it into a custom `cppup` binary — implement the C
+vtable + descriptor + manifest the way
+[git_plugin.cpp](../src/core/package/git/git_plugin.cpp) does, and call
+`register_static_plugin()` from [src/main.cpp](../src/main.cpp) alongside
+the other built-ins. Everything upstream of that (fetch, compile, stamp,
+validated `plugin add`, `dlopen` at build time) is specified in this
+document but not yet wired through; treat §5–§7 as the target this
+subsection is grounded against, and the table above as the current
+state. Follow this doc's own drift policy (see the header note) and file
+an issue if code and spec disagree.
 
 ## 7. Load lifecycle at build time
 
