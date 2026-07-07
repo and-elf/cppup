@@ -16,3 +16,6 @@ bootstrap_build
 /test_cppup
 /test_expected
 /test_print
+
+# Claude Code local config
+/.claude/
