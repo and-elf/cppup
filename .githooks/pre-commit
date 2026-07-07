@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
 # Pre-commit hook for cppup.
 #
-# Runs three checks against the staged C++ files only (fast). If any of
-# them fails the commit is aborted. Each check can be skipped via env var
-# for the rare emergency commit:
+# Runs three checks against the staged C++ files only (fast), plus an
+# optional coverage-threshold gate. If any enabled check fails the commit is
+# aborted. Each of the three mandatory checks can be skipped via env var for
+# the rare emergency commit:
 #
 #   CPPUP_SKIP_GITLEAKS=1   skip secret scan
 #   CPPUP_SKIP_FORMAT=1     skip clang-format check
 #   CPPUP_SKIP_TIDY=1       skip clang-tidy
 #   CPPUP_SKIP_BUILD=1      skip build
 #   CPPUP_SKIP_HOOKS=1      skip everything (escape hatch)
+#
+# The coverage gate is the opposite: OFF by default, opt in per env var.
+# It reruns the whole test suite with gcov instrumentation via
+# scripts/check_coverage.sh, which is too slow to force on every commit.
+#
+#   CPPUP_CHECK_COVERAGE=1  opt in to the coverage-threshold check below
+#   CPPUP_SKIP_COVERAGE=1   skip the coverage check for one commit even if
+#                           CPPUP_CHECK_COVERAGE=1 is set globally (e.g. in
+#                           your shell rc)
+#   CPPUP_MIN_COVERAGE=N    minimum total line-coverage percentage required
+#                           (default: 70; see scripts/check_coverage.sh)
 #
 # Install once per clone: scripts/setup-hooks.sh
 
@@ -99,6 +111,17 @@ if [[ "${CPPUP_SKIP_TIDY:-0}" != "1" ]]; then
             echo "[pre-commit] clang-tidy reported issues — fix or set CPPUP_SKIP_TIDY=1."
             exit 1
         fi
+    fi
+fi
+
+# 4. Coverage threshold — OFF by default (see header). Opt in with
+#    CPPUP_CHECK_COVERAGE=1; it rebuilds the suite with instrumentation and
+#    reruns everything, so this is deliberately not part of the fast path.
+if [[ "${CPPUP_CHECK_COVERAGE:-0}" == "1" && "${CPPUP_SKIP_COVERAGE:-0}" != "1" ]]; then
+    echo "[pre-commit] cppup test --coverage (CPPUP_CHECK_COVERAGE=1)…"
+    if ! CPPUP_COVERAGE_BIN="$cppup_bin" "$repo_root/scripts/check_coverage.sh"; then
+        echo "[pre-commit] coverage check failed — fix coverage or set CPPUP_SKIP_COVERAGE=1."
+        exit 1
     fi
 fi
 

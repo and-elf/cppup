@@ -299,7 +299,10 @@ User-set:
 - `XDG_DATA_HOME` — when set and non-empty, `--user` installs land at `$XDG_DATA_HOME/cppup/`. Otherwise cppup falls back to `$HOME/.cppup/`.
 - `HOME` — fallback root for user-scope installs.
 - `CPPUP_SKIP_HOOKS=1` — skip the entire pre-commit hook for one commit.
-- `CPPUP_SKIP_GITLEAKS=1` / `CPPUP_SKIP_FORMAT=1` / `CPPUP_SKIP_TIDY=1` — skip the individual checks in `.githooks/pre-commit`.
+- `CPPUP_SKIP_GITLEAKS=1` / `CPPUP_SKIP_FORMAT=1` / `CPPUP_SKIP_TIDY=1` / `CPPUP_SKIP_BUILD=1` — skip the individual mandatory checks in `.githooks/pre-commit`.
+- `CPPUP_CHECK_COVERAGE=1` — opt in to the pre-commit coverage-threshold gate (off by default: it rebuilds the test suite with gcov instrumentation and reruns everything, via [scripts/check_coverage.sh](scripts/check_coverage.sh)).
+- `CPPUP_SKIP_COVERAGE=1` — skip the coverage gate for one commit even if `CPPUP_CHECK_COVERAGE=1` is set globally.
+- `CPPUP_MIN_COVERAGE=N` — minimum total line-coverage percentage the gate requires (default: `70`).
 
 Set by the CLI before compiling and loading `build.cpp` — read these via `active_toolchain()` / `active_profile()` or the `when_*` helpers in `<cppup/configuration.hpp>`:
 
@@ -335,7 +338,7 @@ cppup build
 - Source layout: `src/core/{configuration,dependency,build,buildsystems,package,cli,logger,plugin,test_frameworks}/`. Each module is consumed as a subproject from the top-level [build.cpp](build.cpp).
 - Unit tests live next to their modules under `src/core/**/tests/` (and as `test_*.cpp` siblings in `src/core/plugin/` and friends) and are compiled when you pass `--with-tests` or run `cppup test`.
 - Example projects: [examples/simple_project/](examples/simple_project/) and [test_build_project/](test_build_project/).
-- Pre-commit hooks (`.githooks/pre-commit`): gitleaks secret scan, `cppup format --check`, `cppup tidy` — wired up automatically by `bootstrap.sh` via [scripts/setup-hooks.sh](scripts/setup-hooks.sh).
+- Pre-commit hooks (`.githooks/pre-commit`): gitleaks secret scan, `cppup format --check`, `cppup tidy`, plus an opt-in coverage-threshold gate ([scripts/check_coverage.sh](scripts/check_coverage.sh), enabled via `CPPUP_CHECK_COVERAGE=1`) — wired up automatically by `bootstrap.sh` via [scripts/setup-hooks.sh](scripts/setup-hooks.sh). Test the gate's parsing/threshold logic directly with [scripts/tests/test_check_coverage.sh](scripts/tests/test_check_coverage.sh).
 - Generated headers: [scripts/embed_init_templates.sh](scripts/embed_init_templates.sh) bakes `templates/init/**` into `init_templates_data.hpp`, and [scripts/amalgamate_configuration_header.sh](scripts/amalgamate_configuration_header.sh) produces the single-header `cppup/configuration.hpp` that user projects `#embed`. Both are re-run by [build.cpp](build.cpp) on every configure.
 
 ## Additional References
