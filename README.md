@@ -195,7 +195,7 @@ cppup plugin add <source>          # currently a stub — full validation pipeli
 cppup plugin remove <name>
 ```
 
-The full spec — ABI, manifest schema, host services, validation rules — lives in [docs/plugin_api.md](docs/plugin_api.md). Note that `plugin add` is presently scaffolding only; the validated install path described in the spec is in progress.
+The full spec — ABI, manifest schema, host services, validation rules — lives in [docs/plugin_api.md](docs/plugin_api.md). Note that `plugin add` is presently scaffolding only; the validated install path described in the spec is in progress. For how a plugin distributed as *source* (rather than a pre-built shared object) is meant to be fetched, compiled, and loaded — and which of those steps are actually wired up today — see [docs/plugin_api.md §6.6](docs/plugin_api.md#66-fetching-and-compiling-a-plugin-from-source).
 
 ## CLI Commands
 
