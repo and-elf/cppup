@@ -580,6 +580,21 @@ void write_lockfile(const fs::path& project_root, const std::vector<Entry>& entr
   out << text;
 }
 
+// ProcessRunner that always reports failure — stands in for a host that can't
+// reach GitHub, so the version check has to swallow the error.
+class AlwaysFailingRunner final : public ProcessRunner
+{
+ public:
+  int run(const ProcessRunRequest& /*request*/) override
+  {
+    return 1;
+  }
+  ProcessCaptureResult run_capture(const ProcessRunRequest& /*request*/) override
+  {
+    return ProcessCaptureResult{.exit_code = 1, .output = ""};
+  }
+};
+
 }  // namespace
 
 TEST(PackageSync, FetchesMissingPackageAndRegistersMetadata)
@@ -920,6 +935,60 @@ TEST(PackageSync, ReportsFirstFailingPackageInLockfileOrder)
   ASSERT_FALSE(rc.has_value());
   EXPECT_EQ(rc.error(), "Failed to fetch package: b")
       << "expected first-in-lockfile-order failure ('b'), got: " << rc.error();
+}
+
+// sync must run the injected version-check hook first (mirrors pip/uv printing
+// an upgrade hint on install) before reconciling packages.
+TEST(PackageSync, RunsVersionCheckHookBeforeReconciling)
+{
+  auto  root     = make_tmp_root("sync_version_hook");
+  auto  ctx      = make_ctx(root);
+  auto  fake_git = std::make_unique<FakeGit>();
+  auto* git_raw  = fake_git.get();
+  ctx.git        = std::move(fake_git);
+
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+
+  bool                               hook_called = false;
+  const cppup::cli::VersionCheckHook hook = [&](const CommandContext&) { hook_called = true; };
+
+  const auto rc = cppup::cli::executePackageSync({}, ctx, hook);
+  ASSERT_TRUE(rc.has_value()) << rc.error_or("");
+  EXPECT_TRUE(hook_called) << "sync must run the version check first";
+  EXPECT_EQ(git_raw->clones.load(), 1U) << "reconciliation must still happen after the check";
+}
+
+// A version check that can't reach the network swallows its own failure, so the
+// sync it fronts must still succeed and stay silent about upgrades.
+TEST(PackageSync, VersionCheckFailureDoesNotFailSync)
+{
+  auto  root   = make_tmp_root("sync_version_fail");
+  auto  ctx    = make_ctx(root);
+  auto  rec    = std::make_unique<RecordingLogger>();
+  auto* logger = rec.get();
+  ctx.logger   = std::move(rec);
+  ctx.git      = std::make_unique<FakeGit>();
+
+  write_lockfile(root, {make_git_entry("fmt", "https://example.com/fmt.git")});
+
+  // Drive the real best-effort check against a process runner that always
+  // fails, exactly as an offline host would behave.
+  const cppup::cli::VersionCheckHook failing_check = [](const CommandContext& /*sync_ctx*/)
+  {
+    CommandContext probe;
+    probe.logger        = std::make_unique<cppup::logger::SilentLogger>();
+    probe.processRunner = std::make_unique<AlwaysFailingRunner>();
+    cppup::cli::update_internal::check_and_notify("0.1.0", probe);
+  };
+
+  const auto rc = cppup::cli::executePackageSync({}, ctx, failing_check);
+  ASSERT_TRUE(rc.has_value()) << "a failing version check must not fail sync: " << rc.error_or("");
+
+  const auto messages = logger->snapshot();
+  const bool mentioned_upgrade =
+      std::ranges::any_of(messages, [](const std::string& msg)
+                          { return msg.find("new release") != std::string::npos; });
+  EXPECT_FALSE(mentioned_upgrade) << "a failed check must not print an upgrade hint";
 }
 
 // Once `register_package_source_plugin_bridges()` runs after the C-ABI

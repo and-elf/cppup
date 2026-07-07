@@ -608,10 +608,19 @@ std::expected<int, std::string> executePackageLock(const CommandContext& context
 }
 
 std::expected<int, std::string> executePackageSync(const PackageSyncOptions& options,
-                                                   const CommandContext&     context) noexcept
+                                                   const CommandContext&     context,
+                                                   const VersionCheckHook&   version_check) noexcept
 {
   try
   {
+    // Mirror pip/uv: surface a "new version available" hint on sync. Strictly
+    // best-effort — the hook swallows its own failures, so a check that can't
+    // reach the network never fails the sync.
+    if (version_check)
+    {
+      version_check(context);
+    }
+
     const auto path = lockfile_path(context.projectRoot);
     if (!std::filesystem::exists(path))
     {

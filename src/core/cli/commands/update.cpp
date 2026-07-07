@@ -11,6 +11,8 @@
 #include <sys/utsname.h>
 #endif
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <expected>
 #include <filesystem>
@@ -19,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 #include "../../../SystemProcessRunner.hpp"
 #include "../command_context.hpp"
@@ -93,6 +96,37 @@ std::string trim(std::string text)
     ++start;
   }
   return text.substr(start);
+}
+
+// Split a version string into its leading numeric components. An optional
+// leading `v`/`V` is dropped and parsing stops at the first non-digit,
+// non-dot character so pre-release suffixes (e.g. `-rc1`) don't poison the
+// comparison. "v1.2.3" -> {1, 2, 3}; "unknown" -> {}.
+std::vector<long long> parse_version_components(std::string_view version)
+{
+  if (!version.empty() && (version.front() == 'v' || version.front() == 'V'))
+  {
+    version.remove_prefix(1);
+  }
+  std::vector<long long> parts;
+  std::size_t            index = 0;
+  while (index < version.size() && std::isdigit(static_cast<unsigned char>(version[index])) != 0)
+  {
+    long long value = 0;
+    while (index < version.size() && std::isdigit(static_cast<unsigned char>(version[index])) != 0)
+    {
+      value = (value * 10) + (version[index] - '0');
+      ++index;
+    }
+    parts.push_back(value);
+    if (index < version.size() && version[index] == '.')
+    {
+      ++index;
+      continue;
+    }
+    break;
+  }
+  return parts;
 }
 
 fs::path home_dir()
@@ -365,6 +399,60 @@ std::expected<std::string, std::string> parse_latest_tag(std::string_view releas
   return std::string{releases_json.substr(cursor, end - cursor)};
 }
 
+bool is_newer_version(std::string_view latest, std::string_view running) noexcept
+{
+  const auto latest_parts  = parse_version_components(latest);
+  const auto running_parts = parse_version_components(running);
+  const auto count         = std::max(latest_parts.size(), running_parts.size());
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    const long long lhs = i < latest_parts.size() ? latest_parts[i] : 0;
+    const long long rhs = i < running_parts.size() ? running_parts[i] : 0;
+    if (lhs != rhs)
+    {
+      return lhs > rhs;
+    }
+  }
+  return false;
+}
+
+void check_and_notify(std::string_view running_version, const CommandContext& context) noexcept
+{
+  try
+  {
+    if (context.logger == nullptr || context.processRunner == nullptr)
+    {
+      return;
+    }
+    // Opt-out for CI / air-gapped environments; any non-empty value disables.
+    const char* disable = std::getenv("CPPUP_NO_VERSION_CHECK");
+    if (disable != nullptr && *disable != '\0')
+    {
+      return;
+    }
+    // Dev/source builds report "unknown"; there's nothing to compare against.
+    if (running_version.empty() || running_version == "unknown")
+    {
+      return;
+    }
+    const auto latest = default_fetch_latest_version(context);
+    if (!latest)
+    {
+      // Offline, rate-limited, or no releases yet: stay silent.
+      return;
+    }
+    if (is_newer_version(*latest, running_version))
+    {
+      context.logger->info("A new release of cppup is available: " + std::string{running_version} +
+                           " -> " + *latest + ". Run `cppup update` to upgrade.");
+    }
+  }
+  catch (...)
+  {
+    // Best-effort: a version check must never disrupt the surrounding command.
+  }
+}
+
 }  // namespace update_internal
 
 UpdateOptions defaultUpdateOptions() noexcept
@@ -481,6 +569,11 @@ std::expected<int, std::string> executeUpdate(UpdateOptions         options,
   {
     return std::unexpected(std::string{"Update failed: "} + e.what());
   }
+}
+
+void notifyIfUpdateAvailable(const CommandContext& context) noexcept
+{
+  update_internal::check_and_notify(k_running_version, context);
 }
 
 }  // namespace cppup::cli
