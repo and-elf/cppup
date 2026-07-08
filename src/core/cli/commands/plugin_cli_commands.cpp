@@ -2,17 +2,59 @@
 
 #include <cppup/plugin/abi.h>
 
+#include <cstdio>
 #include <memory>
+#include <print>
 #include <string>
 #include <vector>
 
 #include "../../plugin/plugin_cli_command.hpp"
 #include "../../plugin/static_registry.hpp"
-#include "../cli_application.hpp"
 #include "CLI/CLI11.hpp"
 
 namespace cppup::cli
 {
+
+namespace
+{
+
+// Diagnostics for CLI-command plugin wiring. These deliberately write to
+// stderr directly rather than routing through cli::ErrorHandler:
+// ErrorHandler lives in the cli_application translation unit, whose
+// CLIApplication::run references every executeXxx command, so depending
+// on it would statically drag the entire command suite into any binary
+// (tests included) that only needs the plugin wiring. std::print can
+// throw if stderr isn't writable; a failed diagnostic has no useful
+// recovery, so it is swallowed.
+void warn(const std::string& message) noexcept
+{
+  try
+  {
+    std::print(stderr, "Warning: {}\n", message);
+  }
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- swallow is intentional for a diagnostic
+  catch (...)
+  {
+  }
+}
+
+void report_error(const std::string& message) noexcept
+{
+  try
+  {
+    std::print(stderr, "Error: {}\n", message);
+  }
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- swallow is intentional for a diagnostic
+  catch (...)
+  {
+  }
+}
+
+// Exit code reported when a command plugin's run() fails at the dispatch
+// level (non-zero cppup_status) instead of returning its own exit code.
+constexpr int kDispatchFailureExit = 1;
+
+}  // namespace
 
 void register_plugin_cli_commands(CLI::App& app, const cppup::plugin::PluginRegistry& registry,
                                   const std::function<void(int)>& set_result)
@@ -28,7 +70,7 @@ void register_plugin_cli_commands(CLI::App& app, const cppup::plugin::PluginRegi
     if (!command.has_value())
     {
       // A broken vtable must not become a half-wired subcommand.
-      ErrorHandler::reportWarning("skipping cli-command plugin: " + command.error());
+      warn("skipping cli-command plugin: " + command.error());
       continue;
     }
 
@@ -43,8 +85,7 @@ void register_plugin_cli_commands(CLI::App& app, const cppup::plugin::PluginRegi
     // would also make add_subcommand throw and abort startup.
     if (app.get_subcommand_no_throw(name) != nullptr)
     {
-      ErrorHandler::reportWarning("skipping cli-command plugin '" + name +
-                                  "': name already in use");
+      warn("skipping cli-command plugin '" + name + "': name already in use");
       continue;
     }
 
@@ -62,9 +103,8 @@ void register_plugin_cli_commands(CLI::App& app, const cppup::plugin::PluginRegi
             set_result(*result);
             return;
           }
-          ErrorHandler::reportError(std::string{cmd->name()} + " failed: " + result.error(),
-                                    ErrorHandler::ErrorCode::UnknownError);
-          set_result(ErrorHandler::getExitCode(ErrorHandler::ErrorCode::UnknownError));
+          report_error(std::string{cmd->name()} + " failed: " + result.error());
+          set_result(kDispatchFailureExit);
         });
   }
 }

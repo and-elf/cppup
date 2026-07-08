@@ -18,6 +18,7 @@ struct FakeState
   std::vector<std::string> last_argv;
   int                      run_calls        = 0;
   int                      exit_code_return = 7;
+  cppup_status             run_status       = CPPUP_OK;
 };
 
 thread_local FakeState* g_state =
@@ -39,6 +40,10 @@ extern "C" cppup_status cli_run(void* instance, int argc, const char* const* arg
   for (int i = 0; i < argc; ++i)
   {
     state->last_argv.emplace_back(argv[i]);
+  }
+  if (state->run_status != CPPUP_OK)
+  {
+    return state->run_status;  // dispatch-level failure; out_exit_code left untouched
   }
   *out_exit_code = state->exit_code_return;
   return CPPUP_OK;
@@ -83,6 +88,41 @@ cppup::plugin::PluginRegistry make_registry_with_hello()
       {"cppup-hello", kManifest, {&kDescriptor}}, cppup::plugin::default_vtable_support());
   return registry;
 }
+
+// A descriptor whose vtable is missing the required `run` pointer. It
+// passes descriptor validation (non-null vtable, known kind/version) but
+// make_plugin_cli_command rejects it, so the wiring must skip it.
+constexpr cppup_cli_command_vtable_v1 kBrokenVtable{
+    .name        = "broken",
+    .description = nullptr,
+    .last_error  = nullptr,
+    .create      = cli_create,
+    .destroy     = cli_destroy,
+    .run         = nullptr,
+};
+
+constexpr cppup_plugin_descriptor kBrokenDescriptor{
+    .id             = "broken",
+    .kind           = CPPUP_KIND_CLI_COMMAND,
+    .vtable_version = 1,
+    .vtable         = &kBrokenVtable,
+};
+
+constexpr const char* kBrokenManifest = R"(schema = 1
+[plugin]
+name = "cppup-broken"
+version = "0.1.0"
+cppup_compat = ">=0.1.0"
+build_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+commit_hash = "static"
+build_date = "2026-05-22T00:00:00Z"
+license = "MIT"
+
+[[plugin.entries]]
+id = "broken"
+kind = "cli_command"
+vtable_version = 1
+)";
 
 class PluginCliCommandsTest : public ::testing::Test
 {
@@ -152,4 +192,35 @@ TEST_F(PluginCliCommandsTest, EmptyRegistryAddsNoSubcommands)
   CLI::App                            app;
   register_plugin_cli_commands(app, registry, [](int) {});
   EXPECT_EQ(app.get_subcommand_no_throw("hello"), nullptr);
+}
+
+TEST_F(PluginCliCommandsTest, SkipsCommandWithInvalidVtable)
+{
+  cppup::plugin::PluginRegistry registry;
+  ASSERT_TRUE(registry
+                  .register_static_plugin({"cppup-broken", kBrokenManifest, {&kBrokenDescriptor}},
+                                          cppup::plugin::default_vtable_support())
+                  .has_value());
+  CLI::App app;
+  register_plugin_cli_commands(app, registry, [](int) {});
+
+  // A vtable that fails make_plugin_cli_command must never become a subcommand.
+  EXPECT_EQ(app.get_subcommand_no_throw("broken"), nullptr);
+}
+
+TEST_F(PluginCliCommandsTest, DispatchFailureReportsNonZeroExit)
+{
+  state.run_status  = CPPUP_ERR_GENERIC;  // run() signals a dispatch-level failure
+  auto     registry = make_registry_with_hello();
+  CLI::App app;
+  int      captured = -1;
+
+  const std::function<void(int)> set_result = [&captured](int code) { captured = code; };
+  register_plugin_cli_commands(app, registry, set_result);
+
+  const std::vector<const char*> argv = {"cppup", "hello"};
+  app.parse(static_cast<int>(argv.size()), argv.data());
+
+  EXPECT_EQ(state.run_calls, 1);
+  EXPECT_NE(captured, 0);  // a dispatch failure must not report success
 }
