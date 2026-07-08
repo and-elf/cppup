@@ -13,6 +13,7 @@
 #endif
 
 #include <cppup/configuration.hpp>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <print>
@@ -21,8 +22,10 @@
 
 #include "CLI/CLI11.hpp"
 #include "commands.hpp"
+#include "commands/plugin_cli_commands.hpp"
 #include "commands/ref_parser.hpp"
 #include "core/logger/console/console_logger.hpp"
+#include "core/plugin/static_registry.hpp"
 #include "flag_helpers.hpp"
 
 namespace cppup::cli
@@ -919,6 +922,13 @@ int CLIApplication::run(int argc, char** argv) noexcept
     registerPluginCommands(reg);
     registerRegistryCommands(reg);
     registerModuleCommands(reg);
+    // CLI-command plugins (statically registered, or dlopen'd once that
+    // path is wired) each contribute one subcommand. Registered after
+    // the built-ins so a plugin can never shadow a core command —
+    // duplicate names are skipped. The callback feeds the plugin's exit
+    // code back through the same CommandResult the built-ins use.
+    const std::function<void(int)> set_plugin_result = [&result](int code) { result.set(code); };
+    register_plugin_cli_commands(app, cppup::plugin::global_registry(), set_plugin_result);
 #endif
 
     try

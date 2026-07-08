@@ -22,6 +22,8 @@ std::string kind_to_string(EntryKind kind)
       return "template";
     case EntryKind::TestSystem:
       return "test_system";
+    case EntryKind::CliCommand:
+      return "cli_command";
   }
   return "unknown";
 }

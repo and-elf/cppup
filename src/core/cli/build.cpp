@@ -29,6 +29,7 @@ extern "C" BuildConfiguration configure()
                      "commands/module.cpp",
                      "commands/toolchain.cpp",
                      "commands/plugin.cpp",
+                     "commands/plugin_cli_commands.cpp",
                      "commands/update.cpp",
                      "commands/selection_resolver.cpp",
                      "commands/coverage_parser.cpp",
@@ -64,6 +65,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_subproject_runner", "commands/test_subproject_runner.cpp");
   add_test("test_toolchain_probe", "commands/test_toolchain_probe.cpp");
   add_test("test_test_dispatch", "commands/test_test_dispatch.cpp");
+  add_test("test_plugin_cli_commands", "commands/test_plugin_cli_commands.cpp");
   add_test("test_download_helpers", "commands/test_download_helpers.cpp");
   add_test("test_flag_helpers", "commands/test_flag_helpers.cpp");
 

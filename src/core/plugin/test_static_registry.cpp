@@ -129,6 +129,7 @@ TEST(StaticPluginRegistry, RejectsUnsupportedVtableVersion)
       .build_system_versions   = {},
       .package_source_versions = {},
       .logger_versions         = {},
+      .cli_command_versions    = {},
   };
   StaticPluginRegistry reg;
   auto                 result = reg.register_plugin(make_reg(), empty_support);

@@ -40,6 +40,7 @@ through `CliApplication::register*Commands`:
 | Registry | [registry.cpp](commands/registry.cpp) | `registry set` |
 | Modules | [module.cpp](commands/module.cpp) | `module add` |
 | Plugins | [plugin.cpp](commands/plugin.cpp) | `plugin add \| list \| remove` (`add` is scaffolding only — see [docs/plugin_api.md §6](../../../docs/plugin_api.md)) |
+| Plugin commands | [plugin_cli_commands.cpp](commands/plugin_cli_commands.cpp) | one `cppup <name>` subcommand per `CPPUP_KIND_CLI_COMMAND` plugin, registered after the built-ins so a plugin can't shadow a core command — see [docs/plugin_api.md §7.4](../../../docs/plugin_api.md) |
 | Self-update | [update.cpp](commands/update.cpp) | `update` |
 | Version | inline in `cli_application.cpp` | `version`, `--version` |
 

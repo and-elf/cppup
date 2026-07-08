@@ -32,6 +32,8 @@ EntryKind from_c_kind(cppup_plugin_kind kind)
       return EntryKind::Template;
     case CPPUP_KIND_TEST_SYSTEM:
       return EntryKind::TestSystem;
+    case CPPUP_KIND_CLI_COMMAND:
+      return EntryKind::CliCommand;
   }
   ::cppup::panic("from_c_kind: unknown cppup_plugin_kind");
 }

@@ -46,6 +46,7 @@ extern "C"
     CPPUP_KIND_LOGGER         = 3,
     CPPUP_KIND_TEMPLATE       = 4, /* reserved; vtable TBD (post-v1) */
     CPPUP_KIND_TEST_SYSTEM    = 5, /* reserved; vtable TBD (post-v1) */
+    CPPUP_KIND_CLI_COMMAND    = 6, /* vtable cppup_cli_command_vtable_v1 */
   } cppup_plugin_kind;
 
   /* ---------- Status codes returned by vtable functions ---------- */
@@ -272,6 +273,42 @@ extern "C"
 
     void (*set_command_executor)(void* instance, cppup_cmd_exec_v1* executor);
   } cppup_build_system_vtable_v1;
+
+  /* ---------- CLI command vtable v1 ---------- */
+  /*
+   * A CLI command plugin contributes exactly one cppup subcommand
+   * (e.g. `cppup hello`). `name` is the token the user types after
+   * `cppup`; `description` is the one-line help string shown in
+   * `cppup --help` (NULL for no help text).
+   *
+   * Lifetime: `create` returns an opaque instance; `destroy` releases
+   * it. The host creates one instance per dispatch and destroys it when
+   * the command returns.
+   *
+   * `run` receives the invocation's argument vector: `argv[0]` is the
+   * subcommand `name` and `argv[1 .. argc-1]` are the tokens the user
+   * typed after it, verbatim and unparsed — the plugin does its own
+   * option parsing (CLI11 is not shared across the C ABI). `argv` has
+   * `argc` entries and is NOT NULL-terminated; every entry is
+   * NUL-terminated UTF-8, valid only for the duration of the call.
+   *
+   * On success `run` returns CPPUP_OK and writes the process exit code
+   * the command wants cppup to return to `*out_exit_code`. On a
+   * dispatch-level failure it returns a non-zero cppup_status, leaves
+   * `*out_exit_code` untouched, and the message is retrievable via
+   * last_error on the same instance.
+   */
+  typedef struct
+  {
+    const char* name;        /* subcommand token; never NULL */
+    const char* description; /* one-line help; NULL if absent */
+    const char* (*last_error)(void* instance);
+
+    void* (*create)(void);
+    void (*destroy)(void* instance);
+
+    cppup_status (*run)(void* instance, int argc, const char* const* argv, int* out_exit_code);
+  } cppup_cli_command_vtable_v1;
 
   /* ---------- Required entry points ---------- */
   /*
