@@ -118,6 +118,10 @@ std::expected<EntryKind, Diag> parse_entry_kind(std::string_view raw)
   {
     return EntryKind::Logger;
   }
+  if (raw == "cli_command")
+  {
+    return EntryKind::CliCommand;
+  }
   return err(ManifestError::UnknownEntryKind,
              std::string{"unknown entry kind '"} + std::string{raw} + "'");
 }

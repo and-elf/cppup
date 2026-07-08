@@ -26,6 +26,7 @@ For the user-facing command list, see the top-level
 | `registry.cpp` | `cppup registry set` |
 | `module.cpp` | `cppup module add` |
 | `plugin.cpp` | `cppup plugin add / list / remove` (`add` is a scaffolding stub — see [docs/plugin_api.md §6](../../../../docs/plugin_api.md)) |
+| `plugin_cli_commands.cpp` | Registers one `cppup <name>` subcommand per `CPPUP_KIND_CLI_COMMAND` plugin, after the built-ins so a plugin can't shadow a core command — see [docs/plugin_api.md §7.4](../../../../docs/plugin_api.md) |
 | `update.cpp` | `cppup update` (and is the only command compiled into the slim bootstrap binary) |
 
 ### Shared infrastructure

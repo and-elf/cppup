@@ -7,9 +7,11 @@ are landed. `cppup plugin add` is still a scaffolding stub — the
 validation pipeline described in §6 has not been wired through. Built-in
 extensions (cppup-native build system, console logger, gtest test
 framework) register through the same plugin pipeline rather than ad-hoc
-factories. §6.6 answers "how do I get a source-form plugin fetched,
-compiled, and loaded" and documents exactly which of those steps exist
-today.
+factories. CLI-command plugins (`CPPUP_KIND_CLI_COMMAND`, §3.4) are wired
+end-to-end through the static registry: a statically linked command
+plugin surfaces as a `cppup <name>` subcommand (§7.4). §6.6 answers "how
+do I get a source-form plugin fetched, compiled, and loaded" and
+documents exactly which of those steps exist today.
 
 This document is the source of truth for the plugin system. The ABI
 header is the ultimate reference for byte-level layout; this document
@@ -20,8 +22,9 @@ moved into alignment, not allowed to drift.
 ## 1. Goals & non-goals
 
 ### 1.1 Goals
-- Allow third-party shared objects to extend cppup along three runtime axes
-  without re-linking: **build systems**, **package sources**, **loggers**.
+- Allow third-party shared objects to extend cppup along four runtime axes
+  without re-linking: **build systems**, **package sources**, **loggers**,
+  and **CLI commands**.
 - One shared object may contribute multiple plugin entries (e.g. a single
   `cppup-build-systems.so` providing both `ninja` and `meson`).
 - Every plugin self-describes via a TOML manifest stamped at the plugin's
@@ -44,7 +47,7 @@ moved into alignment, not allowed to drift.
 
 ## 2. Plugin kinds
 
-Three runtime kinds today, two reserved for post-v1. Each runtime kind
+Four runtime kinds today, two reserved for post-v1. Each runtime kind
 maps to an existing cppup concept — the plugin layer does not invent
 new abstractions; it lets external code satisfy existing ones via a
 stable C ABI.
@@ -56,6 +59,17 @@ stable C ABI.
 | `CPPUP_KIND_LOGGER = 3`          | `cppup::logger::LoggerType`                  | [src/core/logger/](../src/core/logger/)                        | v1 vtable frozen |
 | `CPPUP_KIND_TEMPLATE = 4`        | `cppup init --type <name>` scaffolders       | n/a                                                            | reserved, no vtable yet |
 | `CPPUP_KIND_TEST_SYSTEM = 5`     | `cppup::TestFrameworkPlugin`                 | [src/core/test_frameworks/](../src/core/test_frameworks/)      | reserved; today exposed only via the in-process C++ registry (§11) |
+| `CPPUP_KIND_CLI_COMMAND = 6`     | a `cppup <command>` subcommand               | [src/core/cli/](../src/core/cli/)                              | v1 vtable frozen (§3.4, §7.4) |
+
+Why a specific `CLI_COMMAND` kind rather than a generic `cli_plugin`
+that could hook arbitrary CLI points: every other kind maps one vtable
+to one existing concept, and the concept a command plugin satisfies is
+"one `cppup <name>` subcommand." A single command per entry keeps the
+vtable frozen and versionable, lets `cppup plugin list` enumerate
+commands the same way it enumerates build systems, and makes shadowing
+rules trivial (a plugin command is skipped if its name is already taken;
+see §7.4). A shared object that wants to contribute several commands
+simply returns several `CPPUP_KIND_CLI_COMMAND` entries.
 
 A "config-hook" kind is **not** part of the plugin ABI. A plugin that
 needs to augment a user's `BuildConfiguration` ships a header (e.g.
@@ -98,6 +112,9 @@ typedef enum {
   CPPUP_KIND_BUILD_SYSTEM    = 1,
   CPPUP_KIND_PACKAGE_SOURCE  = 2,
   CPPUP_KIND_LOGGER          = 3,
+  CPPUP_KIND_TEMPLATE        = 4,  // reserved; vtable TBD (post-v1)
+  CPPUP_KIND_TEST_SYSTEM     = 5,  // reserved; vtable TBD (post-v1)
+  CPPUP_KIND_CLI_COMMAND     = 6,
 } cppup_plugin_kind;
 
 typedef struct {
@@ -120,6 +137,7 @@ sources). Initial versions for v1:
 | `cppup_build_system_vtable_v1`    | 1               |
 | `cppup_package_source_vtable_v1`  | 1               |
 | `cppup_logger_vtable_v1`          | 1               |
+| `cppup_cli_command_vtable_v1`     | 1               |
 
 A descriptor's `vtable_version` must equal the version of the struct
 its `vtable` field points at. The host rejects any descriptor whose
@@ -181,6 +199,29 @@ accessors instead of caller-allocated buffers. The plugin calls
   do not get a cache pointer; source resolution is already a
   package-source concern.
 - `last_error(instance)`.
+
+**CLI-command vtable v1** — contributes exactly one `cppup <name>`
+subcommand:
+- `name` — the subcommand token (never NULL); `description` — one-line
+  help shown in `cppup --help` (NULL for none).
+- `create()` / `destroy(instance)` — one instance is created per
+  dispatch and destroyed when the command returns. Unlike the other
+  vtables `create` takes no argument: a command receives its input
+  through `run`, not at construction.
+- `run(instance, argc, argv, out_exit_code)` → `cppup_status`. `argv[0]`
+  is `name`; `argv[1 .. argc-1]` are the tokens the user typed after the
+  command, **verbatim and unparsed**. The plugin does its own option
+  parsing — the host's CLI11 parser is not shared across the C ABI. On
+  success returns `CPPUP_OK` and writes the process exit code to
+  `*out_exit_code`; on a dispatch-level failure returns a non-zero
+  status, leaves `*out_exit_code` untouched, and exposes the message via
+  `last_error`.
+- `last_error(instance)`.
+
+Passing the whole `argv` (rather than a parsed option set) is what keeps
+the vtable frozen: a command's option grammar is the plugin's business
+and can evolve without touching the ABI. The host contributes only the
+routing — see §7.4.
 
 The build-system flag accessors deliberately differ from the
 package-source resolver: flags are inherently a sequence, so the
@@ -276,7 +317,7 @@ homepage      = "https://..."           # optional
 
 [[plugin.entries]]                       # required; >= 1 entry
 id              = "ninja"               # required; ^[a-z][a-z0-9_-]*$; unique within the SO
-kind            = "build_system"        # required; one of "build_system" | "package_source" | "logger"
+kind            = "build_system"        # required; one of "build_system" | "package_source" | "logger" | "cli_command"
 vtable_version  = 1                     # required; matches the descriptor returned at runtime
 description     = "Ninja build system support"  # optional
 
@@ -613,6 +654,45 @@ registries used at build time, so user configurations can't tell
 which side an entry came from. `cppup plugin list` surfaces both
 populations, marking each entry's origin (see §6.4).
 
+### 7.4 CLI-command dispatch
+
+`CPPUP_KIND_CLI_COMMAND` entries are wired differently from the
+build-time kinds: they are consulted once, at the top of every `cppup`
+invocation, when the CLI parser is assembled.
+
+`CLIApplication::run` registers the built-in subcommands first, then
+calls `register_plugin_cli_commands` (in
+[src/core/cli/commands/plugin_cli_commands.cpp](../src/core/cli/commands/plugin_cli_commands.cpp)),
+which:
+
+1. Calls `collect_cli_command_descriptors(global_registry())` — every
+   `CPPUP_KIND_CLI_COMMAND` descriptor across the static set (first)
+   then the dynamic set (spec §7 order).
+2. Wraps each descriptor's `cppup_cli_command_vtable_v1` in a
+   `PluginCliCommand` C++ adapter
+   ([src/core/plugin/plugin_cli_command.{hpp,cpp}](../src/core/plugin/plugin_cli_command.cpp)).
+   A descriptor whose vtable fails validation is skipped with a warning
+   — a broken plugin never becomes a half-wired subcommand.
+3. Adds one CLI11 subcommand per surviving command, named `vtable->name`
+   with help `vtable->description`. The subcommand is a
+   `prefix_command()`, so everything the user types after the name is
+   captured verbatim and handed to `run()` as `argv[1..]` (with the name
+   as `argv[0]`). The exit code the plugin returns becomes cppup's exit
+   code.
+
+**Built-ins win.** Because plugin commands register *after* the
+built-ins, a plugin whose `name` collides with an existing subcommand
+(a core command, or an earlier-registered plugin) is skipped with a
+warning rather than shadowing it or aborting startup. This makes command
+plugins safe to install without fear of hijacking `build`, `test`, etc.
+
+Like every other kind today, the only wired path is the static registry
+(§7.3): a CLI-command plugin becomes reachable by statically linking it
+and calling `register_static_plugin()` from
+[src/main.cpp](../src/main.cpp). The `dlopen` load loop (§7) will surface
+CLI-command descriptors through the same `collect_cli_command_descriptors`
+call once that path is wired, with no change to the dispatch code above.
+
 ## 8. Plugin SDK headers
 
 `cppup init --plugin <name>` scaffolds:
@@ -752,6 +832,14 @@ implementation code goes in.
 
 8. Header-only extension
    - 8.1 A user `cppup.cpp` that `#include`s `foo_plugin.hpp` and calls `foo::*` compiles without the runtime plugin installed (proves the header is independent of the SO).
+
+9. CLI-command plugins (§3.4, §7.4)
+   - 9.1 `default_vtable_support()` knows `cli_command` v1 and rejects v2 (`test_vtable_support.cpp`).
+   - 9.2 A manifest with `kind = "cli_command"` parses to `EntryKind::CliCommand` (`test_manifest.cpp`).
+   - 9.3 `make_plugin_cli_command` rejects a null vtable / missing name / missing `run` / null `create`, and destroys the instance on scope exit (`test_plugin_cli_command.cpp`).
+   - 9.4 `run` prepends the command name as `argv[0]`, forwards the rest, returns the exit code, and surfaces `last_error` on a non-zero status.
+   - 9.5 `collect_cli_command_descriptors` returns command entries from the static and dynamic sets and ignores other kinds.
+   - 9.6 `register_plugin_cli_commands` adds one subcommand per command, forwards `remaining()` args to `run`, reports the exit code, and skips a command whose name is already taken (built-ins win) (`commands/test_plugin_cli_commands.cpp`).
 
 ## 11. Test-framework plugins (internal, pre-ABI)
 

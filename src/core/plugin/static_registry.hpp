@@ -153,4 +153,13 @@ PluginRegistry& global_registry();
 const cppup_plugin_descriptor* find_build_system_descriptor(const PluginRegistry& registry,
                                                             std::string_view      id) noexcept;
 
+// Walk every registration's descriptor list (static first, then dynamic)
+// and return all `kind == CPPUP_KIND_CLI_COMMAND` entries in registration
+// order. Each returned descriptor's `vtable` points at a
+// cppup_cli_command_vtable_v1. Unlike find_build_system_descriptor there
+// is no id lookup: every CLI-command plugin surfaces as its own
+// subcommand, so the CLI enumerates them all.
+std::vector<const cppup_plugin_descriptor*> collect_cli_command_descriptors(
+    const PluginRegistry& registry);
+
 }  // namespace cppup::plugin

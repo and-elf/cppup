@@ -24,6 +24,16 @@ TEST(VtableSupport, DefaultKnowsLoggerV1)
   EXPECT_TRUE(is_supported(default_vtable_support(), EntryKind::Logger, 1));
 }
 
+TEST(VtableSupport, DefaultKnowsCliCommandV1)
+{
+  EXPECT_TRUE(is_supported(default_vtable_support(), EntryKind::CliCommand, 1));
+}
+
+TEST(VtableSupport, DefaultRejectsCliCommandV2)
+{
+  EXPECT_FALSE(is_supported(default_vtable_support(), EntryKind::CliCommand, 2));
+}
+
 // -----------------------------------------------------------------------
 // §10.2.2 — unknown versions are rejected.
 // -----------------------------------------------------------------------

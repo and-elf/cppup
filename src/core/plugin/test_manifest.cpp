@@ -80,6 +80,32 @@ TEST(Manifest, AcceptsCanonical)
   EXPECT_FALSE(result->entries[1].description.has_value());
 }
 
+TEST(Manifest, AcceptsCliCommandKind)
+{
+  constexpr const char* kCliCommand = R"(schema = 1
+[plugin]
+name = "cppup-hello"
+version = "0.1.0"
+cppup_compat = ">=0.1.0"
+build_hash = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+commit_hash = "static"
+build_date = "2026-05-22T00:00:00Z"
+license = "MIT"
+
+[[plugin.entries]]
+id = "hello"
+kind = "cli_command"
+vtable_version = 1
+)";
+  auto                  result      = parse_manifest(kCliCommand);
+  ASSERT_TRUE(result.has_value()) << "diag: " << static_cast<int>(result.error().code) << " — "
+                                  << result.error().detail;
+  ASSERT_EQ(result->entries.size(), 1U);
+  EXPECT_EQ(result->entries[0].id, "hello");
+  EXPECT_EQ(result->entries[0].kind, EntryKind::CliCommand);
+  EXPECT_EQ(result->entries[0].vtable_version, 1U);
+}
+
 // -----------------------------------------------------------------------
 // §10.1.2 — each §4.2 rejection rule. One test per rule.
 // -----------------------------------------------------------------------

@@ -27,6 +27,8 @@ bool is_supported(const VtableSupport& support, EntryKind kind, std::uint32_t vt
       return contains(support.package_source_versions, vtable_version);
     case EntryKind::Logger:
       return contains(support.logger_versions, vtable_version);
+    case EntryKind::CliCommand:
+      return contains(support.cli_command_versions, vtable_version);
     case EntryKind::Template:
       [[fallthrough]];
     case EntryKind::TestSystem:
@@ -41,6 +43,7 @@ VtableSupport default_vtable_support()
       .build_system_versions   = {1},
       .package_source_versions = {1},
       .logger_versions         = {1},
+      .cli_command_versions    = {1},
   };
 }
 

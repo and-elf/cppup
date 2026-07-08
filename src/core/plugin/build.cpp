@@ -15,8 +15,8 @@ extern "C" BuildConfiguration configure()
   config.libraries.push_back(Library{
       .name    = "cppup_plugin",
       .sources = {"manifest.cpp", "vtable_support.cpp", "descriptor_validation.cpp",
-                  "libdl_loader.cpp", "loader.cpp", "plugin_logger.cpp", "package_info_view.cpp",
-                  "plugin_host_services.cpp", "plugin_package_source.cpp",
+                  "libdl_loader.cpp", "loader.cpp", "plugin_logger.cpp", "plugin_cli_command.cpp",
+                  "package_info_view.cpp", "plugin_host_services.cpp", "plugin_package_source.cpp",
                   "plugin_build_system.cpp", "static_registry.cpp", "plugin_listing.cpp",
                   "host_service_adapters.cpp", "test_framework_plugin.cpp"},
       .type    = LibraryType::Static,
@@ -37,6 +37,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_descriptor_validation", "test_descriptor_validation.cpp");
   add_test("test_plugin_loader", "test_plugin_loader.cpp");
   add_test("test_plugin_logger", "test_plugin_logger.cpp");
+  add_test("test_plugin_cli_command", "test_plugin_cli_command.cpp");
   add_test("test_package_info_view", "test_package_info_view.cpp");
   add_test("test_plugin_host_services", "test_plugin_host_services.cpp");
   add_test("test_plugin_package_source", "test_plugin_package_source.cpp");

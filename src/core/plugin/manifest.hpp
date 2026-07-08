@@ -17,6 +17,7 @@ enum class EntryKind : std::uint8_t
   Logger        = 3,
   Template      = 4,
   TestSystem    = 5,
+  CliCommand    = 6,
 };
 
 struct ManifestEntry

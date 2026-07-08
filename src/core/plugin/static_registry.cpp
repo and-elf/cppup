@@ -144,4 +144,31 @@ const cppup_plugin_descriptor* find_build_system_descriptor(const PluginRegistry
   return nullptr;
 }
 
+std::vector<const cppup_plugin_descriptor*> collect_cli_command_descriptors(
+    const PluginRegistry& registry)
+{
+  std::vector<const cppup_plugin_descriptor*> out;
+
+  const auto append = [&out](const std::vector<const cppup_plugin_descriptor*>& descriptors)
+  {
+    for (const auto* descriptor : descriptors)
+    {
+      if (descriptor != nullptr && descriptor->kind == CPPUP_KIND_CLI_COMMAND)
+      {
+        out.push_back(descriptor);
+      }
+    }
+  };
+
+  for (const auto& reg : registry.static_registry().list())
+  {
+    append(reg.descriptors);
+  }
+  for (const auto& reg : registry.dynamic_plugins())
+  {
+    append(reg.descriptors);
+  }
+  return out;
+}
+
 }  // namespace cppup::plugin

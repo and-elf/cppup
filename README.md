@@ -6,7 +6,7 @@ It focuses on:
 - Build-system-agnostic package resolution (cppup-native, CMake, Make, header-only)
 - Project configuration written in real C++ (`build.cpp`), not a bespoke DSL
 - Reproducible builds via a project-root `cppup.lock` (materialized by `cppup sync`)
-- A plugin ABI for build systems, package sources, and loggers — extensible without re-linking the host
+- A plugin ABI for build systems, package sources, loggers, and CLI commands — extensible without re-linking the host
 - Practical defaults for modern C++ (C++20/23/26, sanitizers, coverage) and a `compile_commands.json` exporter for clangd
 
 ## Quick Start
