@@ -56,6 +56,20 @@ TEST(IsProjectSource, RejectsSystemHeaders)
   fs::remove_all(root);
 }
 
+TEST(IsProjectSource, RejectsVendoredThirdParty)
+{
+  // CLI11 and toml++ live in the source tree but are not cppup's own code;
+  // counting them (CLI11 is ~11k lines) would distort project coverage.
+  const auto root = make_tmp_root("vendored");
+  EXPECT_FALSE(is_project_source("src/cli/CLI/CLI11.hpp", root));
+  EXPECT_FALSE(is_project_source("src/toml++/toml.hpp", root));
+  EXPECT_FALSE(is_project_source((root / "src" / "cli" / "CLI" / "CLI11.hpp").string(), root));
+  // A cppup source that merely lives near the CLI dir is still counted.
+  EXPECT_TRUE(is_project_source("src/core/cli/cli_application.cpp", root));
+  EXPECT_TRUE(is_project_source("src/core/cli/commands/plugin_cli_commands.cpp", root));
+  fs::remove_all(root);
+}
+
 TEST(IsProjectSource, RejectsAbsoluteOutsideRoot)
 {
   const auto root = make_tmp_root("outside");

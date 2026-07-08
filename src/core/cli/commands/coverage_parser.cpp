@@ -1,5 +1,7 @@
 #include "coverage_parser.hpp"
 
+#include <algorithm>
+#include <array>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -135,7 +137,20 @@ bool is_project_source(std::string_view source_path, const fs::path& project_roo
   // lexically_relative returns a path starting with ".." when candidate
   // is outside root_abs; reject those plus the literal "." (root itself).
   const auto first = rel.begin();
-  return first != rel.end() && *first != ".." && *first != ".";
+  if (first == rel.end() || *first == ".." || *first == ".")
+  {
+    return false;
+  }
+
+  // Vendored third-party single-header libraries live inside the source
+  // tree but are not cppup's own code, so they must not dilute project
+  // coverage. CLI11 alone is ~11k lines that a single test touching the
+  // CLI parser would otherwise drag into the denominator at ~16%.
+  static constexpr std::array<std::string_view, 2> k_vendored_prefixes{"src/cli/CLI/",
+                                                                       "src/toml++/"};
+  const std::string                                rel_str = rel.generic_string();
+  return std::ranges::none_of(k_vendored_prefixes, [&rel_str](std::string_view prefix)
+                              { return rel_str.starts_with(prefix); });
 }
 
 CoverageSummary parse_gcov_reports(const CoverageScan& scan)

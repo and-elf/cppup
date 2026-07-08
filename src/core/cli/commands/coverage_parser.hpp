@@ -27,6 +27,10 @@ struct CoverageScan
 // `project_root` itself; absolute paths must lexically descend from it.
 // Used to filter out system headers (e.g. `/usr/include/c++/*`) and any
 // other non-project translation units that gcov emits per `.gcda`.
+// Vendored third-party single-header libraries under `src/cli/CLI/`
+// (CLI11) and `src/toml++/` are also rejected: they live in the tree but
+// are not cppup's own code, and counting them (CLI11 is ~11k lines) would
+// distort project coverage.
 [[nodiscard]] bool is_project_source(std::string_view             source_path,
                                      const std::filesystem::path& project_root);
 
