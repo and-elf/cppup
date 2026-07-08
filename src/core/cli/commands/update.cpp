@@ -26,6 +26,7 @@
 #include "../../configuration/platform.hpp"
 #include "../command_context.hpp"
 #include "../commands.hpp"
+#include "download_helpers.hpp"
 
 namespace cppup::cli
 {
@@ -180,11 +181,8 @@ std::expected<std::string, std::string> default_fetch_latest_version(const Comma
   {
     return std::unexpected("No process runner configured");
   }
-  const std::string url  = "https://api.github.com/repos/" + release_repo() + "/releases/latest";
-  auto              body = capture_with_runner(
-      *context.processRunner,
-      ProcessRunRequest{.command = "curl", .args = {"-fsSL", url}, .working_dir = ""},
-      "fetch latest release metadata");
+  const std::string url = "https://api.github.com/repos/" + release_repo() + "/releases/latest";
+  auto body = download::fetch(*context.processRunner, url, "fetch latest release metadata");
   if (!body || body->empty())
   {
     return std::unexpected("no release available (could not fetch " + url + ")");
@@ -199,12 +197,10 @@ std::expected<int, std::string> default_download(const CommandContext& context,
   {
     return std::unexpected("No process runner configured");
   }
-  const int curl_exit_code = context.processRunner->run(ProcessRunRequest{
-      .command = "curl", .args = {"-fsSL", url, "-o", dest.string()}, .working_dir = ""});
-  if (curl_exit_code != 0)
+  auto result = download::download(*context.processRunner, url, dest, "download " + url);
+  if (!result)
   {
-    return std::unexpected("curl failed to download " + url + " (exit " +
-                           std::to_string(curl_exit_code) + ")");
+    return std::unexpected(result.error());
   }
   return 0;
 }
@@ -216,10 +212,7 @@ std::expected<std::string, std::string> default_fetch_sha256(const CommandContex
   {
     return std::unexpected("No process runner configured");
   }
-  auto body = capture_with_runner(
-      *context.processRunner,
-      ProcessRunRequest{.command = "curl", .args = {"-fsSL", url + ".sha256"}, .working_dir = ""},
-      "fetch checksum");
+  auto body = download::fetch(*context.processRunner, url + ".sha256", "fetch checksum");
   if (!body || body->empty())
   {
     return std::unexpected("could not fetch sha256 checksum from " + url + ".sha256");

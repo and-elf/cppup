@@ -53,6 +53,7 @@ src/core/cli/cli_application.cpp
 src/core/cli/commands.cpp
 src/core/cli/commands/build.cpp
 src/core/cli/commands/update.cpp
+src/core/cli/commands/download_helpers.cpp
 src/core/cli/commands/lockfile.cpp
 src/core/cli/commands/package.cpp
 src/core/cli/commands/package_source_plugin_bridge.cpp
