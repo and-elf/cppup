@@ -26,6 +26,7 @@
 #include "commands/ref_parser.hpp"
 #include "core/logger/console/console_logger.hpp"
 #include "core/plugin/static_registry.hpp"
+#include "flag_helpers.hpp"
 
 namespace cppup::cli
 {
@@ -391,19 +392,18 @@ void registerBuildCommand(const CommandRegistration& reg)
   auto opts = std::make_shared<Opts>();
 
   auto* cmd = app.add_subcommand("build", "Build the project");
-  cmd->add_flag("--asan", opts->asan, "Enable AddressSanitizer");
-  cmd->add_flag("--coverage", opts->coverage, "Instrument with gcov coverage flags");
+  add_instrumentation_flags(cmd, opts->asan, opts->coverage);
   cmd->add_flag("--verbose,-V", opts->verbose, "Print the exact compile/link commands as they run");
   cmd->add_flag("--with-tests", opts->with_tests,
                 "Also compile test binaries (default: libraries + binaries only)");
   cmd->add_option("-j,--jobs", opts->jobs,
                   "Parallel compile jobs (0 = auto / hardware_concurrency)");
-  cmd->add_option("--toolchain", opts->toolchain,
-                  "Override the active toolchain for this build (takes precedence over "
-                  "`cppup toolchain select`)");
-  cmd->add_option("--profile", opts->profile,
-                  "Override the active build profile for this build (takes precedence over "
-                  "`cppup profile select`)");
+  add_toolchain_profile_options(
+      cmd, opts->toolchain, opts->profile,
+      "Override the active toolchain for this build (takes precedence over "
+      "`cppup toolchain select`)",
+      "Override the active build profile for this build (takes precedence over "
+      "`cppup profile select`)");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -450,13 +450,14 @@ void registerCompileCommandsCommand(const CommandRegistration& reg)
 
   auto* cmd =
       app.add_subcommand("compile-commands", "Emit compile_commands.json for clangd/LSP tooling");
-  cmd->add_flag("--asan", opts->asan, "Mirror --asan flags in emitted commands");
-  cmd->add_flag("--coverage", opts->coverage, "Mirror --coverage flags in emitted commands");
-  cmd->add_option("--toolchain", opts->toolchain,
-                  "Emit commands for the named toolchain (must match the build's selection so "
-                  "clangd sees what the compiler actually invoked)");
-  cmd->add_option("--profile", opts->profile,
-                  "Emit commands for the named build profile (must match the build's selection)");
+  add_instrumentation_flags(cmd, opts->asan, opts->coverage,
+                            "Mirror --asan flags in emitted commands",
+                            "Mirror --coverage flags in emitted commands");
+  add_toolchain_profile_options(
+      cmd, opts->toolchain, opts->profile,
+      "Emit commands for the named toolchain (must match the build's selection so "
+      "clangd sees what the compiler actually invoked)",
+      "Emit commands for the named build profile (must match the build's selection)");
 
   cmd->callback(
       [opts, &ctx, &result]
@@ -508,16 +509,14 @@ void registerTestCommand(const CommandRegistration& reg)
   auto opts = std::make_shared<Opts>();
 
   auto* cmd = app.add_subcommand("test", "Run tests");
-  cmd->add_flag("--asan", opts->asan, "Enable AddressSanitizer");
-  cmd->add_flag("--coverage", opts->coverage,
-                "Collect gcov coverage after tests (build with --coverage first)");
+  add_instrumentation_flags(cmd, opts->asan, opts->coverage, "Enable AddressSanitizer",
+                            "Collect gcov coverage after tests (build with --coverage first)");
   auto* fail_under_opt =
       cmd->add_option("--fail-under", opts->fail_under,
                       "Fail (non-zero exit) if total line coverage is below this percentage "
                       "(0..100); requires --coverage");
   fail_under_opt->check(CLI::Range(0.0, 100.0));
-  cmd->add_option("--toolchain", opts->toolchain, "Override the active toolchain for this build");
-  cmd->add_option("--profile", opts->profile, "Override the active build profile for this build");
+  add_toolchain_profile_options(cmd, opts->toolchain, opts->profile);
   cmd->add_option("filter", opts->filter,
                   "Pass-through filter (e.g. gtest glob 'Suite.*') handed verbatim to each "
                   "test's TestFramework plugin");

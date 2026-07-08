@@ -23,6 +23,7 @@ extern "C" BuildConfiguration configure()
                      "commands/package_source_registry.cpp",
                      "commands/progress_sink.cpp",
                      "commands/ref_parser.cpp",
+                     "commands/download_helpers.cpp",
                      "commands/sync_progress.cpp",
                      "commands/lockfile.cpp",
                      "commands/module.cpp",
@@ -65,6 +66,8 @@ extern "C" BuildConfiguration configure()
   add_test("test_toolchain_probe", "commands/test_toolchain_probe.cpp");
   add_test("test_test_dispatch", "commands/test_test_dispatch.cpp");
   add_test("test_plugin_cli_commands", "commands/test_plugin_cli_commands.cpp");
+  add_test("test_download_helpers", "commands/test_download_helpers.cpp");
+  add_test("test_flag_helpers", "commands/test_flag_helpers.cpp");
 
   return config;
 }
