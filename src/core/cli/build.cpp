@@ -65,6 +65,7 @@ extern "C" BuildConfiguration configure()
   add_test("test_toolchain_probe", "commands/test_toolchain_probe.cpp");
   add_test("test_test_dispatch", "commands/test_test_dispatch.cpp");
   add_test("test_download_helpers", "commands/test_download_helpers.cpp");
+  add_test("test_flag_helpers", "commands/test_flag_helpers.cpp");
 
   return config;
 }
